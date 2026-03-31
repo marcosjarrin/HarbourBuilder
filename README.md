@@ -1,2 +1,2 @@
-# hb-
+# hbcpp
 C++ powered GUI for Harbour
