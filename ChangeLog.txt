@@ -3,6 +3,16 @@ hbcpp - C++ powered GUI for Harbour
 
 2026-03-31
 ----------
+- Added macOS Cocoa/AppKit backend
+  * cocoa_core.m: full reimplementation of C++ core (TControl, TForm, all controls)
+    using NSView/NSWindow with flipped coordinates (top-left origin like Win32)
+  * cocoa_inspector.m: property inspector using NSTableView
+    Exports: INS_Create, INS_RefreshWithData, INS_BringToFront, INS_Destroy
+  * inspector_mac.prg: Harbour wrapper for Cocoa inspector
+  * test_design_mac.prg: design-mode sample for macOS
+  * build_mac.sh: build script using clang + Harbour for macOS
+  * Same Harbour OOP layer (classes.prg, commands.ch) works unchanged
+
 - Added nClrPane (background color) property to all controls
   * Form: changes background brush and design-mode grid
   * Controls: handled via WM_CTLCOLOR* messages from parent form
