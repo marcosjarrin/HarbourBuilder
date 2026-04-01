@@ -12,6 +12,7 @@ REQUEST HB_GT_GUI_DEFAULT
 
 static oIDE          // Main IDE bar (top strip)
 static oDesignForm   // Design form (independent floating window)
+static hCodeEditor   // Code editor window (below design form)
 static nScreenW      // Screen width
 static nScreenH      // Screen height
 
@@ -118,11 +119,16 @@ function Main()
    UI_OnSelChange( oDesignForm:hCpp, ;
       { |hCtrl| OnDesignSelChange( hCtrl ) } )
 
+   // === Window 4: Code Editor (below design form) ===
+   hCodeEditor := CodeEditorCreate( 270, 540, 700, 300 )
+   CodeEditorSetText( hCodeEditor, GenerateSampleCode() )
+
    // Show design form first (no message loop)
    oDesignForm:Show()
 
    // When IDE closes, destroy all secondary windows first
-   oIDE:OnClose := { || InspectorClose(), oDesignForm:Destroy() }
+   oIDE:OnClose := { || InspectorClose(), oDesignForm:Destroy(), ;
+                        CodeEditorDestroy( hCodeEditor ) }
 
    // IDE enters the message loop (dispatches for ALL windows)
    oIDE:Activate()
@@ -251,6 +257,38 @@ static function OnDesignSelChange( hCtrl )
 
 return nil
 
+static function GenerateSampleCode()
+
+   local cCode := ""
+
+   cCode += '// Form1.prg - Generated code' + Chr(13) + Chr(10)
+   cCode += '' + Chr(13) + Chr(10)
+   cCode += '#include "commands.ch"' + Chr(13) + Chr(10)
+   cCode += '' + Chr(13) + Chr(10)
+   cCode += 'function Main()' + Chr(13) + Chr(10)
+   cCode += '' + Chr(13) + Chr(10)
+   cCode += '   local oForm, oBtn' + Chr(13) + Chr(10)
+   cCode += '' + Chr(13) + Chr(10)
+   cCode += '   DEFINE FORM oForm TITLE "Form1" ;' + Chr(13) + Chr(10)
+   cCode += '      SIZE 470, 380 FONT "Segoe UI", 9' + Chr(13) + Chr(10)
+   cCode += '' + Chr(13) + Chr(10)
+   cCode += '   @ 13, 12 GROUPBOX "General" OF oForm ;' + Chr(13) + Chr(10)
+   cCode += '      SIZE 430, 120' + Chr(13) + Chr(10)
+   cCode += '' + Chr(13) + Chr(10)
+   cCode += '   @ 40, 26 SAY "Name:" OF oForm SIZE 70' + Chr(13) + Chr(10)
+   cCode += '   @ 38, 100 GET oEdit VAR "" OF oForm ;' + Chr(13) + Chr(10)
+   cCode += '      SIZE 200, 26' + Chr(13) + Chr(10)
+   cCode += '' + Chr(13) + Chr(10)
+   cCode += '   @ 290, 150 BUTTON oBtn PROMPT "&OK" ;' + Chr(13) + Chr(10)
+   cCode += '      OF oForm SIZE 88, 26' + Chr(13) + Chr(10)
+   cCode += '   oBtn:OnClick := { || oForm:Close() }' + Chr(13) + Chr(10)
+   cCode += '' + Chr(13) + Chr(10)
+   cCode += '   ACTIVATE FORM oForm CENTERED' + Chr(13) + Chr(10)
+   cCode += '' + Chr(13) + Chr(10)
+   cCode += 'return nil' + Chr(13) + Chr(10)
+
+return cCode
+
 static function MsgInfo( cText )
 
    W32_MsgBox( cText, "IDE" )
@@ -264,6 +302,8 @@ return nil
 #pragma BEGINDUMP
 #include <hbapi.h>
 #include <windows.h>
+#include <commctrl.h>
+#include <richedit.h>
 
 HB_FUNC( W32_MSGBOX )
 {
@@ -278,6 +318,135 @@ HB_FUNC( W32_GETSCREENWIDTH )
 HB_FUNC( W32_GETSCREENHEIGHT )
 {
    hb_retni( GetSystemMetrics( SM_CYSCREEN ) );
+}
+
+/* ======================================================================
+ * Code Editor - independent window with multiline edit (monospace font)
+ * ====================================================================== */
+
+typedef struct {
+   HWND hWnd;     /* Tool window */
+   HWND hEdit;    /* Multiline edit control */
+   HFONT hFont;   /* Monospace font */
+} CODEEDITOR;
+
+static LRESULT CALLBACK CodeEdWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
+{
+   CODEEDITOR * ed = (CODEEDITOR *) GetWindowLongPtr( hWnd, GWLP_USERDATA );
+
+   switch( msg )
+   {
+      case WM_SIZE:
+      {
+         int w = LOWORD(lParam), h = HIWORD(lParam);
+         if( ed && ed->hEdit )
+            MoveWindow( ed->hEdit, 0, 0, w, h, TRUE );
+         return 0;
+      }
+
+      case WM_CLOSE:
+         ShowWindow( hWnd, SW_HIDE );
+         return 0;
+   }
+
+   return DefWindowProc( hWnd, msg, wParam, lParam );
+}
+
+/* CodeEditorCreate( nLeft, nTop, nWidth, nHeight ) --> hEditor */
+HB_FUNC( CODEEDITORCREATE )
+{
+   CODEEDITOR * ed;
+   WNDCLASSA wc = {0};
+   static BOOL bReg = FALSE;
+   LOGFONTA lf = {0};
+   HDC hDC;
+   int nLeft = hb_parni(1), nTop = hb_parni(2);
+   int nWidth = hb_parni(3), nHeight = hb_parni(4);
+
+   ed = (CODEEDITOR *) malloc( sizeof(CODEEDITOR) );
+   memset( ed, 0, sizeof(CODEEDITOR) );
+
+   /* Monospace font */
+   hDC = GetDC( NULL );
+   lf.lfHeight = -MulDiv( 10, GetDeviceCaps( hDC, LOGPIXELSY ), 72 );
+   ReleaseDC( NULL, hDC );
+   lf.lfCharSet = DEFAULT_CHARSET;
+   lf.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
+   lstrcpyA( lf.lfFaceName, "Consolas" );
+   ed->hFont = CreateFontIndirectA( &lf );
+
+   if( !bReg ) {
+      wc.lpfnWndProc = CodeEdWndProc;
+      wc.hInstance = GetModuleHandle(NULL);
+      wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+      wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+      wc.lpszClassName = "HbIdeCodeEditor";
+      RegisterClassA( &wc );
+      bReg = TRUE;
+   }
+
+   ed->hWnd = CreateWindowExA( WS_EX_TOOLWINDOW,
+      "HbIdeCodeEditor", "Code Editor",
+      WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME,
+      nLeft, nTop, nWidth, nHeight,
+      NULL, NULL, GetModuleHandle(NULL), NULL );
+
+   SetWindowLongPtr( ed->hWnd, GWLP_USERDATA, (LONG_PTR) ed );
+
+   /* Multiline edit with horizontal and vertical scrollbars */
+   ed->hEdit = CreateWindowExA( 0, "EDIT", "",
+      WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL |
+      ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL | ES_WANTRETURN,
+      0, 0, nWidth, nHeight,
+      ed->hWnd, NULL, GetModuleHandle(NULL), NULL );
+
+   SendMessage( ed->hEdit, WM_SETFONT, (WPARAM) ed->hFont, TRUE );
+
+   /* Set tab stops to 4 characters */
+   {
+      int nTabStop = 16;  /* in dialog units (approx 4 chars) */
+      SendMessage( ed->hEdit, EM_SETTABSTOPS, 1, (LPARAM) &nTabStop );
+   }
+
+   ShowWindow( ed->hWnd, SW_SHOW );
+
+   hb_retnint( (HB_PTRUINT) ed );
+}
+
+/* CodeEditorSetText( hEditor, cText ) */
+HB_FUNC( CODEEDITORSETTEXT )
+{
+   CODEEDITOR * ed = (CODEEDITOR *) (HB_PTRUINT) hb_parnint(1);
+   if( ed && ed->hEdit && HB_ISCHAR(2) )
+      SetWindowTextA( ed->hEdit, hb_parc(2) );
+}
+
+/* CodeEditorGetText( hEditor ) --> cText */
+HB_FUNC( CODEEDITORGETTEXT )
+{
+   CODEEDITOR * ed = (CODEEDITOR *) (HB_PTRUINT) hb_parnint(1);
+   if( ed && ed->hEdit )
+   {
+      int nLen = GetWindowTextLengthA( ed->hEdit );
+      char * buf = (char *) malloc( nLen + 1 );
+      GetWindowTextA( ed->hEdit, buf, nLen + 1 );
+      hb_retclen( buf, nLen );
+      free( buf );
+   }
+   else
+      hb_retc( "" );
+}
+
+/* CodeEditorDestroy( hEditor ) */
+HB_FUNC( CODEEDITORDESTROY )
+{
+   CODEEDITOR * ed = (CODEEDITOR *) (HB_PTRUINT) hb_parnint(1);
+   if( ed )
+   {
+      if( ed->hWnd ) DestroyWindow( ed->hWnd );
+      if( ed->hFont ) DeleteObject( ed->hFont );
+      free( ed );
+   }
 }
 
 #pragma ENDDUMP
