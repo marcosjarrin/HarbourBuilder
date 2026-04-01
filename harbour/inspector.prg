@@ -6,7 +6,7 @@ function InspectorOpen()
    endif
 return nil
 
-function InspectorRefresh( hCtrl )
+function InspectorRefresh( hCtrl, hForm )
    local h := _InsGetData()
    local aProps
    if h != 0
@@ -16,8 +16,43 @@ function InspectorRefresh( hCtrl )
       else
          INS_RefreshWithData( h, 0, {} )
       endif
-      INS_BringToFront( h )
    endif
+return nil
+
+// Populate combo with all controls from the design form
+function InspectorPopulateCombo( hForm )
+   local h := _InsGetData()
+   local i, nCount, hChild, cName, cClass, cEntry
+
+   if h == 0 .or. hForm == 0
+      return nil
+   endif
+
+   INS_ComboClear( h )
+
+   // Add the form itself
+   cName  := UI_GetProp( hForm, "cName" )
+   cClass := UI_GetProp( hForm, "cClassName" )
+   if Empty( cName ); cName := "Form1"; endif
+   cEntry := cName + ": " + cClass
+   INS_ComboAdd( h, cEntry )
+
+   // Add all child controls
+   nCount := UI_GetChildCount( hForm )
+   for i := 1 to nCount
+      hChild := UI_GetChild( hForm, i )
+      if hChild != 0
+         cName  := UI_GetProp( hChild, "cName" )
+         cClass := UI_GetProp( hChild, "cClassName" )
+         if Empty( cName ); cName := "ctrl" + LTrim( Str( i ) ); endif
+         cEntry := cName + ": " + cClass
+         INS_ComboAdd( h, cEntry )
+      endif
+   next
+
+   // Select current control in combo
+   INS_ComboSelect( h, 0 )
+
 return nil
 
 function InspectorClose()
@@ -65,11 +100,15 @@ typedef struct {
 
 typedef struct {
    HWND   hWnd;
-   HWND   hList;
+   HWND   hCombo;      /* control selector combobox */
+   HWND   hTab;        /* Properties / Events tab */
+   HWND   hList;       /* property grid listview */
+   HWND   hEventList;  /* events grid listview */
    HFONT  hFont;
    HFONT  hBold;
    HBRUSH hBrush;
    HB_PTRUINT hCtrl;   /* currently inspected control */
+   HB_PTRUINT hFormCtrl; /* form handle (for enumerating controls) */
    IROW   rows[MAX_ROWS];
    int    nRows;
    int    map[MAX_ROWS]; /* visible row -> rows index */
@@ -78,6 +117,7 @@ typedef struct {
    HWND   hBtn;         /* color picker "..." button */
    int    nEditRow;     /* listview row being edited */
    WNDPROC oldEditProc;
+   int    nActiveTab;   /* 0=Properties, 1=Events */
 } INSDATA;
 
 /* Forward */
@@ -88,6 +128,8 @@ static void InsEndEdit( INSDATA * d, BOOL bApply );
 static void InsApplyValue( INSDATA * d, int nReal, const char * szVal );
 static void InsColorPick( INSDATA * d, int nLVRow );
 static void InsFontPick( INSDATA * d, int nLVRow );
+static void InsPopulateEvents( INSDATA * d );
+static void InsUpdateCombo( INSDATA * d );  /* updates combo from current rows data */
 
 static LRESULT CALLBACK InsBtnProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
@@ -186,10 +228,21 @@ static LRESULT CALLBACK InsWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
       case WM_SIZE:
       {
          int w = LOWORD(lParam), h = HIWORD(lParam);
-         if( d && d->hList )
+         int comboH = 24, tabH = 24, topY = comboH + tabH + 8;
+         if( d )
          {
-            MoveWindow( d->hList, 0, 0, w, h, TRUE );
-            ListView_SetColumnWidth( d->hList, 1, w - COL_NAME_W - 4 );
+            if( d->hCombo ) MoveWindow( d->hCombo, 0, 0, w, 200, TRUE );
+            if( d->hTab )   MoveWindow( d->hTab, 0, comboH + 2, w, tabH + 4, TRUE );
+            if( d->hList )
+            {
+               MoveWindow( d->hList, 0, topY, w, h - topY, TRUE );
+               ListView_SetColumnWidth( d->hList, 1, w - COL_NAME_W - 4 );
+            }
+            if( d->hEventList )
+            {
+               MoveWindow( d->hEventList, 0, topY, w, h - topY, TRUE );
+               ListView_SetColumnWidth( d->hEventList, 1, w - COL_NAME_W - 4 );
+            }
          }
          return 0;
       }
@@ -275,6 +328,25 @@ static LRESULT CALLBACK InsWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
             }
             return 0;
          }
+         /* Tab change: Properties / Events */
+         if( pnm->code == TCN_SELCHANGE && pnm->idFrom == 102 )
+         {
+            int sel = (int) SendMessage( d->hTab, TCM_GETCURSEL, 0, 0 );
+            d->nActiveTab = sel;
+            if( sel == 0 )
+            {
+               ShowWindow( d->hList, SW_SHOW );
+               ShowWindow( d->hEventList, SW_HIDE );
+            }
+            else
+            {
+               ShowWindow( d->hList, SW_HIDE );
+               ShowWindow( d->hEventList, SW_SHOW );
+               InsPopulateEvents( d );
+            }
+            return 0;
+         }
+
          break;
       }
 
@@ -516,14 +588,18 @@ HB_FUNC( INS_CREATE )
    INSDATA * d;
    WNDCLASSA wc = {0};
    LVCOLUMNA lvc = {0};
+   TCITEMA tci = {0};
    static BOOL bReg = FALSE;
+   int comboH = 24, tabH = 24, topY;
 
    d = (INSDATA *) malloc( sizeof(INSDATA) );
    memset( d, 0, sizeof(INSDATA) );
    d->nEditRow = -1;
    d->hBtn = NULL;
+   d->nActiveTab = 0;
+   d->hFormCtrl = 0;
 
-   { LOGFONTA lf = {0}; lf.lfHeight = -13; lf.lfCharSet = DEFAULT_CHARSET;
+   { LOGFONTA lf = {0}; lf.lfHeight = -12; lf.lfCharSet = DEFAULT_CHARSET;
      lstrcpyA(lf.lfFaceName, "Segoe UI");
      d->hFont = CreateFontIndirectA(&lf);
      lf.lfWeight = FW_BOLD; d->hBold = CreateFontIndirectA(&lf); }
@@ -536,29 +612,64 @@ HB_FUNC( INS_CREATE )
       wc.lpszClassName = "HbIdeInspector"; RegisterClassA(&wc); bReg = TRUE;
    }
 
+   { INITCOMMONCONTROLSEX ic = { sizeof(ic), ICC_LISTVIEW_CLASSES | ICC_TAB_CLASSES };
+     InitCommonControlsEx(&ic); }
+
    d->hWnd = CreateWindowExA( WS_EX_TOOLWINDOW, "HbIdeInspector", "Object Inspector",
-      WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_BORDER,
-      0, 130, 215, 500,
+      WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME,
+      0, 130, 220, 500,
       NULL, NULL, GetModuleHandle(NULL), NULL );
 
    SetWindowLongPtr( d->hWnd, GWLP_USERDATA, (LONG_PTR) d );
 
-   { INITCOMMONCONTROLSEX ic = { sizeof(ic), ICC_LISTVIEW_CLASSES };
-     InitCommonControlsEx(&ic); }
+   /* ComboBox: control selector at top */
+   d->hCombo = CreateWindowExA( 0, "COMBOBOX", "",
+      WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
+      0, 0, 215, 200,
+      d->hWnd, (HMENU)101, GetModuleHandle(NULL), NULL );
+   SendMessage( d->hCombo, WM_SETFONT, (WPARAM) d->hFont, TRUE );
 
+   /* TabControl: Properties | Events */
+   d->hTab = CreateWindowExA( 0, WC_TABCONTROLA, "",
+      WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
+      0, comboH + 2, 215, tabH + 4,
+      d->hWnd, (HMENU)102, GetModuleHandle(NULL), NULL );
+   SendMessage( d->hTab, WM_SETFONT, (WPARAM) d->hFont, TRUE );
+
+   tci.mask = TCIF_TEXT;
+   tci.pszText = "Properties"; SendMessageA( d->hTab, TCM_INSERTITEMA, 0, (LPARAM) &tci );
+   tci.pszText = "Events";     SendMessageA( d->hTab, TCM_INSERTITEMA, 1, (LPARAM) &tci );
+
+   topY = comboH + tabH + 8;
+
+   /* Properties ListView (visible by default) */
    d->hList = CreateWindowExA( 0, WC_LISTVIEWA, "",
       WS_CHILD | WS_VISIBLE | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOCOLUMNHEADER,
-      0, 0, 210, 470, d->hWnd, (HMENU)100, GetModuleHandle(NULL), NULL );
+      0, topY, 215, 440 - topY, d->hWnd, (HMENU)100, GetModuleHandle(NULL), NULL );
 
    SendMessage( d->hList, LVM_SETEXTENDEDLISTVIEWSTYLE, 0,
       LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER );
    SendMessage( d->hList, WM_SETFONT, (WPARAM) d->hFont, TRUE );
 
    lvc.mask = LVCF_TEXT | LVCF_WIDTH;
-   lvc.cx = 95; lvc.pszText = "Property";
+   lvc.cx = COL_NAME_W; lvc.pszText = "Property";
    SendMessageA( d->hList, LVM_INSERTCOLUMNA, 0, (LPARAM) &lvc );
-   lvc.cx = 95; lvc.pszText = "Value";
+   lvc.cx = 100; lvc.pszText = "Value";
    SendMessageA( d->hList, LVM_INSERTCOLUMNA, 1, (LPARAM) &lvc );
+
+   /* Events ListView (hidden by default) */
+   d->hEventList = CreateWindowExA( 0, WC_LISTVIEWA, "",
+      WS_CHILD | LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOCOLUMNHEADER,
+      0, topY, 215, 440 - topY, d->hWnd, (HMENU)103, GetModuleHandle(NULL), NULL );
+
+   SendMessage( d->hEventList, LVM_SETEXTENDEDLISTVIEWSTYLE, 0,
+      LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER );
+   SendMessage( d->hEventList, WM_SETFONT, (WPARAM) d->hFont, TRUE );
+
+   lvc.cx = COL_NAME_W; lvc.pszText = "Event";
+   SendMessageA( d->hEventList, LVM_INSERTCOLUMNA, 0, (LPARAM) &lvc );
+   lvc.cx = 100; lvc.pszText = "Handler";
+   SendMessageA( d->hEventList, LVM_INSERTCOLUMNA, 1, (LPARAM) &lvc );
 
    ShowWindow( d->hWnd, SW_SHOW );
 
@@ -592,13 +703,9 @@ HB_FUNC( INS_REFRESHWITHDATA )
 
    nLen = hb_arrayLen( pArray );
 
-   /* Title from first prop (ClassName) */
-   {
-      PHB_ITEM pRow = hb_arrayGetItemPtr( pArray, 1 );
-      const char * cls = hb_arrayGetCPtr( pRow, 2 );
-      sprintf( szTitle, "Inspector: %s", cls ? cls : "" );
-      SetWindowTextA( d->hWnd, szTitle );
-   }
+   /* Title always "Object Inspector" (control shown in combo) */
+   (void) szTitle;
+   SetWindowTextA( d->hWnd, "Object Inspector" );
 
    /* Collect categories */
    for( i = 1; i <= nLen && nCats < 16; i++ )
@@ -651,9 +758,101 @@ HB_FUNC( INS_REFRESHWITHDATA )
    }
 
    InsRebuild( d );
+   InsUpdateCombo( d );
+
+   /* If events tab is active, refresh events too */
+   if( d->nActiveTab == 1 )
+      InsPopulateEvents( d );
+}
+
+/* INS_SetFormCtrl( hInsData, hForm ) - set form handle for combo enumeration */
+HB_FUNC( INS_SETFORMCTRL )
+{
+   INSDATA * d = (INSDATA *) (HB_PTRUINT) hb_parnint(1);
+   if( d ) d->hFormCtrl = (HB_PTRUINT) hb_parnint(2);
 }
 
 /* INS_BringToFront( hInsData ) */
+/* Populate the Events tab with available events for the current control */
+static void InsPopulateEvents( INSDATA * d )
+{
+   LVITEMA lvi = {0};
+   static const char * aEvents[] = { "OnClick", "OnChange", "OnInit", "OnClose" };
+   int i, nEvents = 4;
+
+   if( !d || !d->hEventList ) return;
+
+   SendMessage( d->hEventList, LVM_DELETEALLITEMS, 0, 0 );
+
+   for( i = 0; i < nEvents; i++ )
+   {
+      lvi.mask = LVIF_TEXT;
+      lvi.iItem = i;
+      lvi.iSubItem = 0;
+      lvi.pszText = (char *) aEvents[i];
+      SendMessageA( d->hEventList, LVM_INSERTITEMA, 0, (LPARAM) &lvi );
+
+      /* Show handler name if set (placeholder for now) */
+      lvi.iSubItem = 1;
+      lvi.pszText = "";
+      SendMessageA( d->hEventList, LVM_SETITEMA, 0, (LPARAM) &lvi );
+   }
+}
+
+/* Update the control selector combobox - simple version using stored name/class */
+static void InsUpdateCombo( INSDATA * d )
+{
+   char szBuf[128];
+
+   if( !d || !d->hCombo ) return;
+
+   /* Just show the current control. Full enumeration done from Harbour side. */
+   /* Find if current control name matches an existing combo entry */
+   if( d->nRows > 0 )
+   {
+      int i;
+      const char * cls = "";
+      const char * name = "";
+      for( i = 0; i < d->nRows; i++ )
+      {
+         if( !d->rows[i].bIsCat && lstrcmpiA( d->rows[i].szName, "cClassName" ) == 0 )
+            cls = d->rows[i].szValue;
+         if( !d->rows[i].bIsCat && lstrcmpiA( d->rows[i].szName, "cName" ) == 0 )
+            name = d->rows[i].szValue;
+      }
+      sprintf( szBuf, "%s: %s", name[0] ? name : "?", cls[0] ? cls : "?" );
+
+      /* Only update if combo is empty or text changed */
+      SendMessage( d->hCombo, CB_RESETCONTENT, 0, 0 );
+      SendMessageA( d->hCombo, CB_ADDSTRING, 0, (LPARAM) szBuf );
+      SendMessage( d->hCombo, CB_SETCURSEL, 0, 0 );
+   }
+}
+
+/* INS_ComboAdd( hInsData, cText ) - add entry to combo from Harbour */
+HB_FUNC( INS_COMBOADD )
+{
+   INSDATA * d = (INSDATA *) (HB_PTRUINT) hb_parnint(1);
+   if( d && d->hCombo && HB_ISCHAR(2) )
+      SendMessageA( d->hCombo, CB_ADDSTRING, 0, (LPARAM) hb_parc(2) );
+}
+
+/* INS_ComboSelect( hInsData, nIndex ) */
+HB_FUNC( INS_COMBOSELECT )
+{
+   INSDATA * d = (INSDATA *) (HB_PTRUINT) hb_parnint(1);
+   if( d && d->hCombo )
+      SendMessage( d->hCombo, CB_SETCURSEL, hb_parni(2), 0 );
+}
+
+/* INS_ComboClear( hInsData ) */
+HB_FUNC( INS_COMBOCLEAR )
+{
+   INSDATA * d = (INSDATA *) (HB_PTRUINT) hb_parnint(1);
+   if( d && d->hCombo )
+      SendMessage( d->hCombo, CB_RESETCONTENT, 0, 0 );
+}
+
 HB_FUNC( INS_BRINGTOFRONT )
 {
    INSDATA * d = (INSDATA *) (HB_PTRUINT) hb_parnint(1);

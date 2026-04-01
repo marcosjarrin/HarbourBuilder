@@ -86,6 +86,7 @@ function Main()
    // === Window 2: Inspector (independent, positioned left) ===
    InspectorOpen()
    InspectorRefresh( oDesignForm:hCpp )
+   InspectorPopulateCombo( oDesignForm:hCpp )
 
    // Sync: selection change in design form -> refresh inspector + status
    UI_OnSelChange( oDesignForm:hCpp, ;
@@ -94,12 +95,13 @@ function Main()
    // Show design form first (no message loop)
    oDesignForm:Show()
 
+   // When IDE closes, destroy all secondary windows first
+   oIDE:OnClose := { || InspectorClose(), oDesignForm:Destroy() }
+
    // IDE enters the message loop (dispatches for ALL windows)
    oIDE:Activate()
 
    // Cleanup after message loop exits
-   InspectorClose()
-   oDesignForm:Destroy()
    oIDE:Destroy()
 
 return nil
@@ -161,10 +163,23 @@ return nil
 
 static function OnDesignSelChange( hCtrl )
 
-   local hTarget, cPos, cDim
+   local hTarget, cPos, cDim, i, nCount, nSel
 
    hTarget := If( hCtrl == 0, oDesignForm:hCpp, hCtrl )
    InspectorRefresh( hTarget )
+
+   // Select the right entry in the inspector combo
+   nSel := 0  // default = form itself
+   if hCtrl != 0 .and. hCtrl != oDesignForm:hCpp
+      nCount := UI_GetChildCount( oDesignForm:hCpp )
+      for i := 1 to nCount
+         if UI_GetChild( oDesignForm:hCpp, i ) == hCtrl
+            nSel := i
+            exit
+         endif
+      next
+   endif
+   INS_ComboSelect( _InsGetData(), nSel )
 
    // Update status bar: position and dimensions
    if oIDE:hCpp != 0

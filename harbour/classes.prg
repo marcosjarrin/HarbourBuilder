@@ -32,6 +32,7 @@ CLASS TControl
 
    ASSIGN OnClick( b )  INLINE UI_OnEvent( ::hCpp, "OnClick", b )
    ASSIGN OnChange( b ) INLINE UI_OnEvent( ::hCpp, "OnChange", b )
+   ASSIGN OnClose( b )  INLINE UI_OnEvent( ::hCpp, "OnClose", b )
 
 ENDCLASS
 

@@ -680,6 +680,9 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
       }
 
       case WM_CLOSE:
+         /* Fire OnClose event before closing */
+         FireEvent( FOnClose );
+
          if( FMainWindow )
             Close();   /* Main window: destroy -> PostQuitMessage */
          else
