@@ -46,7 +46,7 @@ TEdit::TEdit()
    lstrcpy( FClassName, "TEdit" );
    FControlType = CT_EDIT;
    FWidth = 200;
-   FHeight = 24;
+   FHeight = 26;
    FReadOnly = FALSE;
    FPassword = FALSE;
 }

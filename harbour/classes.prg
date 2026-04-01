@@ -137,7 +137,7 @@ METHOD New( oParent, cText, nLeft, nTop, nWidth, nHeight ) CLASS TEdit
 
    if cText == nil;   cText := ""; endif
    if nWidth == nil;  nWidth := 200; endif
-   if nHeight == nil; nHeight := 24; endif
+   if nHeight == nil; nHeight := 26; endif
 
    ::oParent := oParent
    ::hCpp := UI_EditNew( oParent:hCpp, cText, nLeft, nTop, nWidth, nHeight )
