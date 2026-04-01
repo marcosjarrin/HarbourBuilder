@@ -39,10 +39,13 @@ typedef struct {
    GtkWidget *  treeView;
    GtkListStore * store;
    HB_PTRUINT   hCtrl;       /* currently inspected control handle */
+   HB_PTRUINT   hFormCtrl;   /* form handle for combo enumeration */
    IROW         rows[MAX_ROWS];
    int          nRows;
    int          map[MAX_ROWS]; /* visible row -> rows index */
    int          nVisible;
+   GtkWidget *  combo;       /* control selection combo (GtkComboBoxText) */
+   PHB_ITEM     pOnComboSel; /* callback for combo selection change */
 } INSDATA;
 
 /* Columns in the GtkListStore */
@@ -346,6 +349,20 @@ static void on_row_activated( GtkTreeView * treeView, GtkTreePath * path,
    }
 }
 
+/* Combo box selection changed */
+static void on_combo_sel_changed( GtkComboBox * widget, gpointer data )
+{
+   INSDATA * d = (INSDATA *)data;
+   int idx = gtk_combo_box_get_active( widget );
+   if( idx >= 0 && d->pOnComboSel && HB_IS_BLOCK( d->pOnComboSel ) )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( d->pOnComboSel );
+      hb_vmPushInteger( idx );
+      hb_vmSend( 1 );
+   }
+}
+
 /* Prevent window close from destroying it; just hide */
 static gboolean on_inspector_delete( GtkWidget * widget, GdkEvent * event, gpointer data )
 {
@@ -378,6 +395,15 @@ HB_FUNC( INS_CREATE )
    gtk_window_set_default_size( GTK_WINDOW(d->window), 320, 450 );
    gtk_window_set_type_hint( GTK_WINDOW(d->window), GDK_WINDOW_TYPE_HINT_UTILITY );
    g_signal_connect( d->window, "delete-event", G_CALLBACK(on_inspector_delete), d );
+
+   /* VBox: combo + property table */
+   GtkWidget * vbox = gtk_box_new( GTK_ORIENTATION_VERTICAL, 0 );
+   gtk_container_add( GTK_CONTAINER(d->window), vbox );
+
+   /* Control selection combo at top */
+   d->combo = gtk_combo_box_text_new();
+   gtk_box_pack_start( GTK_BOX(vbox), d->combo, FALSE, FALSE, 2 );
+   g_signal_connect( d->combo, "changed", G_CALLBACK(on_combo_sel_changed), d );
 
    /* List store */
    d->store = gtk_list_store_new( NUM_COLS,
@@ -434,7 +460,7 @@ HB_FUNC( INS_CREATE )
    gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW(scroll),
       GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
    gtk_container_add( GTK_CONTAINER(scroll), d->treeView );
-   gtk_container_add( GTK_CONTAINER(d->window), scroll );
+   gtk_box_pack_start( GTK_BOX(vbox), scroll, TRUE, TRUE, 0 );
 
    gtk_widget_show_all( d->window );
 
@@ -497,6 +523,84 @@ HB_FUNC( INS_DESTROY )
 {
    INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
    if( !d ) return;
+   if( d->pOnComboSel ) { hb_itemRelease( d->pOnComboSel ); d->pOnComboSel = NULL; }
    if( d->window ) gtk_widget_destroy( d->window );
    free( d );
+}
+
+/* ======================================================================
+ * INS_SetFormCtrl( hInsData, hForm )
+ * ====================================================================== */
+
+HB_FUNC( INS_SETFORMCTRL )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   if( d ) d->hFormCtrl = (HB_PTRUINT) hb_parnint(2);
+}
+
+/* ======================================================================
+ * INS_SetOnComboSel( hInsData, bBlock )
+ * ====================================================================== */
+
+HB_FUNC( INS_SETONCOMBOSEL )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( d )
+   {
+      if( d->pOnComboSel ) hb_itemRelease( d->pOnComboSel );
+      d->pOnComboSel = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
+}
+
+/* ======================================================================
+ * INS_ComboAdd( hInsData, cText )
+ * ====================================================================== */
+
+HB_FUNC( INS_COMBOADD )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   if( d && d->combo && HB_ISCHAR(2) )
+      gtk_combo_box_text_append_text( GTK_COMBO_BOX_TEXT(d->combo), hb_parc(2) );
+}
+
+/* ======================================================================
+ * INS_ComboSelect( hInsData, nIndex )
+ * ====================================================================== */
+
+HB_FUNC( INS_COMBOSELECT )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   int idx = hb_parni(2);
+   if( d && d->combo )
+      gtk_combo_box_set_active( GTK_COMBO_BOX(d->combo), idx );
+}
+
+/* ======================================================================
+ * INS_ComboClear( hInsData )
+ * ====================================================================== */
+
+HB_FUNC( INS_COMBOCLEAR )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   if( d && d->combo )
+      gtk_combo_box_text_remove_all( GTK_COMBO_BOX_TEXT(d->combo) );
+}
+
+/* ======================================================================
+ * INS_SetPos( hInsData, nLeft, nTop, nWidth, nHeight )
+ * ====================================================================== */
+
+HB_FUNC( INS_SETPOS )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   if( !d || !d->window ) return;
+
+   int nLeft   = hb_parni(2);
+   int nTop    = hb_parni(3);
+   int nWidth  = hb_parni(4);
+   int nHeight = hb_parni(5);
+
+   gtk_window_move( GTK_WINDOW(d->window), nLeft, nTop );
+   gtk_window_resize( GTK_WINDOW(d->window), nWidth, nHeight );
 }

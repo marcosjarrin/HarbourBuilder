@@ -18,8 +18,44 @@ function InspectorRefresh( hCtrl )
       else
          INS_RefreshWithData( h, 0, {} )
       endif
-      INS_BringToFront( h )
    endif
+return nil
+
+// Populate combo with all controls from the design form
+function InspectorPopulateCombo( hForm )
+   local h := _InsGetData()
+   local i, nCount, hChild, cName, cClass, cEntry
+
+   if h == 0 .or. hForm == 0
+      return nil
+   endif
+
+   INS_ComboClear( h )
+   INS_SetFormCtrl( h, hForm )
+
+   // Add the form itself
+   cName  := UI_GetProp( hForm, "cName" )
+   cClass := UI_GetProp( hForm, "cClassName" )
+   if Empty( cName ); cName := "Form1"; endif
+   cEntry := cName + " AS " + cClass
+   INS_ComboAdd( h, cEntry )
+
+   // Add all child controls
+   nCount := UI_GetChildCount( hForm )
+   for i := 1 to nCount
+      hChild := UI_GetChild( hForm, i )
+      if hChild != 0
+         cName  := UI_GetProp( hChild, "cName" )
+         cClass := UI_GetProp( hChild, "cClassName" )
+         if Empty( cName ); cName := "ctrl" + LTrim( Str( i ) ); endif
+         cEntry := cName + " AS " + cClass
+         INS_ComboAdd( h, cEntry )
+      endif
+   next
+
+   // Select form (first entry)
+   INS_ComboSelect( h, 0 )
+
 return nil
 
 function InspectorClose()

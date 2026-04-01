@@ -1,11 +1,13 @@
 #!/bin/bash
-# build_gtk.sh - Build test_design_gtk for Linux using Harbour + GTK3
+# build_gtk.sh - Build hbcpp IDE for Linux using Harbour + GTK3
 #
 # Prerequisites:
 #   sudo apt install libgtk-3-dev
 #   Harbour compiler installed (default: ~/harbour)
 #
-# Usage: ./build_gtk.sh
+# Usage: ./build_gtk.sh [program]
+#   ./build_gtk.sh              - builds hbcpp_linux (full IDE)
+#   ./build_gtk.sh test_design_gtk  - builds test_design_gtk (simple demo)
 
 set -e
 
@@ -16,11 +18,12 @@ HBINC="$HBDIR/include"
 HBLIB="$HBDIR/lib/linux/gcc"
 
 PROJDIR="$(cd "$(dirname "$0")/.." && pwd)"
-PROG="test_design_gtk"
+PROG="${1:-hbcpp_linux}"
 
 cd "$(dirname "$0")"
 
 echo "Using Harbour: $HBDIR"
+echo "Building: $PROG"
 echo ""
 
 echo "[1/5] Compiling ${PROG}.prg..."

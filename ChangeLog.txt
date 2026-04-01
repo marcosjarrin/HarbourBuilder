@@ -3,6 +3,34 @@ hbcpp - C++ powered GUI for Harbour
 
 2026-04-01
 ----------
+- Linux IDE: full Borland C++Builder-style layout with 4 independent windows
+  * New hbcpp_linux.prg: complete IDE equivalent to macOS version
+  * App title: "hbcpp (GUI framework for Harbour)"
+  * Main IDE bar: full-width window with menu bar, speedbar (toolbar),
+    component palette (GtkNotebook with tabs), all in one horizontal strip
+  * Component Palette: GtkNotebook with real tabs and buttons
+    Tabs: Standard, Additional, Data Access, Data Controls
+    Buttons with tooltips and OnSelect callback
+  * Code Editor: GtkTextView with dark theme (VS Code colors #1E1E1E),
+    syntax highlighting for Harbour/xBase (keywords bold blue, commands
+    teal, strings orange, comments green, preprocessor purple,
+    logical literals), line number gutter with Cairo drawing,
+    scroll-synced gutter repaint
+  * Inspector combo: GtkComboBoxText control selector at top of inspector
+    (INS_ComboAdd, INS_ComboSelect, INS_ComboClear, INS_SetFormCtrl,
+    INS_SetOnComboSel, INS_SetPos) - synced with design form selection
+  * StatusBar: GtkStatusbar with context ID (replaces stub)
+  * UI_FormSelectCtrl: real implementation for programmatic selection
+  * Layout: Inspector left column, Code Editor right (background),
+    Form Designer floating centered on top of editor
+    Positions calculated from GTK_GetWindowBottom() for pixel-perfect alignment
+  * New bridge functions: GTK_GetScreenWidth, GTK_GetScreenHeight,
+    GTK_GetWindowBottom, CodeEditorCreate, CodeEditorSetText,
+    CodeEditorGetText, CodeEditorDestroy
+  * build_gtk.sh: accepts optional program name parameter
+    ./build_gtk.sh (builds hbcpp_linux), ./build_gtk.sh test_design_gtk
+  * inspector_gtk.prg: added InspectorPopulateCombo function
+
 - macOS IDE: full Borland C++Builder-style layout with 4 independent windows
   * Renamed to hbcpp_macos (binary) / hbcpp_macos.prg (source)
   * App title: "hbcpp (GUI framework for Harbour)"
