@@ -42,11 +42,14 @@ HB_FUNC( UI_FORMNEW )
    if( HB_ISNUM(2) )  p->FWidth = hb_parni(2);
    if( HB_ISNUM(3) )  p->FHeight = hb_parni(3);
 
-   /* Custom font */
+   /* Custom font - convert point size to pixel height correctly */
    if( HB_ISCHAR(4) && HB_ISNUM(5) )
    {
       LOGFONTA lf = {0};
-      lf.lfHeight = -hb_parni(5);
+      HDC hDC = GetDC( NULL );
+      int nPtSize = hb_parni(5);
+      lf.lfHeight = -MulDiv( nPtSize, GetDeviceCaps( hDC, LOGPIXELSY ), 72 );
+      ReleaseDC( NULL, hDC );
       lf.lfCharSet = DEFAULT_CHARSET;
       lstrcpynA( lf.lfFaceName, hb_parc(4), LF_FACESIZE );
       if( p->FFormFont ) DeleteObject( p->FFormFont );
@@ -318,7 +321,9 @@ HB_FUNC( UI_SETPROP )
 
       { LOGFONTA lf = {0};
         HFONT hNew;
-        lf.lfHeight = -nSize;
+        HDC hTmpDC = GetDC( NULL );
+        lf.lfHeight = -MulDiv( nSize, GetDeviceCaps( hTmpDC, LOGPIXELSY ), 72 );
+        ReleaseDC( NULL, hTmpDC );
         lf.lfCharSet = DEFAULT_CHARSET;
         lstrcpynA( lf.lfFaceName, szFace, LF_FACESIZE );
         hNew = CreateFontIndirectA( &lf );

@@ -337,10 +337,12 @@ void TToolBar::CreateHandle( HWND hParent )
    SendMessage( FHandle, TB_BUTTONSTRUCTSIZE, sizeof(TBBUTTON), 0 );
    SendMessage( FHandle, TB_SETEXTENDEDSTYLE, 0, TBSTYLE_EX_MIXEDBUTTONS );
 
-   /* Apply font from parent */
-   if( hParent )
-      SendMessage( FHandle, WM_SETFONT,
-         SendMessage( hParent, WM_GETFONT, 0, 0 ), TRUE );
+   /* Apply font from parent form - use FFormFont directly for consistency */
+   {
+      HFONT hFont = (HFONT) SendMessage( hParent, WM_GETFONT, 0, 0 );
+      if( hFont )
+         SendMessage( FHandle, WM_SETFONT, (WPARAM) hFont, TRUE );
+   }
 
    /* Add all buttons */
    for( i = 0; i < FBtnCount; i++ )
@@ -494,19 +496,32 @@ void TComponentPalette::CreateHandle( HWND hParent )
 
    GetClientRect( hParent, &rcParent );
 
+   /* Vertical splitter line between speedbar and palette */
+   if( tbWidth > 0 )
+   {
+      CreateWindowExA( 0, "STATIC", NULL,
+         WS_CHILD | WS_VISIBLE | SS_ETCHEDVERT,
+         tbWidth - 2, 2, 2, rcParent.bottom - 4,
+         hParent, NULL, GetModuleHandle(NULL), NULL );
+   }
+
    /* Create tab control to the right of the toolbar */
    FTabCtrl = CreateWindowExA( 0, WC_TABCONTROLA, NULL,
       WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | TCS_TABS,
-      tbWidth, 0,
-      rcParent.right - tbWidth, rcParent.bottom,
+      tbWidth + 2, 0,
+      rcParent.right - tbWidth - 2, rcParent.bottom,
       hParent, NULL, GetModuleHandle(NULL), NULL );
 
    if( !FTabCtrl ) return;
    FHandle = FTabCtrl;
 
-   /* Apply parent font */
-   SendMessage( FTabCtrl, WM_SETFONT,
-      SendMessage( hParent, WM_GETFONT, 0, 0 ), TRUE );
+   /* Apply the exact same font as the toolbar for visual consistency */
+   if( pForm && pForm->FToolBar && pForm->FToolBar->FHandle )
+      SendMessage( FTabCtrl, WM_SETFONT,
+         SendMessage( pForm->FToolBar->FHandle, WM_GETFONT, 0, 0 ), TRUE );
+   else
+      SendMessage( FTabCtrl, WM_SETFONT,
+         SendMessage( hParent, WM_GETFONT, 0, 0 ), TRUE );
 
    /* Add tabs */
    {

@@ -90,12 +90,17 @@ void TForm::CreateHandle( HWND hParent )
    WNDCLASSA wc = {0};
    char szClass[32];
 
-   /* Create font */
-   LOGFONTA lf = {0};
-   lf.lfHeight = -12;  /* default: ~9pt */
-   lf.lfCharSet = DEFAULT_CHARSET;
-   lstrcpyA( lf.lfFaceName, "Segoe UI" );
-   FFormFont = CreateFontIndirectA( &lf );
+   /* Create default font only if not already set by UI_FormNew */
+   if( !FFormFont )
+   {
+      LOGFONTA lf = {0};
+      HDC hTmpDC = GetDC( NULL );
+      lf.lfHeight = -MulDiv( 9, GetDeviceCaps( hTmpDC, LOGPIXELSY ), 72 );
+      ReleaseDC( NULL, hTmpDC );
+      lf.lfCharSet = DEFAULT_CHARSET;
+      lstrcpyA( lf.lfFaceName, "Segoe UI" );
+      FFormFont = CreateFontIndirectA( &lf );
+   }
    FFont = FFormFont;
 
    /* Background brush */
@@ -316,8 +321,8 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
             RECT rc;
             int tbW = ( FToolBar ) ? FToolBar->FWidth + 4 : 0;
             GetClientRect( FHandle, &rc );
-            SetWindowPos( FPalette->FTabCtrl, NULL, tbW, 0,
-               rc.right - tbW, rc.bottom, SWP_NOZORDER );
+            SetWindowPos( FPalette->FTabCtrl, NULL, tbW + 2, 0,
+               rc.right - tbW - 2, rc.bottom, SWP_NOZORDER );
          }
          /* Resize status bar */
          if( FStatusBar )
