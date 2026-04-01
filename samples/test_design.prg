@@ -432,8 +432,8 @@ static void HighlightCode( HWND hEdit )
    SendMessage( hEdit, EM_EXGETSEL, 0, (LPARAM) &crSave );
    SendMessage( hEdit, WM_SETREDRAW, FALSE, 0 );
 
-   /* Reset all to black */
-   SetRichColor( hEdit, 0, nLen, RGB(0,0,0), FALSE );
+   /* Reset all to light gray (default text on dark bg) */
+   SetRichColor( hEdit, 0, nLen, RGB(212,212,212), FALSE );
 
    i = 0;
    while( i < nLen )
@@ -443,7 +443,7 @@ static void HighlightCode( HWND hEdit )
       {
          int start = i;
          while( i < nLen && buf[i] != '\r' && buf[i] != '\n' ) i++;
-         SetRichColor( hEdit, start, i, RGB(0,128,0), FALSE );
+         SetRichColor( hEdit, start, i, RGB(106,153,85), FALSE );
          continue;
       }
 
@@ -454,7 +454,7 @@ static void HighlightCode( HWND hEdit )
          i += 2;
          while( i + 1 < nLen && !( buf[i] == '*' && buf[i+1] == '/' ) ) i++;
          if( i + 1 < nLen ) i += 2;
-         SetRichColor( hEdit, start, i, RGB(0,128,0), FALSE );
+         SetRichColor( hEdit, start, i, RGB(106,153,85), FALSE );
          continue;
       }
 
@@ -466,7 +466,7 @@ static void HighlightCode( HWND hEdit )
          i++;
          while( i < nLen && buf[i] != q && buf[i] != '\r' && buf[i] != '\n' ) i++;
          if( i < nLen && buf[i] == q ) i++;
-         SetRichColor( hEdit, start, i, RGB(163,21,21), FALSE );
+         SetRichColor( hEdit, start, i, RGB(206,145,120), FALSE );
          continue;
       }
 
@@ -476,7 +476,7 @@ static void HighlightCode( HWND hEdit )
          int start = i;
          i++;
          while( i < nLen && IsWordChar(buf[i]) ) i++;
-         SetRichColor( hEdit, start, i, RGB(128,0,128), TRUE );
+         SetRichColor( hEdit, start, i, RGB(198,120,221), TRUE );
          continue;
       }
 
@@ -486,7 +486,7 @@ static void HighlightCode( HWND hEdit )
          int start = i;
          i++;
          while( i < nLen && buf[i] != '.' && IsWordChar(buf[i]) ) i++;
-         if( i < nLen && buf[i] == '.' ) { i++; SetRichColor( hEdit, start, i, RGB(128,0,128), FALSE ); }
+         if( i < nLen && buf[i] == '.' ) { i++; SetRichColor( hEdit, start, i, RGB(198,120,221), FALSE ); }
          continue;
       }
 
@@ -496,9 +496,9 @@ static void HighlightCode( HWND hEdit )
          ws = i;
          while( i < nLen && IsWordChar(buf[i]) ) i++;
          if( IsKeyword( buf + ws, i - ws ) )
-            SetRichColor( hEdit, ws, i, RGB(0,0,180), TRUE );
+            SetRichColor( hEdit, ws, i, RGB(86,156,214), TRUE );
          else if( IsCommand( buf + ws, i - ws ) )
-            SetRichColor( hEdit, ws, i, RGB(0,0,180), FALSE );
+            SetRichColor( hEdit, ws, i, RGB(78,201,176), FALSE );
          continue;
       }
 
@@ -528,16 +528,16 @@ static void GutterPaint( CODEEDITOR * ed )
    hDC = BeginPaint( ed->hGutter, &ps );
    GetClientRect( ed->hGutter, &rcGutter );
 
-   /* Fill background */
+   /* Dark fill background */
    {
-      HBRUSH hBr = CreateSolidBrush( RGB(240, 240, 240) );
+      HBRUSH hBr = CreateSolidBrush( RGB(37, 37, 38) );
       FillRect( hDC, &rcGutter, hBr );
       DeleteObject( hBr );
    }
 
    /* Right border line */
    {
-      HPEN hPen = CreatePen( PS_SOLID, 1, RGB(200, 200, 200) );
+      HPEN hPen = CreatePen( PS_SOLID, 1, RGB(60, 60, 60) );
       HPEN hOldPen = (HPEN) SelectObject( hDC, hPen );
       MoveToEx( hDC, rcGutter.right - 1, 0, NULL );
       LineTo( hDC, rcGutter.right - 1, rcGutter.bottom );
@@ -547,7 +547,7 @@ static void GutterPaint( CODEEDITOR * ed )
 
    hOld = (HFONT) SelectObject( hDC, ed->hFont );
    SetBkMode( hDC, TRANSPARENT );
-   SetTextColor( hDC, RGB(128, 128, 128) );
+   SetTextColor( hDC, RGB(133, 133, 133) );
 
    /* Get first visible line and line height */
    firstLine = (int) SendMessage( ed->hEdit, EM_GETFIRSTVISIBLELINE, 0, 0 );
@@ -676,11 +676,11 @@ HB_FUNC( CODEEDITORCREATE )
    ed = (CODEEDITOR *) malloc( sizeof(CODEEDITOR) );
    memset( ed, 0, sizeof(CODEEDITOR) );
 
-   /* Monospace font - 13pt Consolas */
+   /* Monospace font - 15pt Consolas */
    {
       LOGFONTA lf = {0};
       hDC = GetDC( NULL );
-      lf.lfHeight = -MulDiv( 13, GetDeviceCaps( hDC, LOGPIXELSY ), 72 );
+      lf.lfHeight = -MulDiv( 15, GetDeviceCaps( hDC, LOGPIXELSY ), 72 );
       ReleaseDC( NULL, hDC );
       lf.lfCharSet = DEFAULT_CHARSET;
       lf.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
@@ -749,13 +749,13 @@ HB_FUNC( CODEEDITORCREATE )
       /* Set default font via CHARFORMAT - 13pt Consolas */
       cf.cbSize = sizeof(cf);
       cf.dwMask = CFM_FACE | CFM_SIZE | CFM_COLOR;
-      cf.yHeight = 13 * 20;  /* 13pt in twips (1pt = 20 twips) */
-      cf.crTextColor = RGB(0,0,0);
+      cf.yHeight = 15 * 20;  /* 15pt in twips */
+      cf.crTextColor = RGB(212,212,212);  /* light gray text on dark bg */
       lstrcpyA( cf.szFaceName, "Consolas" );
       SendMessageA( ed->hEdit, EM_SETCHARFORMAT, SCF_ALL, (LPARAM) &cf );
 
-      /* White background */
-      SendMessage( ed->hEdit, EM_SETBKGNDCOLOR, 0, (LPARAM) RGB(255,255,255) );
+      /* Dark background */
+      SendMessage( ed->hEdit, EM_SETBKGNDCOLOR, 0, (LPARAM) RGB(30,30,30) );
 
       /* Enable ENM_CHANGE for future auto-highlight */
       SendMessage( ed->hEdit, EM_SETEVENTMASK, 0, ENM_CHANGE );
