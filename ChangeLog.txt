@@ -1,6 +1,29 @@
 hbcpp - C++ powered GUI for Harbour
 =====================================
 
+2026-04-02 (HbBuilder: Run, two-way tools, dot grid, TApplication)
+-------------------------------------------------------------------
+- Run button (F9): full compile+link+execute pipeline
+  * Saves all .prg files to /tmp/hbbuilder_build
+  * Compiles user code + framework with Harbour + clang
+  * Links with Cocoa + Harbour libs, launches in Terminal.app
+  * Build log with step-by-step progress, error dialog on failure
+  * MAC_ShellExec: NSTask-based shell command execution
+- TApplication class: Title, aForms, CreateForm (calls form's CreateForm),
+  Run (activates main form)
+- TForm: added Title ACCESS/ASSIGN (alias for Text, C++Builder compat)
+- Two-way tools (Borland pattern): designer ←→ code sync
+  * RegenerateFormCode: reads live form + all children, regenerates complete code
+  * SyncDesignerToCode: called on control move/resize, property edit, component drop
+  * INS_SetOnPropChanged: inspector callback after any property change
+  * OnComponentDrop simplified: just names the control, SyncDesignerToCode does the rest
+- Design-time dot grid (classic C++Builder):
+  * HBDotGridView: dedicated NSView with 8px dot pattern
+  * Added to form's contentView in design mode
+  * Grid snap changed from 4px to 8px (drag, resize, drop, arrow keys)
+- File renames: commands.ch → hbbuilder.ch, hbcpp_macos.prg → hbbuilder_macos.prg
+- About dialog: added "Vibe coded 100% using Claude Code"
+
 2026-04-02 (HbBuilder: multi-form, editor tabs, About dialog)
 --------------------------------------------------------------
 - Multi-form project support (C++Builder style):

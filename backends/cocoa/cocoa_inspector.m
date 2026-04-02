@@ -53,6 +53,8 @@ typedef struct {
    int          nEvVisible;
    /* Callback for double-click on event */
    PHB_ITEM     pOnEventDblClick;
+   /* Callback after property edit (two-way sync) */
+   PHB_ITEM     pOnPropChanged;
 } INSDATA;
 
 /* Forward declarations */
@@ -227,6 +229,14 @@ static HBFontPickerTarget * s_fontTarget = nil;
          hb_vmPushNil();
 
       hb_vmDo( 3 );
+   }
+
+   /* Fire two-way sync callback */
+   if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( d->pOnPropChanged );
+      hb_vmSend( 0 );
    }
 }
 
@@ -543,6 +553,14 @@ static void InsApplyColor( INSDATA * d, int nReal, unsigned int clr )
    }
 
    [d->tableView reloadData];
+
+   /* Fire two-way sync */
+   if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( d->pOnPropChanged );
+      hb_vmSend( 0 );
+   }
 }
 
 static void InsApplyFont( INSDATA * d, int nReal, NSFont * font )
@@ -564,6 +582,14 @@ static void InsApplyFont( INSDATA * d, int nReal, NSFont * font )
    }
 
    [d->tableView reloadData];
+
+   /* Fire two-way sync */
+   if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( d->pOnPropChanged );
+      hb_vmSend( 0 );
+   }
 }
 
 /* Keep delegate alive */
@@ -942,6 +968,7 @@ HB_FUNC( INS_DESTROY )
    if( !d ) return;
    if( d->pOnComboSel ) { hb_itemRelease( d->pOnComboSel ); d->pOnComboSel = NULL; }
    if( d->pOnEventDblClick ) { hb_itemRelease( d->pOnEventDblClick ); d->pOnEventDblClick = NULL; }
+   if( d->pOnPropChanged ) { hb_itemRelease( d->pOnPropChanged ); d->pOnPropChanged = NULL; }
    if( d->window ) [d->window close];
    free( d );
 }
@@ -1062,5 +1089,18 @@ HB_FUNC( INS_SETONEVENTDBLCLICK )
    {
       if( d->pOnEventDblClick ) hb_itemRelease( d->pOnEventDblClick );
       d->pOnEventDblClick = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
+}
+
+/* INS_SetOnPropChanged( hInsData, bBlock )
+ * Called after any property is edited in the inspector (two-way sync) */
+HB_FUNC( INS_SETONPROPCHANGED )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( d )
+   {
+      if( d->pOnPropChanged ) hb_itemRelease( d->pOnPropChanged );
+      d->pOnPropChanged = pBlock ? hb_itemNew( pBlock ) : NULL;
    }
 }

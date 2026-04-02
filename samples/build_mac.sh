@@ -10,7 +10,7 @@ HBBIN="$HBDIR/bin/darwin/clang"
 HBINC="$HBDIR/include"
 HBLIB="$HBDIR/lib/darwin/clang"
 PROJDIR="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="hbcpp_macos"
+SRC="hbbuilder_macos"
 PROG="HbBuilder"
 
 cd "$(dirname "$0")"

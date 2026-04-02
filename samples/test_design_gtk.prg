@@ -1,6 +1,6 @@
 // test_design_gtk.prg - Design mode with live inspector (Linux GTK3 version)
 
-#include "../harbour/commands.ch"
+#include "../harbour/hbbuilder.ch"
 
 function Main()
 

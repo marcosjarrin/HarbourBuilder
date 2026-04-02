@@ -1,7 +1,7 @@
 // test_xbase.prg - Preferences using xBase commands
 // Familiar Clipper/FiveWin-like syntax, C++ core underneath.
 
-#include "c:\ide\harbour\commands.ch"
+#include "c:\ide\harbour\hbbuilder.ch"
 
 REQUEST HB_GT_GUI_DEFAULT
 

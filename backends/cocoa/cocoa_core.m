@@ -114,6 +114,31 @@ static void EnsureNSApp( void )
 - (BOOL)isFlipped { return YES; }
 @end
 
+/* Dot grid view for design-time (drawn as first subview of content) */
+@interface HBDotGridView : NSView
+@end
+@implementation HBDotGridView
+- (BOOL)isFlipped { return YES; }
+- (BOOL)isOpaque { return YES; }
+- (void)drawRect:(NSRect)dirtyRect
+{
+   /* Form background */
+   [[NSColor colorWithCalibratedRed:0.94 green:0.94 blue:0.94 alpha:1.0] setFill];
+   NSRectFill( dirtyRect );
+
+   /* Classic C++Builder dot grid */
+   [[NSColor colorWithCalibratedWhite:0.72 alpha:1.0] setFill];
+   int gridStep = 8;
+   int x1 = ((int)dirtyRect.origin.x / gridStep) * gridStep;
+   int y1 = ((int)dirtyRect.origin.y / gridStep) * gridStep;
+   int x2 = (int)(dirtyRect.origin.x + dirtyRect.size.width);
+   int y2 = (int)(dirtyRect.origin.y + dirtyRect.size.height);
+   for( int y = y1; y <= y2; y += gridStep )
+      for( int x = x1; x <= x2; x += gridStep )
+         NSRectFill( NSMakeRect( x, y, 1, 1 ) );
+}
+@end
+
 /* ======================================================================
  * ALL @interface declarations (full definitions before any @implementation)
  * ====================================================================== */
@@ -987,6 +1012,8 @@ static HBPaletteTarget * s_palTarget = nil;
 {
    if( !form ) return;
 
+   /* Dot grid is drawn by FContentView (HBFlippedView::drawRect) */
+
    NSColor * handleColor = [NSColor colorWithCalibratedRed:0.0 green:0.47 blue:0.84 alpha:1.0];
 
    for( int i = 0; i < form->FSelCount; i++ )
@@ -1089,7 +1116,7 @@ static HBPaletteTarget * s_palTarget = nil;
       int dx = (int)pt.x - form->FDragStartX, dy = (int)pt.y - form->FDragStartY;
       HBControl * p = form->FSelected[0];
       int nl = p->FLeft, nt = p->FTop, nw = p->FWidth, nh = p->FHeight;
-      dx = (dx/4)*4; dy = (dy/4)*4;
+      dx = (dx/8)*8; dy = (dy/8)*8;
       if( dx == 0 && dy == 0 ) return;
       switch( form->FResizeHandle ) {
          case 0: nl+=dx; nt+=dy; nw-=dx; nh-=dy; break;
@@ -1112,7 +1139,7 @@ static HBPaletteTarget * s_palTarget = nil;
 
    if( form->FDragging && form->FSelCount > 0 ) {
       int dx = (int)pt.x - form->FDragStartX, dy = (int)pt.y - form->FDragStartY;
-      dx = (dx/4)*4; dy = (dy/4)*4;
+      dx = (dx/8)*8; dy = (dy/8)*8;
       if( dx == 0 && dy == 0 ) return;
       for( int i = 0; i < form->FSelCount; i++ ) {
          form->FSelected[i]->FLeft += dx; form->FSelected[i]->FTop += dy;
@@ -1146,8 +1173,8 @@ static HBPaletteTarget * s_palTarget = nil;
          if( rh < 10 ) rh = 24;
 
          /* Snap to 4-pixel grid */
-         rx1 = (rx1 / 4) * 4;
-         ry1 = (ry1 / 4) * 4;
+         rx1 = (rx1 / 8) * 8;
+         ry1 = (ry1 / 8) * 8;
 
          /* Create the control in C */
          HBControl * newCtrl = nil;
@@ -1252,7 +1279,7 @@ static HBPaletteTarget * s_palTarget = nil;
    NSString * chars = [event charactersIgnoringModifiers];
    if( [chars length] > 0 && form->FSelCount > 0 ) {
       unichar ch = [chars characterAtIndex:0];
-      int dx = 0, dy = 0, step = ([event modifierFlags] & NSEventModifierFlagShift) ? 1 : 4;
+      int dx = 0, dy = 0, step = ([event modifierFlags] & NSEventModifierFlagShift) ? 1 : 8;
       switch( ch ) {
          case NSLeftArrowFunctionKey:  dx = -step; break;
          case NSRightArrowFunctionKey: dx = step;  break;
@@ -1430,6 +1457,14 @@ static HBPaletteTarget * s_palTarget = nil;
 
    FContentView = [[HBFlippedView alloc] initWithFrame:[[FWindow contentView] bounds]];
    [FContentView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+
+   /* Design-time dot grid (first subview, behind all controls) */
+   if( FDesignMode )
+   {
+      HBDotGridView * grid = [[HBDotGridView alloc] initWithFrame:[FContentView bounds]];
+      [grid setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+      [FContentView addSubview:grid];
+   }
    /* Force light appearance to avoid dark mode white-on-dark text */
    if( [NSAppearance respondsToSelector:@selector(appearanceNamed:)] )
       [FWindow setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameAqua]];
@@ -2786,6 +2821,16 @@ HB_FUNC( UI_FORMSELECTCTRL )
    }
 }
 
+/* UI_FormBringToFront( hForm ) - bring form window to front */
+HB_FUNC( UI_FORMBRINGTOFRONT )
+{
+   HBForm * p = GetForm(1);
+   if( p && p->FWindow ) {
+      [p->FWindow makeKeyAndOrderFront:nil];
+      [NSApp activateIgnoringOtherApps:YES];
+   }
+}
+
 /* UI_SetDesignForm( hForm ) - register the form that receives palette drops */
 HB_FUNC( UI_SETDESIGNFORM )
 {
@@ -2891,6 +2936,33 @@ HB_FUNC( MAC_MSGBOX )
    [alert addButtonWithTitle:@"OK"];
    [alert setAlertStyle:NSAlertStyleInformational];
    [alert runModal];
+}
+
+/* MAC_ShellExec( cCommand ) --> cOutput
+ * Execute a shell command and return stdout+stderr as string */
+HB_FUNC( MAC_SHELLEXEC )
+{
+   if( !HB_ISCHAR(1) ) { hb_retc(""); return; }
+
+   NSTask * task = [[NSTask alloc] init];
+   [task setLaunchPath:@"/bin/zsh"];
+   [task setArguments:@[@"-c", [NSString stringWithUTF8String:hb_parc(1)]]];
+
+   NSPipe * pipe = [NSPipe pipe];
+   [task setStandardOutput:pipe];
+   [task setStandardError:pipe];
+
+   @try {
+      [task launch];
+      [task waitUntilExit];
+
+      NSData * data = [[pipe fileHandleForReading] readDataToEndOfFile];
+      NSString * output = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+      hb_retc( output ? [output UTF8String] : "" );
+   }
+   @catch( NSException * e ) {
+      hb_retc( [[e reason] UTF8String] );
+   }
 }
 
 /* MAC_AboutDialog( cTitle, cMessage, cImagePath ) - show About dialog with logo */
@@ -3468,7 +3540,7 @@ HB_FUNC( CODEEDITORCREATE )
    [ed->tabBar setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
    [ed->tabBar setFont:[NSFont boldSystemFontOfSize:13]];
    /* Force Aqua appearance so labels are readable on dark window */
-   [ed->tabBar setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameAqua]];
+   [ed->tabBar setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameVibrantDark]];
    strncpy( ed->tabNames[0], "Project1.prg", 63 );
    ed->tabTexts[0] = strdup( "" );
    ed->nTabs = 1;

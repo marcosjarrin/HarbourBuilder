@@ -1,6 +1,6 @@
 // test_inspector.prg - Demo: click a button to inspect any control
 
-#include "c:\ide\harbour\commands.ch"
+#include "c:\ide\harbour\hbbuilder.ch"
 
 REQUEST HB_GT_GUI_DEFAULT
 

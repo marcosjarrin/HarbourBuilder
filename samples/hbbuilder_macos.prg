@@ -16,7 +16,7 @@
 // │  Messages / Compiler output (future)                        │
 // └─────────────────────────────────────────────────────────────┘ 768
 
-#include "../harbour/commands.ch"
+#include "../harbour/hbbuilder.ch"
 
 static oIDE          // Main IDE bar (top strip)
 static oDesignForm   // Design form (active, floats on top of editor)
@@ -166,6 +166,7 @@ function Main()
    INS_SetOnComboSel( _InsGetData(), { |nSel| OnComboSelect( nSel ) } )
    INS_SetOnEventDblClick( _InsGetData(), ;
       { |hCtrl, cEvent| OnEventDblClick( hCtrl, cEvent ) } )
+   INS_SetOnPropChanged( _InsGetData(), { || SyncDesignerToCode() } )
    INS_SetPos( _InsGetData(), 0, nInsTop, nInsW, nBottomY - nInsTop - 50 )
 
    // Sync: selection change in design form -> refresh inspector
@@ -263,6 +264,9 @@ static function OnDesignSelChange( hCtrl )
    endif
    INS_ComboSelect( _InsGetData(), nSel )
 
+   // Two-way: sync designer changes to code
+   SyncDesignerToCode()
+
 return nil
 
 // Generate Project1.prg code with all form references
@@ -274,7 +278,7 @@ static function GenerateProjectCode()
 
    cCode += "// Project1.prg" + e
    cCode += cSep
-   cCode += '#include "commands.ch"' + e
+   cCode += '#include "hbbuilder.ch"' + e
    cCode += cSep
    cCode += e
    cCode += "PROCEDURE Main()" + e
@@ -285,7 +289,7 @@ static function GenerateProjectCode()
    cCode += '   oApp:Title := "Project1"' + e
 
    for i := 1 to Len( aForms )
-      cCode += "   oApp:CreateForm( T" + aForms[i][1] + "() )" + e
+      cCode += "   oApp:CreateForm( T" + aForms[i][1] + "():New() )" + e
    next
 
    cCode += "   oApp:Run()" + e
@@ -295,19 +299,96 @@ static function GenerateProjectCode()
 
 return cCode
 
-// Generate a single form's code (Form1.prg, Form2.prg...)
+// Generate initial form code (empty form, no controls)
 static function GenerateFormCode( cName )
+return RegenerateFormCode( cName, 0 )
+
+// Regenerate form code from current designer state (two-way tools)
+// Reads all properties from the live form and its children
+static function RegenerateFormCode( cName, hForm )
 
    local cCode := "", e := Chr(13) + Chr(10)
    local cSep := "//" + Replicate( "-", 68 ) + e
    local cClass := "T" + cName  // TForm1, TForm2...
+   local i, nCount, hCtrl, cCtrlName, cCtrlClass, nType
+   local nW, nH, cTitle, nClr
+   local nL, nT, nCW, nCH, cText
+   local cDatas := "", cCreate := "", cEvents := ""
 
+   // Form properties (read from live form or use defaults)
+   if hForm != 0
+      cTitle := UI_GetProp( hForm, "cText" )
+      nW     := UI_GetProp( hForm, "nWidth" )
+      nH     := UI_GetProp( hForm, "nHeight" )
+      nClr   := UI_GetProp( hForm, "nClrPane" )
+   else
+      cTitle := cName
+      nW     := 400
+      nH     := 300
+      nClr   := 15790320  // 0x00F0F0F0
+   endif
+
+   // Enumerate child controls
+   if hForm != 0
+      nCount := UI_GetChildCount( hForm )
+      for i := 1 to nCount
+         hCtrl := UI_GetChild( hForm, i )
+         if hCtrl == 0; loop; endif
+
+         cCtrlName  := UI_GetProp( hCtrl, "cName" )
+         cCtrlClass := UI_GetProp( hCtrl, "cClassName" )
+         nType      := UI_GetType( hCtrl )
+         if Empty( cCtrlName ); cCtrlName := "ctrl" + LTrim(Str(i)); endif
+
+         // DATA declaration
+         cDatas += "   DATA o" + cCtrlName + "   // " + cCtrlClass + e
+
+         // Creation code in CreateForm
+         nL := UI_GetProp( hCtrl, "nLeft" )
+         nT := UI_GetProp( hCtrl, "nTop" )
+         nCW := UI_GetProp( hCtrl, "nWidth" )
+         nCH := UI_GetProp( hCtrl, "nHeight" )
+         cText := UI_GetProp( hCtrl, "cText" )
+
+         do case
+            case nType == 1  // Label
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' SAY ::o' + cCtrlName + ' PROMPT "' + cText + '" OF Self SIZE ' + ;
+                  LTrim(Str(nCW)) + e
+            case nType == 2  // Edit
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' GET ::o' + cCtrlName + ' VAR "' + cText + '" OF Self SIZE ' + ;
+                  LTrim(Str(nCW)) + ", " + LTrim(Str(nCH)) + e
+            case nType == 3  // Button
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' BUTTON ::o' + cCtrlName + ' PROMPT "' + cText + '" OF Self SIZE ' + ;
+                  LTrim(Str(nCW)) + ", " + LTrim(Str(nCH)) + e
+            case nType == 4  // CheckBox
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' CHECKBOX ::o' + cCtrlName + ' PROMPT "' + cText + '" OF Self SIZE ' + ;
+                  LTrim(Str(nCW)) + e
+            case nType == 5  // ComboBox
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' COMBOBOX ::o' + cCtrlName + ' OF Self SIZE ' + ;
+                  LTrim(Str(nCW)) + ", " + LTrim(Str(nCH)) + e
+            case nType == 6  // GroupBox
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' GROUPBOX ::o' + cCtrlName + ' PROMPT "' + cText + '" OF Self SIZE ' + ;
+                  LTrim(Str(nCW)) + ", " + LTrim(Str(nCH)) + e
+         endcase
+      next
+   endif
+
+   // Build the complete form code
    cCode += "// " + cName + ".prg" + e
    cCode += cSep
    cCode += e
    cCode += "CLASS " + cClass + " FROM TForm" + e
    cCode += e
    cCode += "   // IDE-managed Components" + e
+   if ! Empty( cDatas )
+      cCode += cDatas
+   endif
    cCode += e
    cCode += "   // Event handlers" + e
    cCode += e
@@ -318,9 +399,16 @@ static function GenerateFormCode( cName )
    cCode += e
    cCode += "METHOD CreateForm() CLASS " + cClass + e
    cCode += e
-   cCode += '   ::Title  := "' + cName + '"' + e
-   cCode += "   ::Width  := 400" + e
-   cCode += "   ::Height := 300" + e
+   cCode += '   ::Title  := "' + cTitle + '"' + e
+   cCode += "   ::Width  := " + LTrim(Str(nW)) + e
+   cCode += "   ::Height := " + LTrim(Str(nH)) + e
+   if nClr != 15790320  // non-default color
+      cCode += "   ::Color  := " + LTrim(Str(nClr)) + e
+   endif
+   if ! Empty( cCreate )
+      cCode += e
+      cCode += cCreate
+   endif
    cCode += e
    cCode += "return nil" + e
    cCode += cSep
@@ -410,71 +498,52 @@ return cHandler
 
 static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
 
-   local cClass, cName, cCode, e, cSep, cDataDecl, cCreateCode
-   local nCount, hCtrl
+   local cName, nCount, hCtrl
    static nLabelCnt := 0, nEditCnt := 0, nBtnCnt := 0
    static nChkCnt := 0, nCmbCnt := 0, nGrpCnt := 0
 
-   e := Chr(13) + Chr(10)
-   cSep := "//" + Replicate( "-", 68 )
-
-   // Increment counter and build name (C++Builder style: Button1, Button2...)
-
+   // Auto-name the new control (C++Builder style: Button1, Button2...)
    do case
-      case nType == 1;  nLabelCnt++;  cClass := "TLabel";     cName := "Label"    + LTrim(Str(nLabelCnt))
-      case nType == 2;  nEditCnt++;   cClass := "TEdit";      cName := "Edit"     + LTrim(Str(nEditCnt))
-      case nType == 3;  nBtnCnt++;    cClass := "TButton";    cName := "Button"   + LTrim(Str(nBtnCnt))
-      case nType == 4;  nChkCnt++;    cClass := "TCheckBox";  cName := "CheckBox" + LTrim(Str(nChkCnt))
-      case nType == 5;  nCmbCnt++;    cClass := "TComboBox";  cName := "ComboBox" + LTrim(Str(nCmbCnt))
-      case nType == 6;  nGrpCnt++;    cClass := "TGroupBox";  cName := "GroupBox" + LTrim(Str(nGrpCnt))
+      case nType == 1;  nLabelCnt++;  cName := "Label"    + LTrim(Str(nLabelCnt))
+      case nType == 2;  nEditCnt++;   cName := "Edit"     + LTrim(Str(nEditCnt))
+      case nType == 3;  nBtnCnt++;    cName := "Button"   + LTrim(Str(nBtnCnt))
+      case nType == 4;  nChkCnt++;    cName := "CheckBox" + LTrim(Str(nChkCnt))
+      case nType == 5;  nCmbCnt++;    cName := "ComboBox" + LTrim(Str(nCmbCnt))
+      case nType == 6;  nGrpCnt++;    cName := "GroupBox" + LTrim(Str(nGrpCnt))
       otherwise;  return nil
    endcase
 
-   // Set the Name property on the new control (last child of the form)
+   // Set name on the new control (last child)
    nCount := UI_GetChildCount( hForm )
    hCtrl  := UI_GetChild( hForm, nCount )
    if hCtrl != 0
       UI_SetProp( hCtrl, "cName", cName )
    endif
 
-   // Insert DATA declaration in CLASS block (after "// IDE-managed Components")
-   cDataDecl := "   DATA o" + cName + "   // " + cClass + e
-   CodeEditorInsertAfter( hCodeEditor, "// IDE-managed Components", cDataDecl )
-
-   // Insert creation code in CreateForm method (before "return nil")
-   // Build the line like C++Builder generates in the DFM -> CreateForm
-   do case
-      case nType == 1  // Label
-         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
-            ' SAY ::o' + cName + ' PROMPT "' + cName + '" OF Self SIZE ' + ;
-            LTrim(Str(nW)) + e
-      case nType == 2  // Edit
-         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
-            ' GET ::o' + cName + ' VAR "" OF Self SIZE ' + ;
-            LTrim(Str(nW)) + ", " + LTrim(Str(nH)) + e
-      case nType == 3  // Button
-         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
-            ' BUTTON ::o' + cName + ' PROMPT "' + cName + '" OF Self SIZE ' + ;
-            LTrim(Str(nW)) + ", " + LTrim(Str(nH)) + e
-      case nType == 4  // CheckBox
-         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
-            ' CHECKBOX ::o' + cName + ' PROMPT "' + cName + '" OF Self SIZE ' + ;
-            LTrim(Str(nW)) + e
-      case nType == 5  // ComboBox
-         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
-            ' COMBOBOX ::o' + cName + ' OF Self SIZE ' + ;
-            LTrim(Str(nW)) + ", " + LTrim(Str(nH)) + e
-      case nType == 6  // GroupBox
-         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
-            ' GROUPBOX ::o' + cName + ' PROMPT "' + cName + '" OF Self SIZE ' + ;
-            LTrim(Str(nW)) + ", " + LTrim(Str(nH)) + e
-   endcase
-
-   CodeEditorInsertAfter( hCodeEditor, "::Height", cCreateCode )
+   // Two-way: regenerate entire form code from designer state
+   SyncDesignerToCode()
 
    // Refresh inspector
    InspectorRefresh( hCtrl )
    InspectorPopulateCombo( hForm )
+
+return nil
+
+// Two-way sync: regenerate code from designer state
+static function SyncDesignerToCode()
+
+   local cNewCode
+
+   if nActiveForm < 1 .or. nActiveForm > Len( aForms )
+      return nil
+   endif
+
+   // Regenerate form code from current designer state
+   cNewCode := RegenerateFormCode( aForms[ nActiveForm ][ 1 ], oDesignForm:hCpp )
+
+   // Update stored code and editor tab
+   aForms[ nActiveForm ][ 3 ] := cNewCode
+   CodeEditorSetTabText( hCodeEditor, nActiveForm + 1, cNewCode )
 
 return nil
 
@@ -496,42 +565,28 @@ return nil
 
 // === Multi-form management (C++Builder style) ===
 
-// Switch active form (hide current, show selected)
+// Switch active form: bring selected form to front
 static function SwitchToForm( nIdx )
 
-   local nX, nY
-
-   if nIdx < 1 .or. nIdx > Len( aForms ) .or. nIdx == nActiveForm
+   if nIdx < 1 .or. nIdx > Len( aForms )
       return nil
    endif
 
    // Save current form's code from editor
-   SaveActiveFormCode()
-
-   // Hide current design form
-   if nActiveForm > 0 .and. nActiveForm <= Len( aForms )
-      aForms[ nActiveForm ][ 2 ]:Close()
+   if nActiveForm > 0 .and. nActiveForm != nIdx
+      SaveActiveFormCode()
    endif
 
    // Activate new form
    nActiveForm := nIdx
    oDesignForm := aForms[ nIdx ][ 2 ]
-   nX := aForms[ nIdx ][ 4 ]
-   nY := aForms[ nIdx ][ 5 ]
 
-   // Show + wire up
-   oDesignForm:SetDesign( .t. )
+   // Bring to front
    UI_SetDesignForm( oDesignForm:hCpp )
-   UI_FormSetPos( oDesignForm:hCpp, nX, nY )
-   oDesignForm:Show()
-
-   UI_OnSelChange( oDesignForm:hCpp, ;
-      { |hCtrl| OnDesignSelChange( hCtrl ) } )
-   UI_FormOnComponentDrop( oDesignForm:hCpp, ;
-      { |hForm, nType, nL, nT, nW, nH| OnComponentDrop( hForm, nType, nL, nT, nW, nH ) } )
+   UI_FormBringToFront( oDesignForm:hCpp )
 
    // Switch editor to this form's tab
-   CodeEditorSelectTab( hCodeEditor, nIdx + 1 )  // +1 because tab 1 = Project1.prg
+   CodeEditorSelectTab( hCodeEditor, nIdx + 1 )
 
    // Refresh inspector
    InspectorRefresh( oDesignForm:hCpp )
@@ -706,13 +761,134 @@ static function TBSave()
 
 return nil
 
-// Run: show form definition as JSON (future: compile and execute)
+// Run: compile and execute the project (C++Builder F9)
 static function TBRun()
 
-   local cJSON
+   local cBuildDir, cOutput, cLog, i, lError
+   local cHbDir, cHbBin, cHbInc, cHbLib, cProjDir
+   local cAllPrg, cCmd
 
-   cJSON := UI_FormToJSON( oDesignForm:hCpp )
-   MsgInfo( cJSON )
+   SaveActiveFormCode()
+
+   cBuildDir := "/tmp/hbbuilder_build"
+   cHbDir   := "/Users/usuario/harbour"
+   cHbBin   := cHbDir + "/bin/darwin/clang"
+   cHbInc   := cHbDir + "/include"
+   cHbLib   := cHbDir + "/lib/darwin/clang"
+   cProjDir := "/Users/usuario/hbcpp"
+   cLog     := ""
+   lError   := .F.
+
+   MAC_ShellExec( "mkdir -p " + cBuildDir )
+
+   // Step 1: Save files
+   cLog += "[1] Saving project files..." + Chr(10)
+   MemoWrit( cBuildDir + "/Project1.prg", CodeEditorGetTabText( hCodeEditor, 1 ) )
+   for i := 1 to Len( aForms )
+      MemoWrit( cBuildDir + "/" + aForms[i][1] + ".prg", aForms[i][3] )
+      cLog += "    " + aForms[i][1] + ".prg" + Chr(10)
+   next
+   MAC_ShellExec( "cp " + cProjDir + "/harbour/classes.prg " + cBuildDir + "/" )
+   MAC_ShellExec( "cp " + cProjDir + "/harbour/hbbuilder.ch " + cBuildDir + "/" )
+
+   // Step 2: Assemble main.prg
+   cLog += "[2] Building main.prg..." + Chr(10)
+   cAllPrg := '#include "hbbuilder.ch"' + Chr(10) + Chr(10)
+   cAllPrg += StrTran( MemoRead( cBuildDir + "/Project1.prg" ), ;
+                       '#include "hbbuilder.ch"', "" ) + Chr(10)
+   for i := 1 to Len( aForms )
+      cAllPrg += MemoRead( cBuildDir + "/" + aForms[i][1] + ".prg" ) + Chr(10)
+   next
+   MemoWrit( cBuildDir + "/main.prg", cAllPrg )
+
+   // Step 3: Compile user code with Harbour
+   if ! lError
+      cLog += "[3] Compiling main.prg..." + Chr(10)
+      cCmd := cHbBin + "/harbour " + cBuildDir + "/main.prg -n -w -q" + ;
+              " -I" + cHbInc + " -I" + cBuildDir + ;
+              " -o" + cBuildDir + "/main.c 2>&1"
+      cOutput := MAC_ShellExec( cCmd )
+      if "Error" $ cOutput
+         cLog += "    FAILED:" + Chr(10) + cOutput + Chr(10)
+         lError := .T.
+      else
+         cLog += "    OK" + Chr(10)
+      endif
+   endif
+
+   // Step 4: Compile framework
+   if ! lError
+      cLog += "[4] Compiling framework..." + Chr(10)
+      cCmd := cHbBin + "/harbour " + cBuildDir + "/classes.prg -n -w -q" + ;
+              " -I" + cHbInc + " -I" + cBuildDir + ;
+              " -o" + cBuildDir + "/classes.c 2>&1"
+      cOutput := MAC_ShellExec( cCmd )
+      cLog += "    OK" + Chr(10)
+   endif
+
+   // Step 5: Compile C
+   if ! lError
+      cLog += "[5] Compiling C sources..." + Chr(10)
+      cCmd := "clang -c -O2 -Wno-unused-value -I" + cHbInc + ;
+              " " + cBuildDir + "/main.c -o " + cBuildDir + "/main.o 2>&1"
+      cOutput := MAC_ShellExec( cCmd )
+      if ! Empty( cOutput )
+         cLog += "    FAILED:" + Chr(10) + cOutput + Chr(10)
+         lError := .T.
+      endif
+      cCmd := "clang -c -O2 -Wno-unused-value -I" + cHbInc + ;
+              " " + cBuildDir + "/classes.c -o " + cBuildDir + "/classes.o 2>&1"
+      MAC_ShellExec( cCmd )
+      cLog += "    OK" + Chr(10)
+   endif
+
+   // Step 6: Compile Cocoa backend
+   if ! lError
+      cLog += "[6] Compiling Cocoa backend..." + Chr(10)
+      cCmd := "clang -c -O2 -fobjc-arc -I" + cHbInc + ;
+              " " + cProjDir + "/backends/cocoa/cocoa_core.m" + ;
+              " -o " + cBuildDir + "/cocoa_core.o 2>&1"
+      MAC_ShellExec( cCmd )
+      cLog += "    OK" + Chr(10)
+   endif
+
+   // Step 7: Link
+   if ! lError
+      cLog += "[7] Linking..." + Chr(10)
+      cCmd := "clang++ -o " + cBuildDir + "/UserApp" + ;
+              " " + cBuildDir + "/main.o" + ;
+              " " + cBuildDir + "/classes.o" + ;
+              " " + cBuildDir + "/cocoa_core.o" + ;
+              " -L" + cHbLib + ;
+              " -lhbvm -lhbrtl -lhbcommon -lhbcpage -lhblang" + ;
+              " -lhbmacro -lhbpp -lhbrdd -lhbcplr -lhbdebug" + ;
+              " -lhbct -lhbextern" + ;
+              " -lrddntx -lrddnsx -lrddcdx -lrddfpt" + ;
+              " -lhbhsx -lhbsix -lhbusrrdd" + ;
+              " -lgtcgi -lgttrm -lgtstd" + ;
+              " -framework Cocoa -framework UniformTypeIdentifiers" + ;
+              " -lm -lpthread 2>&1"
+      cOutput := MAC_ShellExec( cCmd )
+      if "error" $ Lower( cOutput )
+         cLog += "    FAILED:" + Chr(10) + cOutput + Chr(10)
+         lError := .T.
+      else
+         cLog += "    OK" + Chr(10)
+      endif
+   endif
+
+   // Result
+   if lError
+      MsgInfo( "Build FAILED:" + Chr(10) + Chr(10) + cLog )
+   else
+      cLog += Chr(10) + "Build succeeded. Running..." + Chr(10)
+      // Launch in Terminal.app (Harbour needs a pty)
+      MAC_ShellExec( "osascript -e " + Chr(39) + "tell application " + Chr(34) + ;
+         "Terminal" + Chr(34) + " to do script " + Chr(34) + ;
+         cBuildDir + "/UserApp" + Chr(34) + Chr(39) )
+   endif
+
+return nil
 
 return nil
 
@@ -732,6 +908,8 @@ static function ShowAbout()
    cMsg += "Cross-platform GUI framework" + Chr(10)
    cMsg += Chr(10)
    cMsg += "Inspired by Borland C++Builder" + Chr(10)
+   cMsg += Chr(10)
+   cMsg += "Vibe coded 100% using Claude Code" + Chr(10)
 
    MAC_AboutDialog( "About HbBuilder", cMsg, "../resources/harbour_logo.png" )
 

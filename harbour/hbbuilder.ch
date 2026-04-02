@@ -1,8 +1,10 @@
-// commands.ch - xBase commands for the IDE framework
+// hbbuilder.ch - xBase commands for the IDE framework
 // Translates familiar syntax to TForm/TControl OOP calls
 
 #ifndef _IDECOMMANDS_CH
 #define _IDECOMMANDS_CH
+
+#include "hbclass.ch"
 
 // BorderStyle constants (C++Builder TFormBorderStyle)
 #define bsNone           0

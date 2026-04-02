@@ -42,6 +42,10 @@ ENDCLASS
 
 CLASS TForm INHERIT TControl
 
+   // Title (alias for Text - C++Builder uses Caption/Title)
+   ACCESS Title         INLINE UI_GetProp( ::hCpp, "cText" )
+   ASSIGN Title( c )    INLINE UI_SetProp( ::hCpp, "cText", c )
+
    // Font
    ACCESS FontName      INLINE UI_GetProp( ::hCpp, "cFontName" )
    ASSIGN FontName( c ) INLINE UI_SetProp( ::hCpp, "cFontName", c )
@@ -387,4 +391,46 @@ return UI_MenuItemAddEx( ::oForm:hCpp, ::hPopup, cText, bAction, cAccel )
 
 METHOD AddSeparator() CLASS TMenuPopup
    UI_MenuSepAdd( ::oForm:hCpp, ::hPopup )
+return Self
+
+//----------------------------------------------------------------------------//
+// TApplication - Main application object (C++Builder pattern)
+//----------------------------------------------------------------------------//
+
+CLASS TApplication
+
+   DATA Title     INIT "Application"
+   DATA aForms    INIT {}
+   DATA oMainForm INIT nil
+
+   METHOD New()
+   METHOD CreateForm( oForm )
+   METHOD Run()
+
+ENDCLASS
+
+METHOD New() CLASS TApplication
+return Self
+
+METHOD CreateForm( oForm ) CLASS TApplication
+
+   AAdd( ::aForms, oForm )
+   if ::oMainForm == nil
+      ::oMainForm := oForm
+   endif
+
+   // Call the form's CreateForm method (like C++Builder constructor)
+   if __objHasMethod( oForm, "CREATEFORM" )
+      oForm:CreateForm()
+   endif
+
+return Self
+
+METHOD Run() CLASS TApplication
+
+   // Show and activate the main form (enters NSApp run loop)
+   if ::oMainForm != nil
+      ::oMainForm:Activate()
+   endif
+
 return Self

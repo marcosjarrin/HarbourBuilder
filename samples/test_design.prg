@@ -6,7 +6,7 @@
 //
 // All 3 are independent top-level windows sharing one message loop.
 
-#include "c:\ide\harbour\commands.ch"
+#include "c:\ide\harbour\hbbuilder.ch"
 
 REQUEST HB_GT_GUI_DEFAULT
 
@@ -266,7 +266,7 @@ static function GenerateSampleCode()
 
    cCode += '// Form1.prg - Generated code' + Chr(13) + Chr(10)
    cCode += '' + Chr(13) + Chr(10)
-   cCode += '#include "commands.ch"' + Chr(13) + Chr(10)
+   cCode += '#include "hbbuilder.ch"' + Chr(13) + Chr(10)
    cCode += '' + Chr(13) + Chr(10)
    cCode += 'function Main()' + Chr(13) + Chr(10)
    cCode += '' + Chr(13) + Chr(10)
