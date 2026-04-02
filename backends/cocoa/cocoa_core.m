@@ -6,6 +6,7 @@
  */
 
 #import <Cocoa/Cocoa.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <hbapi.h>
 #include <hbapiitm.h>
 #include <hbapicls.h>
@@ -34,9 +35,11 @@
 typedef long LONG_PTR_MAC;
 #define LONG_PTR LONG_PTR_MAC
 
-/* Forward declaration */
+/* Forward declarations */
 @class HBToolBar;
 @class HBSplitterView;
+@class HBControl;
+static void KeepAlive( HBControl * p );
 
 /* Component Palette data (forward declared for use in HBForm) */
 #define CT_TABCONTROL 10
@@ -73,6 +76,7 @@ typedef struct {
 } PALDATA;
 
 static PALDATA * s_palData = NULL;
+static HBForm * s_designForm = NULL;  /* the design-mode form for component drops */
 static void PalShowTab( PALDATA * pd, int nTab );
 
 /* ======================================================================
@@ -211,6 +215,9 @@ static void EnsureNSApp( void )
    /* Menu */
    PHB_ITEM    FMenuActions[MAX_MENUITEMS];
    int         FMenuItemCount;
+   /* Component drop from palette */
+   int         FPendingControlType;  /* -1 = none, CT_LABEL..CT_GROUPBOX */
+   PHB_ITEM    FOnComponentDrop;     /* callback( hForm, nControlType, nLeft, nTop, nWidth, nHeight ) */
    /* C++Builder TForm properties */
    int        FBorderStyle;     /* BS_NONE..BS_SIZETOOLWIN */
    int        FBorderIcons;     /* bitmask: 1=SystemMenu, 2=Minimize, 4=Maximize, 8=Help */
@@ -924,6 +931,7 @@ static void EnsureNSApp( void )
    PALDATA * palData;
 }
 - (void)tabChanged:(id)sender;
+- (void)palBtnClicked:(id)sender;
 @end
 
 @implementation HBPaletteTarget
@@ -933,6 +941,28 @@ static void EnsureNSApp( void )
    if( palData ) {
       int sel = (int)[palData->segmented selectedSegment];
       PalShowTab( palData, sel );
+   }
+}
+
+- (void)palBtnClicked:(id)sender
+{
+   if( !palData ) return;
+
+   /* Find which button was clicked */
+   PaletteTab * t = &palData->tabs[palData->nCurrentTab];
+   int btnIdx = -1;
+   for( int i = 0; i < t->nBtnCount; i++ ) {
+      if( palData->buttons[i] == sender ) { btnIdx = i; break; }
+   }
+   if( btnIdx < 0 ) return;
+
+   int ctrlType = t->btns[btnIdx].nControlType;
+
+   /* Set pending drop mode on the design form (not the IDE bar) */
+   HBForm * targetForm = s_designForm;
+   if( targetForm && targetForm->FDesignMode ) {
+      targetForm->FPendingControlType = ctrlType;
+      [[NSCursor crosshairCursor] set];
    }
 }
 
@@ -1007,6 +1037,14 @@ static HBPaletteTarget * s_palTarget = nil;
    if( !form || !form->FDesignMode ) return;
    NSPoint pt = [self convertPoint:[event locationInWindow] fromView:nil];
    BOOL isShift = ([event modifierFlags] & NSEventModifierFlagShift) != 0;
+
+   /* Component drop mode: start rubber band to define new control area */
+   if( form->FPendingControlType >= 0 ) {
+      [form clearSelection];
+      isRubberBand = YES;
+      rubberOrigin = pt; rubberCurrent = pt;
+      return;
+   }
 
    int nHandle = [form hitTestHandle:pt];
    if( nHandle >= 0 ) {
@@ -1091,10 +1129,93 @@ static HBPaletteTarget * s_palTarget = nil;
 
    if( isRubberBand ) {
       isRubberBand = NO;
-      CGFloat rx1 = fmin(rubberOrigin.x, rubberCurrent.x);
-      CGFloat ry1 = fmin(rubberOrigin.y, rubberCurrent.y);
-      CGFloat rx2 = fmax(rubberOrigin.x, rubberCurrent.x);
-      CGFloat ry2 = fmax(rubberOrigin.y, rubberCurrent.y);
+      int rx1 = (int)fmin(rubberOrigin.x, rubberCurrent.x);
+      int ry1 = (int)fmin(rubberOrigin.y, rubberCurrent.y);
+      int rx2 = (int)fmax(rubberOrigin.x, rubberCurrent.x);
+      int ry2 = (int)fmax(rubberOrigin.y, rubberCurrent.y);
+      int rw = rx2 - rx1, rh = ry2 - ry1;
+
+      /* Component drop mode: create the control at drawn rectangle */
+      if( form->FPendingControlType >= 0 ) {
+         int ctrlType = form->FPendingControlType;
+         form->FPendingControlType = -1;  /* reset */
+         [[NSCursor arrowCursor] set];
+
+         /* Enforce minimum size */
+         if( rw < 20 ) rw = 80;
+         if( rh < 10 ) rh = 24;
+
+         /* Snap to 4-pixel grid */
+         rx1 = (rx1 / 4) * 4;
+         ry1 = (ry1 / 4) * 4;
+
+         /* Create the control in C */
+         HBControl * newCtrl = nil;
+         switch( ctrlType ) {
+            case CT_LABEL: {
+               HBLabel * p = [[HBLabel alloc] init];
+               [p setText:"Label"]; p->FLeft=rx1; p->FTop=ry1; p->FWidth=rw; p->FHeight=rh;
+               newCtrl = p; break;
+            }
+            case CT_EDIT: {
+               HBEdit * p = [[HBEdit alloc] init];
+               p->FLeft=rx1; p->FTop=ry1; p->FWidth=rw; p->FHeight=rh;
+               newCtrl = p; break;
+            }
+            case CT_BUTTON: {
+               HBButton * p = [[HBButton alloc] init];
+               [p setText:"Button"]; p->FLeft=rx1; p->FTop=ry1; p->FWidth=rw; p->FHeight=rh;
+               newCtrl = p; break;
+            }
+            case CT_CHECKBOX: {
+               HBCheckBox * p = [[HBCheckBox alloc] init];
+               [p setText:"CheckBox"]; p->FLeft=rx1; p->FTop=ry1; p->FWidth=rw; p->FHeight=rh;
+               newCtrl = p; break;
+            }
+            case CT_COMBOBOX: {
+               HBComboBox * p = [[HBComboBox alloc] init];
+               p->FLeft=rx1; p->FTop=ry1; p->FWidth=rw; p->FHeight=rh;
+               newCtrl = p; break;
+            }
+            case CT_GROUPBOX: {
+               HBGroupBox * p = [[HBGroupBox alloc] init];
+               [p setText:"GroupBox"]; p->FLeft=rx1; p->FTop=ry1; p->FWidth=rw; p->FHeight=rh;
+               newCtrl = p; break;
+            }
+         }
+
+         if( newCtrl ) {
+            KeepAlive( newCtrl );
+            newCtrl->FFont = form->FFormFont;
+            [form addChild:newCtrl];
+            [newCtrl createViewInParent:form->FContentView];
+
+            /* Move overlay to front (must stay on top of all children) */
+            if( form->FOverlayView )
+               [form->FContentView addSubview:(NSView *)form->FOverlayView
+                                   positioned:NSWindowAbove relativeTo:nil];
+
+            /* Select the new control */
+            [form selectControl:newCtrl add:NO];
+
+            /* Fire Harbour callback */
+            if( form->FOnComponentDrop && HB_IS_BLOCK( form->FOnComponentDrop ) ) {
+               hb_vmPushEvalSym();
+               hb_vmPush( form->FOnComponentDrop );
+               hb_vmPushNumInt( (HB_PTRUINT)(__bridge void *)form );
+               hb_vmPushInteger( ctrlType );
+               hb_vmPushInteger( rx1 );
+               hb_vmPushInteger( ry1 );
+               hb_vmPushInteger( rw );
+               hb_vmPushInteger( rh );
+               hb_vmSend( 6 );
+            }
+         }
+         [self setNeedsDisplay:YES];
+         return;
+      }
+
+      /* Normal rubber band: select controls inside rectangle */
       [form clearSelection];
       for( int i = 0; i < form->FChildCount; i++ ) {
          HBControl * p = form->FChildren[i];
@@ -1165,6 +1286,7 @@ static HBPaletteTarget * s_palTarget = nil;
       FSelCount = 0; FDragging = NO; FResizing = NO; FResizeHandle = -1;
       FOnSelChange = NULL; FOverlayView = nil; FContentView = nil;
       FToolBar = nil; FClientTop = 0; FMenuItemCount = 0;
+      FPendingControlType = -1; FOnComponentDrop = NULL;
       memset( FSelected, 0, sizeof(FSelected) );
       memset( FMenuActions, 0, sizeof(FMenuActions) );
       FWidth = 470; FHeight = 400;
@@ -1202,6 +1324,7 @@ static HBPaletteTarget * s_palTarget = nil;
 - (void)dealloc
 {
    if( FOnSelChange ) { hb_itemRelease( FOnSelChange ); FOnSelChange = NULL; }
+   if( FOnComponentDrop ) { hb_itemRelease( FOnComponentDrop ); FOnComponentDrop = NULL; }
    for( int i = 0; i < FMenuItemCount; i++ )
       if( FMenuActions[i] ) { hb_itemRelease( FMenuActions[i] ); FMenuActions[i] = NULL; }
    /* Release form events */
@@ -2534,6 +2657,8 @@ static void PalShowTab( PALDATA * pd, int nTab )
          [btn setTitle:title];
       }
       [btn setToolTip:[NSString stringWithUTF8String:t->btns[i].szTooltip]];
+      [btn setTarget:s_palTarget];
+      [btn setAction:@selector(palBtnClicked:)];
       [pd->btnPanel addSubview:btn];
       pd->buttons[i] = btn;
       xPos += thisBtnW + 2;
@@ -2661,6 +2786,40 @@ HB_FUNC( UI_FORMSELECTCTRL )
    }
 }
 
+/* UI_SetDesignForm( hForm ) - register the form that receives palette drops */
+HB_FUNC( UI_SETDESIGNFORM )
+{
+   HBForm * p = GetForm(1);
+   s_designForm = p;
+}
+
+/* UI_FormSetPending( hForm, nControlType ) - set pending component drop mode
+ * nControlType: 1=Label 2=Edit 3=Button 4=CheckBox 5=ComboBox 6=GroupBox, -1=cancel */
+HB_FUNC( UI_FORMSETPENDING )
+{
+   HBForm * p = GetForm(1);
+   if( p ) {
+      p->FPendingControlType = hb_parni(2);
+      /* Change cursor to crosshair when in drop mode */
+      if( p->FPendingControlType >= 0 )
+         [[NSCursor crosshairCursor] set];
+      else
+         [[NSCursor arrowCursor] set];
+   }
+}
+
+/* UI_FormOnComponentDrop( hForm, bBlock )
+ * Block receives: hForm, nControlType, nLeft, nTop, nWidth, nHeight */
+HB_FUNC( UI_FORMONCOMPONENTDROP )
+{
+   HBForm * p = GetForm(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( p ) {
+      if( p->FOnComponentDrop ) hb_itemRelease( p->FOnComponentDrop );
+      p->FOnComponentDrop = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
+}
+
 HB_FUNC( UI_FORMSETPOS )
 {
    HBForm * p = GetForm(1);
@@ -2732,6 +2891,91 @@ HB_FUNC( MAC_MSGBOX )
    [alert addButtonWithTitle:@"OK"];
    [alert setAlertStyle:NSAlertStyleInformational];
    [alert runModal];
+}
+
+/* MAC_OpenFileDialog( [cTitle], [cFilter] ) --> cFilePath or "" */
+HB_FUNC( MAC_OPENFILEDIALOG )
+{
+   EnsureNSApp();
+   NSOpenPanel * panel = [NSOpenPanel openPanel];
+   [panel setCanChooseFiles:YES];
+   [panel setCanChooseDirectories:NO];
+   [panel setAllowsMultipleSelection:NO];
+   if( HB_ISCHAR(1) )
+      [panel setTitle:[NSString stringWithUTF8String:hb_parc(1)]];
+   if( HB_ISCHAR(2) )
+   {
+      NSString * ext = [NSString stringWithUTF8String:hb_parc(2)];
+      UTType * type = [UTType typeWithFilenameExtension:ext];
+      if( type )
+         [panel setAllowedContentTypes:@[type]];
+   }
+   if( [panel runModal] == NSModalResponseOK )
+   {
+      NSString * path = [[panel URL] path];
+      hb_retc( [path UTF8String] );
+   }
+   else
+      hb_retc( "" );
+}
+
+/* MAC_SaveFileDialog( [cTitle], [cDefaultName], [cFilter] ) --> cFilePath or "" */
+HB_FUNC( MAC_SAVEFILEDIALOG )
+{
+   EnsureNSApp();
+   NSSavePanel * panel = [NSSavePanel savePanel];
+   if( HB_ISCHAR(1) )
+      [panel setTitle:[NSString stringWithUTF8String:hb_parc(1)]];
+   if( HB_ISCHAR(2) )
+      [panel setNameFieldStringValue:[NSString stringWithUTF8String:hb_parc(2)]];
+   if( HB_ISCHAR(3) )
+   {
+      NSString * ext = [NSString stringWithUTF8String:hb_parc(3)];
+      UTType * type = [UTType typeWithFilenameExtension:ext];
+      if( type )
+         [panel setAllowedContentTypes:@[type]];
+   }
+   if( [panel runModal] == NSModalResponseOK )
+   {
+      NSString * path = [[panel URL] path];
+      hb_retc( [path UTF8String] );
+   }
+   else
+      hb_retc( "" );
+}
+
+/* UI_FormClearChildren( hForm ) - remove all child controls from form */
+HB_FUNC( UI_FORMCLEARCHILDREN )
+{
+   HBForm * pForm = GetForm(1);
+   if( !pForm ) return;
+
+   /* Remove views from content view */
+   if( pForm->FContentView )
+   {
+      for( NSView * sv in [[pForm->FContentView subviews] copy] )
+      {
+         /* Keep overlay view for design mode */
+         if( pForm->FOverlayView && sv == (NSView *)pForm->FOverlayView ) continue;
+         [sv removeFromSuperview];
+      }
+   }
+
+   /* Release child objects */
+   for( int i = 0; i < pForm->FChildCount; i++ )
+   {
+      if( pForm->FChildren[i] )
+         [s_allControls removeObject:pForm->FChildren[i]];
+      pForm->FChildren[i] = nil;
+   }
+   pForm->FChildCount = 0;
+
+   /* Clear selection */
+   [pForm clearSelection];
+
+   /* Redraw overlay */
+   if( pForm->FOverlayView )
+      [(NSView *)pForm->FOverlayView setNeedsDisplay:YES];
 }
 
 /* ======================================================================

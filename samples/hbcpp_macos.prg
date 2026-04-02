@@ -23,6 +23,7 @@ static oDesignForm   // Design form (floats on top of editor)
 static hCodeEditor   // Code editor (background, right of inspector)
 static nScreenW      // Screen width
 static nScreenH      // Screen height
+static cCurrentFile  // Current file path (empty = untitled)
 
 function Main()
 
@@ -32,6 +33,7 @@ function Main()
 
    nScreenW := MAC_GetScreenWidth()
    nScreenH := MAC_GetScreenHeight()
+   cCurrentFile := ""
 
    // C++Builder classic proportions scaled to current screen
    // Reference: 1024x768 -> Inspector 250px (24.4%), Bar 100px (13%)
@@ -110,18 +112,18 @@ function Main()
 
    // Speedbar (toolbar with 28x28 icon-sized buttons)
    DEFINE TOOLBAR oTB OF oIDE
-   BUTTON "New"   OF oTB TOOLTIP "New file (Cmd+N)"    ACTION MsgInfo( "New" )
-   BUTTON "Open"  OF oTB TOOLTIP "Open file (Cmd+O)"   ACTION MsgInfo( "Open" )
-   BUTTON "Save"  OF oTB TOOLTIP "Save file (Cmd+S)"   ACTION MsgInfo( "Save" )
+   BUTTON "New"   OF oTB TOOLTIP "New project (Cmd+N)"  ACTION TBNew()
+   BUTTON "Open"  OF oTB TOOLTIP "Open file (Cmd+O)"    ACTION TBOpen()
+   BUTTON "Save"  OF oTB TOOLTIP "Save file (Cmd+S)"    ACTION TBSave()
    SEPARATOR OF oTB
-   BUTTON "Cut"   OF oTB TOOLTIP "Cut (Cmd+X)"         ACTION MsgInfo( "Cut" )
-   BUTTON "Copy"  OF oTB TOOLTIP "Copy (Cmd+C)"        ACTION MsgInfo( "Copy" )
-   BUTTON "Paste" OF oTB TOOLTIP "Paste (Cmd+V)"       ACTION MsgInfo( "Paste" )
+   BUTTON "Cut"   OF oTB TOOLTIP "Cut (Cmd+X)"          ACTION MsgInfo( "Cut" )
+   BUTTON "Copy"  OF oTB TOOLTIP "Copy (Cmd+C)"         ACTION MsgInfo( "Copy" )
+   BUTTON "Paste" OF oTB TOOLTIP "Paste (Cmd+V)"        ACTION MsgInfo( "Paste" )
    SEPARATOR OF oTB
-   BUTTON "Undo"  OF oTB TOOLTIP "Undo (Cmd+Z)"        ACTION MsgInfo( "Undo" )
-   BUTTON "Redo"  OF oTB TOOLTIP "Redo (Cmd+Y)"        ACTION MsgInfo( "Redo" )
+   BUTTON "Undo"  OF oTB TOOLTIP "Undo (Cmd+Z)"         ACTION MsgInfo( "Undo" )
+   BUTTON "Redo"  OF oTB TOOLTIP "Redo (Cmd+Y)"         ACTION MsgInfo( "Redo" )
    SEPARATOR OF oTB
-   BUTTON "Run"   OF oTB TOOLTIP "Run project (Cmd+R)"  ACTION MsgInfo( "Run" )
+   BUTTON "Run"   OF oTB TOOLTIP "Run project (F9)"      ACTION TBRun()
 
    // Load toolbar icons (Silk icon set by famfamfam, CC BY 2.5)
    UI_ToolBarLoadImages( oTB:hCpp, "../resources/toolbar.bmp" )
@@ -137,6 +139,7 @@ function Main()
    // === Window 3: Form Designer (floating on top of editor) ===
    CreateDesignForm( nFormX, nFormY )
    oDesignForm:SetDesign( .t. )
+   UI_SetDesignForm( oDesignForm:hCpp )
    oDesignForm:Show()
 
    // === Window 2: Object Inspector (left column, below bar) ===
@@ -152,6 +155,10 @@ function Main()
    // Sync: selection change in design form -> refresh inspector
    UI_OnSelChange( oDesignForm:hCpp, ;
       { |hCtrl| OnDesignSelChange( hCtrl ) } )
+
+   // Component drop: palette click + draw on form -> create control
+   UI_FormOnComponentDrop( oDesignForm:hCpp, ;
+      { |hForm, nType, nL, nT, nW, nH| OnComponentDrop( hForm, nType, nL, nT, nW, nH ) } )
 
    // When IDE closes, destroy all secondary windows
    oIDE:OnClose := { || InspectorClose(), oDesignForm:Destroy(), ;
@@ -171,7 +178,7 @@ static function CreatePalette()
 
    DEFINE PALETTE oPal OF oIDE
 
-   // Standard tab (28x28 icon buttons)
+   // Standard tab - only controls that are implemented
    nStd := oPal:AddTab( "Standard" )
    oPal:AddComp( nStd, "A",    "Label",    1 )
    oPal:AddComp( nStd, "ab",   "Edit",     2 )
@@ -179,24 +186,6 @@ static function CreatePalette()
    oPal:AddComp( nStd, "Chk",  "CheckBox", 4 )
    oPal:AddComp( nStd, "Cmb",  "ComboBox", 5 )
    oPal:AddComp( nStd, "Grp",  "GroupBox", 6 )
-   oPal:AddComp( nStd, "Lst",  "ListBox",  7 )
-   oPal:AddComp( nStd, "Rad",  "Radio",    8 )
-
-   // Additional tab
-   nAdd := oPal:AddTab( "Additional" )
-   oPal:AddComp( nAdd, "Img",  "Image",    9 )
-   oPal:AddComp( nAdd, "Shp",  "Shape",   10 )
-   oPal:AddComp( nAdd, "Spd",  "SpeedBtn",11 )
-
-   // Data Access tab
-   nAdd := oPal:AddTab( "Data Access" )
-   oPal:AddComp( nAdd, "Tbl",  "Table",   12 )
-   oPal:AddComp( nAdd, "Qry",  "Query",   13 )
-
-   // Data Controls tab
-   nAdd := oPal:AddTab( "Data Controls" )
-   oPal:AddComp( nAdd, "DBG",  "DBGrid",  14 )
-   oPal:AddComp( nAdd, "DBN",  "DBNav",   15 )
 
    // Load palette icons (Silk icon set by famfamfam, CC BY 2.5)
    UI_PaletteLoadImages( oPal:hCpp, "../resources/palette.bmp" )
@@ -355,9 +344,154 @@ static function OnEventDblClick( hCtrl, cEvent )
 
 return cHandler
 
+// === Component drop from palette ===
+
+static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
+
+   local cClass, cName, cCode, e, cSep, cDataDecl, cCreateCode
+   local nCount, hCtrl
+   static nLabelCnt := 0, nEditCnt := 0, nBtnCnt := 0
+   static nChkCnt := 0, nCmbCnt := 0, nGrpCnt := 0
+
+   e := Chr(13) + Chr(10)
+   cSep := "//" + Replicate( "-", 68 )
+
+   // Increment counter and build name (C++Builder style: Button1, Button2...)
+
+   do case
+      case nType == 1;  nLabelCnt++;  cClass := "TLabel";     cName := "Label"    + LTrim(Str(nLabelCnt))
+      case nType == 2;  nEditCnt++;   cClass := "TEdit";      cName := "Edit"     + LTrim(Str(nEditCnt))
+      case nType == 3;  nBtnCnt++;    cClass := "TButton";    cName := "Button"   + LTrim(Str(nBtnCnt))
+      case nType == 4;  nChkCnt++;    cClass := "TCheckBox";  cName := "CheckBox" + LTrim(Str(nChkCnt))
+      case nType == 5;  nCmbCnt++;    cClass := "TComboBox";  cName := "ComboBox" + LTrim(Str(nCmbCnt))
+      case nType == 6;  nGrpCnt++;    cClass := "TGroupBox";  cName := "GroupBox" + LTrim(Str(nGrpCnt))
+      otherwise;  return nil
+   endcase
+
+   // Set the Name property on the new control (last child of the form)
+   nCount := UI_GetChildCount( hForm )
+   hCtrl  := UI_GetChild( hForm, nCount )
+   if hCtrl != 0
+      UI_SetProp( hCtrl, "cName", cName )
+   endif
+
+   // Insert DATA declaration in CLASS block (after "// IDE-managed Components")
+   cDataDecl := "   DATA o" + cName + "   // " + cClass + e
+   CodeEditorInsertAfter( hCodeEditor, "// IDE-managed Components", cDataDecl )
+
+   // Insert creation code in CreateForm method (before "return nil")
+   // Build the line like C++Builder generates in the DFM -> CreateForm
+   do case
+      case nType == 1  // Label
+         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+            ' SAY ::o' + cName + ' PROMPT "' + cName + '" OF Self SIZE ' + ;
+            LTrim(Str(nW)) + e
+      case nType == 2  // Edit
+         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+            ' GET ::o' + cName + ' VAR "" OF Self SIZE ' + ;
+            LTrim(Str(nW)) + ", " + LTrim(Str(nH)) + e
+      case nType == 3  // Button
+         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+            ' BUTTON ::o' + cName + ' PROMPT "' + cName + '" OF Self SIZE ' + ;
+            LTrim(Str(nW)) + ", " + LTrim(Str(nH)) + e
+      case nType == 4  // CheckBox
+         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+            ' CHECKBOX ::o' + cName + ' PROMPT "' + cName + '" OF Self SIZE ' + ;
+            LTrim(Str(nW)) + e
+      case nType == 5  // ComboBox
+         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+            ' COMBOBOX ::o' + cName + ' OF Self SIZE ' + ;
+            LTrim(Str(nW)) + ", " + LTrim(Str(nH)) + e
+      case nType == 6  // GroupBox
+         cCreateCode := '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+            ' GROUPBOX ::o' + cName + ' PROMPT "' + cName + '" OF Self SIZE ' + ;
+            LTrim(Str(nW)) + ", " + LTrim(Str(nH)) + e
+   endcase
+
+   CodeEditorInsertAfter( hCodeEditor, "::Height", cCreateCode )
+
+   // Refresh inspector
+   InspectorRefresh( hCtrl )
+   InspectorPopulateCombo( hForm )
+
+return nil
+
+// === Toolbar actions ===
+
+// New: reset form + code editor (like C++Builder File > New > Application)
+static function TBNew()
+
+   // Clear the design form (remove all child controls)
+   UI_FormClearChildren( oDesignForm:hCpp )
+
+   // Reset code editor to initial template
+   CodeEditorSetText( hCodeEditor, GenerateSampleCode() )
+
+   // Reset file path
+   cCurrentFile := ""
+
+   // Refresh inspector
+   InspectorRefresh( oDesignForm:hCpp )
+   InspectorPopulateCombo( oDesignForm:hCpp )
+
+return nil
+
+// Open: load a .prg file into the code editor
+static function TBOpen()
+
+   local cFile, cContent
+
+   cFile := MAC_OpenFileDialog( "Open Harbour Source", "prg" )
+   if Empty( cFile )
+      return nil
+   endif
+
+   cContent := MemoRead( cFile )
+   if Empty( cContent )
+      MsgInfo( "Could not read file: " + cFile )
+      return nil
+   endif
+
+   CodeEditorSetText( hCodeEditor, cContent )
+   cCurrentFile := cFile
+
+return nil
+
+// Save: save code editor to file
+static function TBSave()
+
+   local cContent, cFile
+
+   cContent := CodeEditorGetText( hCodeEditor )
+
+   if Empty( cCurrentFile )
+      // No file yet: show Save As dialog
+      cFile := MAC_SaveFileDialog( "Save Harbour Source", "Form1.prg", "prg" )
+      if Empty( cFile )
+         return nil
+      endif
+      cCurrentFile := cFile
+   endif
+
+   MemoWrit( cCurrentFile, cContent )
+
+return nil
+
+// Run: show form definition as JSON (future: compile and execute)
+static function TBRun()
+
+   local cJSON
+
+   cJSON := UI_FormToJSON( oDesignForm:hCpp )
+   MsgInfo( cJSON )
+
+return nil
+
+// === Helpers ===
+
 static function MsgInfo( cText )
 
-   MAC_MsgBox( cText, "IDE" )
+   MAC_MsgBox( cText, "HbBuilder" )
 
 return nil
 

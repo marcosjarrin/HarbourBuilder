@@ -1,6 +1,21 @@
 hbcpp - C++ powered GUI for Harbour
 =====================================
 
+2026-04-02 (HbBuilder: toolbar actions, palette drop, button icon)
+------------------------------------------------------------------
+- Toolbar buttons: New (reset form+editor), Open (NSOpenPanel), Save (NSSavePanel), Run (show JSON)
+- Component palette drop: click palette icon -> crosshair cursor -> draw rectangle on form -> control created
+  * Palette buttons wired to palBtnClicked: which sets FPendingControlType on design form
+  * Overlay mouseDown/mouseUp handles rubber band in drop mode, creates control at drawn rect
+  * s_designForm global + UI_SetDesignForm() to target the correct form for drops
+  * UI_FormOnComponentDrop callback fires Harbour block with type, position and size
+  * OnComponentDrop: auto-names controls (Button1, Edit1...), inserts DATA + creation code in editor
+  * UI_FormClearChildren: removes all child controls from form (for New button)
+- MAC_OpenFileDialog / MAC_SaveFileDialog: NSOpenPanel/NSSavePanel with UTType (modern API)
+- Button palette icon: replaced application_form.png with custom 3D button icon ("OK")
+- Palette Standard tab: reduced to 6 implemented controls (removed ListBox, Radio)
+- resources/icons/button.png: new 16x16 button icon for palette
+
 2026-04-02 (HbBuilder: TForm properties, events, inspector tabs, code generation)
 ----------------------------------------------------------------------------------
 - Renamed IDE to "HbBuilder" (title bar, macOS app menu, executable name)

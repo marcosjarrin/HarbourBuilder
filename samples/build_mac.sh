@@ -47,6 +47,7 @@ clang++ -o ${PROG} \
    -lhbhsx -lhbsix -lhbusrrdd \
    -lgtcgi -lgttrm -lgtstd \
    -framework Cocoa \
+   -framework UniformTypeIdentifiers \
    -lm -lpthread
 
 echo ""
