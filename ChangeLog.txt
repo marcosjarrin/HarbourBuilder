@@ -1,6 +1,27 @@
 hbcpp - C++ powered GUI for Harbour
 =====================================
 
+2026-04-02 (HbBuilder: multi-form, editor tabs, About dialog)
+--------------------------------------------------------------
+- Multi-form project support (C++Builder style):
+  * aForms array tracks { cName, oForm, cCode, nX, nY } per form
+  * File > New Form: creates Form2, Form3... with own design window + code
+  * View > Forms...: MAC_SelectFromList dialog to switch between forms
+  * SwitchToForm: hides current, shows selected, updates editor + inspector
+  * DestroyAllForms on IDE close
+  * Each form generates its own FormN.prg code (CLASS TFormN FROM TForm)
+  * Project1.prg auto-updated with oApp:CreateForm() for each form
+- Code editor tabs (NSSegmentedControl):
+  * Tab bar above editor: Project1.prg + FormN.prg tabs
+  * CodeEditorAddTab, CodeEditorSetTabText, CodeEditorGetTabText,
+    CodeEditorSelectTab, CodeEditorClearTabs, CodeEditorOnTabChange
+  * Tab content saved/restored on switch, Aqua appearance for readability
+  * Clicking a form tab switches to that form's designer
+- About HbBuilder dialog:
+  * MAC_AboutDialog with logo image support
+  * Harbour ship logo (128x128 PNG, generated)
+  * Shows: HbBuilder 1.0, (c) The Harbour Project, Harbour 3.2, C++Builder inspired
+
 2026-04-02 (HbBuilder: toolbar actions, palette drop, button icon)
 ------------------------------------------------------------------
 - Toolbar buttons: New (reset form+editor), Open (NSOpenPanel), Save (NSSavePanel), Run (show JSON)

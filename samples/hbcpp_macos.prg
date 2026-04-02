@@ -19,11 +19,16 @@
 #include "../harbour/commands.ch"
 
 static oIDE          // Main IDE bar (top strip)
-static oDesignForm   // Design form (floats on top of editor)
+static oDesignForm   // Design form (active, floats on top of editor)
 static hCodeEditor   // Code editor (background, right of inspector)
 static nScreenW      // Screen width
 static nScreenH      // Screen height
 static cCurrentFile  // Current file path (empty = untitled)
+
+// Project form list (C++Builder: each form = a unit)
+// Each entry: { cName, oForm, cCode, nFormX, nFormY }
+static aForms        // Array of form entries
+static nActiveForm   // Index of active form (1-based)
 
 function Main()
 
@@ -34,6 +39,8 @@ function Main()
    nScreenW := MAC_GetScreenWidth()
    nScreenH := MAC_GetScreenHeight()
    cCurrentFile := ""
+   aForms := {}
+   nActiveForm := 0
 
    // C++Builder classic proportions scaled to current screen
    // Reference: 1024x768 -> Inspector 250px (24.4%), Bar 100px (13%)
@@ -65,9 +72,11 @@ function Main()
    DEFINE MENUBAR OF oIDE
 
    DEFINE POPUP oFile PROMPT "File" OF oIDE
-   MENUITEM "New"        OF oFile ACTION MsgInfo( "New file" )      ACCEL "n"
-   MENUITEM "Open..."    OF oFile ACTION MsgInfo( "Open file" )     ACCEL "o"
-   MENUITEM "Save"       OF oFile ACTION MsgInfo( "Save file" )     ACCEL "s"
+   MENUITEM "New Application" OF oFile ACTION TBNew()               ACCEL "n"
+   MENUITEM "New Form"        OF oFile ACTION MenuNewForm()
+   MENUSEPARATOR OF oFile
+   MENUITEM "Open..."    OF oFile ACTION TBOpen()                   ACCEL "o"
+   MENUITEM "Save"       OF oFile ACTION TBSave()                   ACCEL "s"
    MENUITEM "Save As..." OF oFile ACTION MsgInfo( "Save As" )
    MENUSEPARATOR OF oFile
    MENUITEM "Exit"       OF oFile ACTION oIDE:Close()               ACCEL "q"
@@ -85,8 +94,8 @@ function Main()
    MENUITEM "Replace..."   OF oSearch ACTION MsgInfo( "Replace" )  ACCEL "h"
 
    DEFINE POPUP oView PROMPT "View" OF oIDE
+   MENUITEM "Forms..."     OF oView ACTION MenuViewForms()
    MENUITEM "Inspector"    OF oView ACTION InspectorOpen()
-   MENUITEM "Object Tree"  OF oView ACTION MsgInfo( "Object Tree" )
 
    DEFINE POPUP oProject PROMPT "Project" OF oIDE
    MENUITEM "Add to Project..."    OF oProject ACTION MsgInfo( "Add to Project" )
@@ -107,8 +116,7 @@ function Main()
    MENUITEM "Environment Options..." OF oTools ACTION MsgInfo( "Options" )
 
    DEFINE POPUP oHelp PROMPT "Help" OF oIDE
-   MENUITEM "About..." OF oHelp ACTION ;
-      MsgInfo( "HbBuilder v0.1 - Visual development environment for Harbour" )
+   MENUITEM "About HbBuilder..." OF oHelp ACTION ShowAbout()
 
    // Speedbar (toolbar with 28x28 icon-sized buttons)
    DEFINE TOOLBAR oTB OF oIDE
@@ -134,13 +142,21 @@ function Main()
    // === Window 4: Code Editor (background, right of inspector, full area) ===
    // Created FIRST so it appears BEHIND the form
    hCodeEditor := CodeEditorCreate( nEditorX, nEditorTop, nEditorW, nEditorH )
-   CodeEditorSetText( hCodeEditor, GenerateSampleCode() )
 
    // === Window 3: Form Designer (floating on top of editor) ===
    CreateDesignForm( nFormX, nFormY )
    oDesignForm:SetDesign( .t. )
    UI_SetDesignForm( oDesignForm:hCpp )
    oDesignForm:Show()
+
+   // Set up editor tabs: Project1.prg (tab 1) + Form1.prg (tab 2)
+   CodeEditorSetTabText( hCodeEditor, 1, GenerateProjectCode() )
+   CodeEditorAddTab( hCodeEditor, "Form1.prg" )
+   CodeEditorSetTabText( hCodeEditor, 2, aForms[1][3] )
+   CodeEditorSelectTab( hCodeEditor, 2 )  // Show Form1.prg initially
+
+   // Tab change callback
+   CodeEditorOnTabChange( hCodeEditor, { |hEd, nTab| OnEditorTabChange( hEd, nTab ) } )
 
    // === Window 2: Object Inspector (left column, below bar) ===
    InspectorOpen()
@@ -161,7 +177,7 @@ function Main()
       { |hForm, nType, nL, nT, nW, nH| OnComponentDrop( hForm, nType, nL, nT, nW, nH ) } )
 
    // When IDE closes, destroy all secondary windows
-   oIDE:OnClose := { || InspectorClose(), oDesignForm:Destroy(), ;
+   oIDE:OnClose := { || DestroyAllForms(), InspectorClose(), ;
                        CodeEditorDestroy( hCodeEditor ) }
 
    // IDE enters the message loop (dispatches for ALL windows)
@@ -194,10 +210,20 @@ return nil
 
 static function CreateDesignForm( nX, nY )
 
-   // New empty form, like C++Builder "File > New > VCL Forms Application"
-   DEFINE FORM oDesignForm TITLE "Form1" SIZE 400, 300 FONT "Helvetica Neue", 12
+   local cName, nIdx
 
+   // Generate form name: Form1, Form2, Form3...
+   nIdx := Len( aForms ) + 1
+   cName := "Form" + LTrim( Str( nIdx ) )
+
+   // Create new empty form (like C++Builder File > New > VCL Forms Application)
+   DEFINE FORM oDesignForm TITLE cName SIZE 400, 300 FONT "Helvetica Neue", 12
    UI_FormSetPos( oDesignForm:hCpp, nX, nY )
+
+   // Register in project form list
+   // { cName, oForm, cCode, nX, nY }
+   AAdd( aForms, { cName, oDesignForm, GenerateFormCode( cName ), nX, nY } )
+   nActiveForm := Len( aForms )
 
 return nil
 
@@ -239,12 +265,13 @@ static function OnDesignSelChange( hCtrl )
 
 return nil
 
-static function GenerateSampleCode()
+// Generate Project1.prg code with all form references
+static function GenerateProjectCode()
 
    local cCode := "", e := Chr(13) + Chr(10)
    local cSep := "//" + Replicate( "-", 68 ) + e
+   local i
 
-   // === Project1.prg section ===
    cCode += "// Project1.prg" + e
    cCode += cSep
    cCode += '#include "commands.ch"' + e
@@ -256,18 +283,29 @@ static function GenerateSampleCode()
    cCode += e
    cCode += "   oApp := TApplication():New()" + e
    cCode += '   oApp:Title := "Project1"' + e
-   cCode += "   oApp:CreateForm( TForm1() )" + e
+
+   for i := 1 to Len( aForms )
+      cCode += "   oApp:CreateForm( T" + aForms[i][1] + "() )" + e
+   next
+
    cCode += "   oApp:Run()" + e
    cCode += e
    cCode += "return" + e
-   cCode += e
    cCode += cSep
-   cCode += "// Form1.prg" + e
-   cCode += cSep
-   cCode += e
 
-   // === Form1.prg section (C++Builder Unit1.h + Unit1.cpp equivalent) ===
-   cCode += "CLASS TForm1 FROM TForm" + e
+return cCode
+
+// Generate a single form's code (Form1.prg, Form2.prg...)
+static function GenerateFormCode( cName )
+
+   local cCode := "", e := Chr(13) + Chr(10)
+   local cSep := "//" + Replicate( "-", 68 ) + e
+   local cClass := "T" + cName  // TForm1, TForm2...
+
+   cCode += "// " + cName + ".prg" + e
+   cCode += cSep
+   cCode += e
+   cCode += "CLASS " + cClass + " FROM TForm" + e
    cCode += e
    cCode += "   // IDE-managed Components" + e
    cCode += e
@@ -278,9 +316,9 @@ static function GenerateSampleCode()
    cCode += "ENDCLASS" + e
    cCode += cSep
    cCode += e
-   cCode += "METHOD CreateForm() CLASS TForm1" + e
+   cCode += "METHOD CreateForm() CLASS " + cClass + e
    cCode += e
-   cCode += '   ::Title  := "Form1"' + e
+   cCode += '   ::Title  := "' + cName + '"' + e
    cCode += "   ::Width  := 400" + e
    cCode += "   ::Height := 300" + e
    cCode += e
@@ -288,6 +326,30 @@ static function GenerateSampleCode()
    cCode += cSep
 
 return cCode
+
+// Build full editor text: Project1.prg + active form's code
+static function BuildFullCode()
+
+   local cCode
+
+   cCode := GenerateProjectCode()
+   if nActiveForm > 0 .and. nActiveForm <= Len( aForms )
+      cCode += aForms[ nActiveForm ][ 3 ]
+   endif
+
+return cCode
+
+// Save current editor text back to active form's code slot
+static function SaveActiveFormCode()
+
+   if nActiveForm < 1 .or. nActiveForm > Len( aForms )
+      return nil
+   endif
+
+   // Read from the form's tab (tab index = nActiveForm + 1)
+   aForms[ nActiveForm ][ 3 ] := CodeEditorGetTabText( hCodeEditor, nActiveForm + 1 )
+
+return nil
 
 // Double-click on event in inspector: generate METHOD handler
 // Follows C++Builder pattern: ComponentName + EventNameWithoutOn
@@ -416,18 +478,185 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
 
 return nil
 
+// Editor tab changed: switch to the corresponding form
+static function OnEditorTabChange( hEd, nTab )
+
+   local nFormIdx
+
+   // Tab 1 = Project1.prg (no form switch needed)
+   // Tab 2+ = Form1.prg, Form2.prg...
+   if nTab > 1
+      nFormIdx := nTab - 1
+      if nFormIdx != nActiveForm .and. nFormIdx <= Len( aForms )
+         SwitchToForm( nFormIdx )
+      endif
+   endif
+
+return nil
+
+// === Multi-form management (C++Builder style) ===
+
+// Switch active form (hide current, show selected)
+static function SwitchToForm( nIdx )
+
+   local nX, nY
+
+   if nIdx < 1 .or. nIdx > Len( aForms ) .or. nIdx == nActiveForm
+      return nil
+   endif
+
+   // Save current form's code from editor
+   SaveActiveFormCode()
+
+   // Hide current design form
+   if nActiveForm > 0 .and. nActiveForm <= Len( aForms )
+      aForms[ nActiveForm ][ 2 ]:Close()
+   endif
+
+   // Activate new form
+   nActiveForm := nIdx
+   oDesignForm := aForms[ nIdx ][ 2 ]
+   nX := aForms[ nIdx ][ 4 ]
+   nY := aForms[ nIdx ][ 5 ]
+
+   // Show + wire up
+   oDesignForm:SetDesign( .t. )
+   UI_SetDesignForm( oDesignForm:hCpp )
+   UI_FormSetPos( oDesignForm:hCpp, nX, nY )
+   oDesignForm:Show()
+
+   UI_OnSelChange( oDesignForm:hCpp, ;
+      { |hCtrl| OnDesignSelChange( hCtrl ) } )
+   UI_FormOnComponentDrop( oDesignForm:hCpp, ;
+      { |hForm, nType, nL, nT, nW, nH| OnComponentDrop( hForm, nType, nL, nT, nW, nH ) } )
+
+   // Switch editor to this form's tab
+   CodeEditorSelectTab( hCodeEditor, nIdx + 1 )  // +1 because tab 1 = Project1.prg
+
+   // Refresh inspector
+   InspectorRefresh( oDesignForm:hCpp )
+   InspectorPopulateCombo( oDesignForm:hCpp )
+
+return nil
+
+// File > New Form: add a new form to the project
+static function MenuNewForm()
+
+   local nFormX, nFormY, nInsW, nEditorX, nEditorW, nEditorH
+   local nInsTop, nEditorTop, nBottomY
+
+   // Save current form code
+   SaveActiveFormCode()
+
+   // Hide current form
+   if nActiveForm > 0
+      aForms[ nActiveForm ][ 2 ]:Close()
+   endif
+
+   // Calculate position (same as initial form, offset a bit)
+   nInsW := Int( nScreenW * 0.18 )
+   nInsTop := MAC_GetWindowBottom( oIDE:hCpp )
+   nEditorTop := nInsTop + 80
+   nEditorX := nInsW
+   nEditorW := nScreenW - nEditorX
+   nEditorH := nScreenH - nEditorTop
+   nFormX := nEditorX + Int( ( nEditorW - 400 ) / 2 ) + Len(aForms) * 20
+   nFormY := nEditorTop + Int( ( nEditorH - 300 ) * 0.35 ) + Len(aForms) * 20
+
+   // Create new form
+   CreateDesignForm( nFormX, nFormY )
+   oDesignForm:SetDesign( .t. )
+   UI_SetDesignForm( oDesignForm:hCpp )
+   oDesignForm:Show()
+
+   UI_OnSelChange( oDesignForm:hCpp, ;
+      { |hCtrl| OnDesignSelChange( hCtrl ) } )
+   UI_FormOnComponentDrop( oDesignForm:hCpp, ;
+      { |hForm, nType, nL, nT, nW, nH| OnComponentDrop( hForm, nType, nL, nT, nW, nH ) } )
+
+   // Add tab to editor and switch to it
+   CodeEditorAddTab( hCodeEditor, aForms[ nActiveForm ][ 1 ] + ".prg" )
+   CodeEditorSetTabText( hCodeEditor, nActiveForm + 1, aForms[ nActiveForm ][ 3 ] )
+   CodeEditorSelectTab( hCodeEditor, nActiveForm + 1 )
+
+   // Update Project1.prg tab with new CreateForm line
+   CodeEditorSetTabText( hCodeEditor, 1, GenerateProjectCode() )
+
+   // Refresh inspector
+   InspectorRefresh( oDesignForm:hCpp )
+   InspectorPopulateCombo( oDesignForm:hCpp )
+
+return nil
+
+// View > Forms... (Shift+F12): show list dialog and switch
+static function MenuViewForms()
+
+   local aNames := {}, i, nSel
+
+   for i := 1 to Len( aForms )
+      AAdd( aNames, aForms[i][1] )
+   next
+
+   nSel := MAC_SelectFromList( "View Forms", aNames )
+   if nSel > 0
+      SwitchToForm( nSel )
+   endif
+
+return nil
+
+// Destroy all forms on exit
+static function DestroyAllForms()
+
+   local i
+
+   for i := 1 to Len( aForms )
+      aForms[i][2]:Destroy()
+   next
+
+return nil
+
 // === Toolbar actions ===
 
-// New: reset form + code editor (like C++Builder File > New > Application)
+// New Application: reset everything (like C++Builder File > New > Application)
 static function TBNew()
 
-   // Clear the design form (remove all child controls)
-   UI_FormClearChildren( oDesignForm:hCpp )
+   local i, nFormX, nFormY, nInsW, nEditorX, nEditorW, nEditorH
+   local nInsTop, nEditorTop, nBottomY
 
-   // Reset code editor to initial template
-   CodeEditorSetText( hCodeEditor, GenerateSampleCode() )
+   // Destroy all existing forms
+   for i := 1 to Len( aForms )
+      aForms[i][2]:Destroy()
+   next
+   aForms := {}
+   nActiveForm := 0
 
-   // Reset file path
+   // Calculate position for Form1
+   nInsW := Int( nScreenW * 0.18 )
+   nInsTop := MAC_GetWindowBottom( oIDE:hCpp )
+   nEditorTop := nInsTop + 80
+   nEditorX := nInsW
+   nEditorW := nScreenW - nEditorX
+   nEditorH := nScreenH - nEditorTop
+   nFormX := nEditorX + Int( ( nEditorW - 400 ) / 2 )
+   nFormY := nEditorTop + Int( ( nEditorH - 300 ) * 0.35 )
+
+   // Create first form
+   CreateDesignForm( nFormX, nFormY )
+   oDesignForm:SetDesign( .t. )
+   UI_SetDesignForm( oDesignForm:hCpp )
+   oDesignForm:Show()
+
+   UI_OnSelChange( oDesignForm:hCpp, ;
+      { |hCtrl| OnDesignSelChange( hCtrl ) } )
+   UI_FormOnComponentDrop( oDesignForm:hCpp, ;
+      { |hForm, nType, nL, nT, nW, nH| OnComponentDrop( hForm, nType, nL, nT, nW, nH ) } )
+
+   // Reset editor tabs
+   CodeEditorClearTabs( hCodeEditor )
+   CodeEditorSetTabText( hCodeEditor, 1, GenerateProjectCode() )
+   CodeEditorAddTab( hCodeEditor, "Form1.prg" )
+   CodeEditorSetTabText( hCodeEditor, 2, aForms[1][3] )
+   CodeEditorSelectTab( hCodeEditor, 2 )
    cCurrentFile := ""
 
    // Refresh inspector
@@ -488,6 +717,25 @@ static function TBRun()
 return nil
 
 // === Helpers ===
+
+static function ShowAbout()
+
+   local cMsg := ""
+
+   cMsg += "HbBuilder 1.0" + Chr(10)
+   cMsg += "Visual development environment for Harbour" + Chr(10)
+   cMsg += Chr(10)
+   cMsg += "(c) 2025-2026 The Harbour Project" + Chr(10)
+   cMsg += "https://harbour.github.io/" + Chr(10)
+   cMsg += Chr(10)
+   cMsg += "Based on Harbour 3.2" + Chr(10)
+   cMsg += "Cross-platform GUI framework" + Chr(10)
+   cMsg += Chr(10)
+   cMsg += "Inspired by Borland C++Builder" + Chr(10)
+
+   MAC_AboutDialog( "About HbBuilder", cMsg, "../resources/harbour_logo.png" )
+
+return nil
 
 static function MsgInfo( cText )
 

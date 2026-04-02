@@ -2893,6 +2893,30 @@ HB_FUNC( MAC_MSGBOX )
    [alert runModal];
 }
 
+/* MAC_AboutDialog( cTitle, cMessage, cImagePath ) - show About dialog with logo */
+HB_FUNC( MAC_ABOUTDIALOG )
+{
+   EnsureNSApp();
+   NSAlert * alert = [[NSAlert alloc] init];
+   [alert setMessageText:[NSString stringWithUTF8String:HB_ISCHAR(1) ? hb_parc(1) : "About"]];
+   [alert setInformativeText:[NSString stringWithUTF8String:HB_ISCHAR(2) ? hb_parc(2) : ""]];
+   [alert addButtonWithTitle:@"OK"];
+   [alert setAlertStyle:NSAlertStyleInformational];
+
+   if( HB_ISCHAR(3) )
+   {
+      NSString * path = [NSString stringWithUTF8String:hb_parc(3)];
+      NSImage * logo = [[NSImage alloc] initWithContentsOfFile:path];
+      if( logo )
+      {
+         [logo setSize:NSMakeSize(128, 128)];
+         [alert setIcon:logo];
+      }
+   }
+
+   [alert runModal];
+}
+
 /* MAC_OpenFileDialog( [cTitle], [cFilter] ) --> cFilePath or "" */
 HB_FUNC( MAC_OPENFILEDIALOG )
 {
@@ -2942,6 +2966,35 @@ HB_FUNC( MAC_SAVEFILEDIALOG )
    }
    else
       hb_retc( "" );
+}
+
+/* MAC_SelectFromList( cTitle, aItems ) --> nIndex (1-based) or 0 if cancelled */
+HB_FUNC( MAC_SELECTFROMLIST )
+{
+   EnsureNSApp();
+   const char * szTitle = HB_ISCHAR(1) ? hb_parc(1) : "Select";
+   PHB_ITEM pArray = hb_param(2, HB_IT_ARRAY);
+   if( !pArray ) { hb_retni(0); return; }
+
+   HB_SIZE nLen = hb_arrayLen( pArray );
+   if( nLen == 0 ) { hb_retni(0); return; }
+
+   NSAlert * alert = [[NSAlert alloc] init];
+   [alert setMessageText:[NSString stringWithUTF8String:szTitle]];
+   [alert addButtonWithTitle:@"OK"];
+   [alert addButtonWithTitle:@"Cancel"];
+
+   /* Create popup button with items */
+   NSPopUpButton * popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 250, 28) pullsDown:NO];
+   for( HB_SIZE i = 1; i <= nLen; i++ )
+      [popup addItemWithTitle:[NSString stringWithUTF8String:hb_arrayGetCPtr(pArray, i)]];
+   [alert setAccessoryView:popup];
+
+   NSModalResponse result = [alert runModal];
+   if( result == NSAlertFirstButtonReturn )
+      hb_retni( (int)[popup indexOfSelectedItem] + 1 );
+   else
+      hb_retni( 0 );
 }
 
 /* UI_FormClearChildren( hForm ) - remove all child controls from form */
@@ -3115,12 +3168,21 @@ static int CE_IsCommand( const char * word, int len )
  * Code editor data structure
  * ----------------------------------------------------------------------- */
 
+#define CE_MAX_TABS 16
+
 typedef struct {
    NSWindow *     window;
    NSTextView *   textView;
    NSScrollView * scrollView;
    HBGutterView * gutterView;
    NSFont *       font;
+   /* Tabs */
+   NSSegmentedControl * tabBar;
+   char           tabNames[CE_MAX_TABS][64];
+   char *         tabTexts[CE_MAX_TABS];  /* heap-allocated text per tab */
+   int            nTabs;
+   int            nActiveTab;             /* 0-based */
+   PHB_ITEM       pOnTabChange;           /* callback( hEditor, nNewTab ) */
 } CODEEDITOR;
 
 /* -----------------------------------------------------------------------
@@ -3277,6 +3339,60 @@ static void CE_HighlightCode( NSTextView * tv )
 
 static HBCodeEditorDelegate * s_codeDelegate = nil;
 
+/* Tab bar target for code editor */
+@interface HBTabBarTarget : NSObject
+{
+@public
+   CODEEDITOR * ed;
+}
+- (void)tabChanged:(id)sender;
+@end
+
+@implementation HBTabBarTarget
+
+- (void)tabChanged:(id)sender
+{
+   if( !ed || !ed->tabBar ) return;
+   int newTab = (int)[ed->tabBar selectedSegment];
+   if( newTab == ed->nActiveTab ) return;
+
+   /* Save current tab's text */
+   if( ed->nActiveTab >= 0 && ed->nActiveTab < ed->nTabs )
+   {
+      NSString * text = [[ed->textView textStorage] string];
+      const char * utf8 = [text UTF8String];
+      if( ed->tabTexts[ed->nActiveTab] ) free( ed->tabTexts[ed->nActiveTab] );
+      ed->tabTexts[ed->nActiveTab] = utf8 ? strdup( utf8 ) : strdup( "" );
+   }
+
+   /* Switch to new tab */
+   ed->nActiveTab = newTab;
+
+   /* Load new tab's text */
+   const char * newText = ed->tabTexts[newTab] ? ed->tabTexts[newTab] : "";
+   [[ed->textView textStorage] replaceCharactersInRange:
+      NSMakeRange(0, [[ed->textView textStorage] length])
+      withString:[NSString stringWithUTF8String:newText]];
+   [ed->textView setFont:ed->font];
+   CE_HighlightCode( ed->textView );
+   [ed->gutterView setNeedsDisplay:YES];
+   [ed->textView scrollRangeToVisible:NSMakeRange(0, 0)];
+
+   /* Fire Harbour callback */
+   if( ed->pOnTabChange && HB_IS_BLOCK( ed->pOnTabChange ) )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( ed->pOnTabChange );
+      hb_vmPushNumInt( (HB_PTRUINT) ed );
+      hb_vmPushInteger( newTab + 1 );  /* 1-based for Harbour */
+      hb_vmSend( 2 );
+   }
+}
+
+@end
+
+static HBTabBarTarget * s_tabTarget = nil;
+
 /* -----------------------------------------------------------------------
  * Scroll observer — repaint gutter when user scrolls
  * ----------------------------------------------------------------------- */
@@ -3333,16 +3449,45 @@ HB_FUNC( CODEEDITORCREATE )
 
    NSView * content = [ed->window contentView];
    NSRect contentBounds = [content bounds];
+   CGFloat tabBarH = 32;
 
-   /* Gutter view */
+   /* Tab bar at top */
+   ed->nTabs = 0;
+   ed->nActiveTab = 0;
+   ed->pOnTabChange = NULL;
+   memset( ed->tabTexts, 0, sizeof(ed->tabTexts) );
+   ed->tabBar = [NSSegmentedControl segmentedControlWithLabels:@[@"Project1.prg"]
+      trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
+   [ed->tabBar setSelectedSegment:0];
+   /* Tab bar strip with segmented control */
+   ed->tabBar = [NSSegmentedControl segmentedControlWithLabels:@[@"Project1.prg"]
+      trackingMode:NSSegmentSwitchTrackingSelectOne target:nil action:nil];
+   [ed->tabBar setSelectedSegment:0];
+   [ed->tabBar setFrame:NSMakeRect( 0, contentBounds.size.height - tabBarH,
+      contentBounds.size.width, tabBarH )];
+   [ed->tabBar setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
+   [ed->tabBar setFont:[NSFont boldSystemFontOfSize:13]];
+   /* Force Aqua appearance so labels are readable on dark window */
+   [ed->tabBar setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameAqua]];
+   strncpy( ed->tabNames[0], "Project1.prg", 63 );
+   ed->tabTexts[0] = strdup( "" );
+   ed->nTabs = 1;
+
+   s_tabTarget = [[HBTabBarTarget alloc] init];
+   s_tabTarget->ed = ed;
+   [ed->tabBar setTarget:s_tabTarget];
+   [ed->tabBar setAction:@selector(tabChanged:)];
+
+   /* Gutter view (below tab bar) */
    ed->gutterView = [[HBGutterView alloc] initWithFrame:
-      NSMakeRect( 0, 0, GUTTER_WIDTH, contentBounds.size.height )];
+      NSMakeRect( 0, 0, GUTTER_WIDTH, contentBounds.size.height - tabBarH )];
    ed->gutterView->font = ed->font;
    [ed->gutterView setAutoresizingMask:NSViewHeightSizable];
 
-   /* Scroll view + text view (to the right of gutter) */
+   /* Scroll view + text view (to the right of gutter, below tab bar) */
    ed->scrollView = [[NSScrollView alloc] initWithFrame:
-      NSMakeRect( GUTTER_WIDTH, 0, contentBounds.size.width - GUTTER_WIDTH, contentBounds.size.height )];
+      NSMakeRect( GUTTER_WIDTH, 0, contentBounds.size.width - GUTTER_WIDTH,
+                  contentBounds.size.height - tabBarH )];
    [ed->scrollView setHasVerticalScroller:YES];
    [ed->scrollView setHasHorizontalScroller:YES];
    [ed->scrollView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
@@ -3391,6 +3536,8 @@ HB_FUNC( CODEEDITORCREATE )
 
    [content addSubview:ed->gutterView];
    [content addSubview:ed->scrollView];
+   /* Add tab bar LAST so it renders on top of everything */
+   [content addSubview:ed->tabBar positioned:NSWindowAbove relativeTo:nil];
 
    [ed->window orderFront:nil];
 
@@ -3532,6 +3679,124 @@ HB_FUNC( CODEEDITORINSERTAFTER )
    [ed->textView setFont:ed->font];
    CE_HighlightCode( ed->textView );
    [ed->gutterView setNeedsDisplay:YES];
+}
+
+/* CodeEditorAddTab( hEditor, cName ) --> nTabIndex (1-based) */
+HB_FUNC( CODEEDITORADDTAB )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed || !ed->tabBar || !HB_ISCHAR(2) || ed->nTabs >= CE_MAX_TABS )
+   { hb_retni(0); return; }
+
+   const char * name = hb_parc(2);
+   strncpy( ed->tabNames[ed->nTabs], name, 63 );
+   ed->tabTexts[ed->nTabs] = strdup( "" );
+   ed->nTabs++;
+
+   /* Rebuild segmented control */
+   [ed->tabBar setSegmentCount:ed->nTabs];
+   for( int i = 0; i < ed->nTabs; i++ )
+      [ed->tabBar setLabel:[NSString stringWithUTF8String:ed->tabNames[i]] forSegment:i];
+
+   hb_retni( ed->nTabs );
+}
+
+/* CodeEditorSetTabText( hEditor, nTab, cText ) - set text for a tab (1-based) */
+HB_FUNC( CODEEDITORSETTABTEXT )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   int nTab = hb_parni(2) - 1;
+   if( !ed || nTab < 0 || nTab >= ed->nTabs || !HB_ISCHAR(3) ) return;
+
+   if( ed->tabTexts[nTab] ) free( ed->tabTexts[nTab] );
+   ed->tabTexts[nTab] = strdup( hb_parc(3) );
+
+   /* If this is the active tab, update the editor view */
+   if( nTab == ed->nActiveTab && ed->textView )
+   {
+      [[ed->textView textStorage] replaceCharactersInRange:
+         NSMakeRange(0, [[ed->textView textStorage] length])
+         withString:[NSString stringWithUTF8String:ed->tabTexts[nTab]]];
+      [ed->textView setFont:ed->font];
+      CE_HighlightCode( ed->textView );
+      [ed->gutterView setNeedsDisplay:YES];
+   }
+}
+
+/* CodeEditorGetTabText( hEditor, nTab ) --> cText (1-based) */
+HB_FUNC( CODEEDITORGETTABTEXT )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   int nTab = hb_parni(2) - 1;
+   if( !ed || nTab < 0 || nTab >= ed->nTabs )
+   { hb_retc(""); return; }
+
+   /* If active tab, get from editor (may have been edited) */
+   if( nTab == ed->nActiveTab && ed->textView )
+   {
+      NSString * text = [[ed->textView textStorage] string];
+      hb_retc( [text UTF8String] );
+   }
+   else
+      hb_retc( ed->tabTexts[nTab] ? ed->tabTexts[nTab] : "" );
+}
+
+/* CodeEditorSelectTab( hEditor, nTab ) - switch to tab (1-based) */
+HB_FUNC( CODEEDITORSELECTTAB )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   int nTab = hb_parni(2) - 1;
+   if( !ed || !ed->tabBar || nTab < 0 || nTab >= ed->nTabs ) return;
+
+   /* Save current tab */
+   if( ed->nActiveTab >= 0 && ed->nActiveTab < ed->nTabs && ed->textView )
+   {
+      NSString * text = [[ed->textView textStorage] string];
+      const char * utf8 = [text UTF8String];
+      if( ed->tabTexts[ed->nActiveTab] ) free( ed->tabTexts[ed->nActiveTab] );
+      ed->tabTexts[ed->nActiveTab] = utf8 ? strdup( utf8 ) : strdup( "" );
+   }
+
+   ed->nActiveTab = nTab;
+   [ed->tabBar setSelectedSegment:nTab];
+
+   /* Load new tab */
+   const char * newText = ed->tabTexts[nTab] ? ed->tabTexts[nTab] : "";
+   [[ed->textView textStorage] replaceCharactersInRange:
+      NSMakeRange(0, [[ed->textView textStorage] length])
+      withString:[NSString stringWithUTF8String:newText]];
+   [ed->textView setFont:ed->font];
+   CE_HighlightCode( ed->textView );
+   [ed->gutterView setNeedsDisplay:YES];
+   [ed->textView scrollRangeToVisible:NSMakeRange(0, 0)];
+}
+
+/* CodeEditorClearTabs( hEditor ) - remove all tabs except first */
+HB_FUNC( CODEEDITORCLEARTABS )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed ) return;
+
+   for( int i = 1; i < ed->nTabs; i++ )
+   {
+      if( ed->tabTexts[i] ) { free( ed->tabTexts[i] ); ed->tabTexts[i] = NULL; }
+      ed->tabNames[i][0] = 0;
+   }
+   ed->nTabs = 1;
+   ed->nActiveTab = 0;
+   [ed->tabBar setSegmentCount:1];
+}
+
+/* CodeEditorOnTabChange( hEditor, bBlock ) */
+HB_FUNC( CODEEDITORONTABCHANGE )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( ed )
+   {
+      if( ed->pOnTabChange ) hb_itemRelease( ed->pOnTabChange );
+      ed->pOnTabChange = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
 }
 
 /* CodeEditorDestroy( hEditor ) */
