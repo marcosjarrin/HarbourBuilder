@@ -4,11 +4,11 @@ C++ powered cross-platform visual IDE for Harbour
 
 This entire framework has been **vibe coded from scratch using [Claude Code](https://claude.ai/claude-code)** -- from the C++ core and native backends (Win32, Cocoa, GTK3) to the Harbour OOP layer, the visual designer with live inspector, and the IDE layout with 4 independent windows.
 
-![macOS](images/MacOS.png)
+### macOS
+![macOS](images/macos_now.png)
 
-![Linux IDE](images/linux_ide.png)
-
-![Linux Console](images/linux.png)
+### Linux
+![Linux](images/linux_now.png)
 
 ## Architecture
 
@@ -21,7 +21,7 @@ Harbour Builder uses a layered architecture that achieves native performance on 
 +------------------------------------------------------+
 |              xBase Command Layer                      |
 |  DEFINE FORM, @ GET, BUTTON, CHECKBOX, COMBOBOX ...   |
-|                (commands.ch)                          |
+|                (hbbuilder.ch)                          |
 +------------------------------------------------------+
 |             Harbour OOP Layer                         |
 |    TForm, TControl, TToolBar, TMenuPopup ...          |
@@ -52,7 +52,7 @@ Harbour Builder uses a layered architecture that achieves native performance on 
 
 3. **Harbour OOP is a thin wrapper**: The `TForm`, `TButton`, etc. classes in `classes.prg` are simple ACCESS/ASSIGN wrappers that call `UI_GetProp`/`UI_SetProp`. No data duplication -- the C++ object is the single source of truth.
 
-4. **xBase commands compile away**: The `#xcommand` preprocessor rules in `commands.ch` translate to method calls at compile time. Zero runtime cost.
+4. **xBase commands compile away**: The `#xcommand` preprocessor rules in `hbbuilder.ch` translate to method calls at compile time. Zero runtime cost.
 
 ### Performance vs FiveWin
 
@@ -102,7 +102,7 @@ cpp/
 
 harbour/
   classes.prg            - Harbour OOP wrappers (TForm, TControl, TToolBar, TMenuPopup)
-  commands.ch            - xBase #xcommand syntax (DEFINE FORM, @ GET, BUTTON, etc.)
+  hbbuilder.ch            - xBase #xcommand syntax (DEFINE FORM, @ GET, BUTTON, etc.)
   inspector.prg          - Object Inspector (Win32 implementation)
 
 backends/
@@ -125,7 +125,7 @@ samples/
 2. Create `TMyControl` class in `tcontrols.cpp` (constructor, `CreateParams`, `GetPropDescs`)
 3. Add `UI_MyControlNew` bridge function in `hbbridge.cpp`
 4. Add `TMyControl` Harbour class in `classes.prg`
-5. Add `#xcommand` in `commands.ch`
+5. Add `#xcommand` in `hbbuilder.ch`
 6. Implement in `cocoa_core.m` and `gtk3_core.c` with matching `HB_FUNC`
 
 ## Build
