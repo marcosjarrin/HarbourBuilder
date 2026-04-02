@@ -18,7 +18,7 @@ HBINC="$HBDIR/include"
 HBLIB="$HBDIR/lib/linux/gcc"
 
 PROJDIR="$(cd "$(dirname "$0")/.." && pwd)"
-PROG="${1:-hbcpp_linux}"
+PROG="${1:-hbbuilder_linux}"
 
 cd "$(dirname "$0")"
 

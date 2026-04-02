@@ -46,6 +46,12 @@ typedef struct {
    int          nVisible;
    GtkWidget *  combo;       /* control selection combo (GtkComboBoxText) */
    PHB_ITEM     pOnComboSel; /* callback for combo selection change */
+   /* Events tab */
+   IROW         evRows[MAX_ROWS];
+   int          nEvRows;
+   /* Callbacks */
+   PHB_ITEM     pOnEventDblClick;  /* double-click on event row */
+   PHB_ITEM     pOnPropChanged;    /* after property edit (two-way sync) */
 } INSDATA;
 
 /* Columns in the GtkListStore */
@@ -234,6 +240,14 @@ static void InsApplyValue( INSDATA * d, int nReal )
       hb_vmPushNil();
 
    hb_vmDo( 3 );
+
+   /* Notify property changed (two-way sync) */
+   if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( d->pOnPropChanged );
+      hb_vmSend( 0 );
+   }
 }
 
 /* ======================================================================
@@ -603,4 +617,91 @@ HB_FUNC( INS_SETPOS )
 
    gtk_window_move( GTK_WINDOW(d->window), nLeft, nTop );
    gtk_window_resize( GTK_WINDOW(d->window), nWidth, nHeight );
+}
+
+/* ======================================================================
+ * INS_SetEvents( hInsData, aEvents )
+ * Store events array for inspector Events tab
+ * Each event: { cName, lAssigned, cCategory }
+ * ====================================================================== */
+
+HB_FUNC( INS_SETEVENTS )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   PHB_ITEM pArray = hb_param(2, HB_IT_ARRAY);
+   if( !d ) return;
+
+   d->nEvRows = 0;
+   if( !pArray ) return;
+
+   HB_SIZE nLen = hb_arrayLen( pArray );
+   char lastCat[32] = "";
+
+   for( HB_SIZE i = 1; i <= nLen && d->nEvRows < MAX_ROWS; i++ )
+   {
+      PHB_ITEM pRow = hb_arrayGetItemPtr( pArray, i );
+      if( !pRow || hb_arrayLen( pRow ) < 3 ) continue;
+
+      const char * name = hb_arrayGetCPtr( pRow, 1 );
+      int assigned = hb_arrayGetL( pRow, 2 );
+      const char * cat = hb_arrayGetCPtr( pRow, 3 );
+
+      /* Insert category header if new category */
+      if( strcmp( cat, lastCat ) != 0 && d->nEvRows < MAX_ROWS )
+      {
+         IROW * r = &d->evRows[d->nEvRows++];
+         strncpy( r->szName, cat, 31 );
+         r->szValue[0] = 0;
+         strncpy( r->szCategory, cat, 31 );
+         r->cType = 'S';
+         r->bIsCat = 1;
+         r->bCollapsed = 0;
+         r->bVisible = 1;
+         strncpy( lastCat, cat, 31 );
+      }
+
+      if( d->nEvRows < MAX_ROWS )
+      {
+         IROW * r = &d->evRows[d->nEvRows++];
+         strncpy( r->szName, name, 31 );
+         snprintf( r->szValue, sizeof(r->szValue), "%s", assigned ? "(assigned)" : "" );
+         strncpy( r->szCategory, cat, 31 );
+         r->cType = 'S';
+         r->bIsCat = 0;
+         r->bCollapsed = 0;
+         r->bVisible = 1;
+      }
+   }
+}
+
+/* ======================================================================
+ * INS_SetOnEventDblClick( hInsData, bBlock )
+ * Callback when event row is double-clicked: bBlock( hCtrl, cEventName )
+ * ====================================================================== */
+
+HB_FUNC( INS_SETONEVENTDBLCLICK )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( d )
+   {
+      if( d->pOnEventDblClick ) hb_itemRelease( d->pOnEventDblClick );
+      d->pOnEventDblClick = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
+}
+
+/* ======================================================================
+ * INS_SetOnPropChanged( hInsData, bBlock )
+ * Callback after any property is edited (for two-way sync)
+ * ====================================================================== */
+
+HB_FUNC( INS_SETONPROPCHANGED )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( d )
+   {
+      if( d->pOnPropChanged ) hb_itemRelease( d->pOnPropChanged );
+      d->pOnPropChanged = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
 }

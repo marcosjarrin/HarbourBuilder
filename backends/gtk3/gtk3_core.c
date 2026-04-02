@@ -104,6 +104,8 @@ struct _HBForm
    int          FDragging, FResizing;
    int          FResizeHandle;
    int          FDragStartX, FDragStartY;
+   int          FRubberBand;
+   int          FRubberX1, FRubberY1, FRubberX2, FRubberY2;
    PHB_ITEM     FOnSelChange;
    GtkWidget *  FOverlay;    /* Drawing area for selection handles */
    /* Toolbar */
@@ -113,6 +115,29 @@ struct _HBForm
    GtkWidget *  FMenuBar;
    PHB_ITEM     FMenuActions[128];
    int          FMenuItemCount;
+   /* C++Builder TForm properties */
+   int          FBorderStyle;    /* bsNone..bsSizeToolWin */
+   int          FBorderIcons;    /* bitmask: biSystemMenu|biMinimize|biMaximize */
+   int          FBorderWidth;
+   int          FPosition;       /* poDesigned..poMainFormCenter */
+   int          FWindowState;    /* wsNormal, wsMinimized, wsMaximized */
+   int          FFormStyle;      /* fsNormal, fsStayOnTop, fsMDIChild, fsMDIForm */
+   int          FCursor;
+   int          FKeyPreview;
+   int          FAlphaBlend;
+   int          FAlphaBlendValue;
+   int          FShowHint;
+   char         FHint[256];
+   int          FAutoScroll;
+   int          FDoubleBuffered;
+   /* Component drop (palette) */
+   int          FPendingControlType;
+   PHB_ITEM     FOnComponentDrop;
+   /* Events (C++Builder TForm properties) */
+   PHB_ITEM     FOnActivate, FOnDeactivate, FOnResize, FOnPaint;
+   PHB_ITEM     FOnShow, FOnHide, FOnCloseQuery, FOnCreate, FOnDestroy;
+   PHB_ITEM     FOnKeyDown, FOnKeyUp, FOnKeyPress;
+   PHB_ITEM     FOnMouseDown, FOnMouseUp, FOnMouseMove, FOnDblClick, FOnMouseWheel;
 };
 
 /* ======================================================================
@@ -143,6 +168,8 @@ typedef struct _HBToolBar {
    PHB_ITEM FBtnOnClick[MAX_TOOLBTNS];
    int      FBtnCount;
    GtkWidget * FToolBarWidget;
+   GdkPixbuf * FIconImages[MAX_TOOLBTNS];
+   int      FIconCount;
 } HBToolBar;
 
 /* ======================================================================
@@ -216,6 +243,27 @@ static void HBControl_SetEvent( HBControl * p, const char * event, PHB_ITEM bloc
    else if( strcasecmp( event, "OnChange" ) == 0 )  ppTarget = &p->FOnChange;
    else if( strcasecmp( event, "OnInit" ) == 0 )    ppTarget = &p->FOnInit;
    else if( strcasecmp( event, "OnClose" ) == 0 )   ppTarget = &p->FOnClose;
+   /* Form-specific events */
+   else if( p->FControlType == CT_FORM ) {
+      HBForm * f = (HBForm *)( (char*)p - offsetof(HBForm, base) );
+      if( strcasecmp( event, "OnActivate" ) == 0 )      ppTarget = &f->FOnActivate;
+      else if( strcasecmp( event, "OnDeactivate" ) == 0 ) ppTarget = &f->FOnDeactivate;
+      else if( strcasecmp( event, "OnResize" ) == 0 )    ppTarget = &f->FOnResize;
+      else if( strcasecmp( event, "OnPaint" ) == 0 )     ppTarget = &f->FOnPaint;
+      else if( strcasecmp( event, "OnShow" ) == 0 )      ppTarget = &f->FOnShow;
+      else if( strcasecmp( event, "OnHide" ) == 0 )      ppTarget = &f->FOnHide;
+      else if( strcasecmp( event, "OnCloseQuery" ) == 0 ) ppTarget = &f->FOnCloseQuery;
+      else if( strcasecmp( event, "OnCreate" ) == 0 )    ppTarget = &f->FOnCreate;
+      else if( strcasecmp( event, "OnDestroy" ) == 0 )   ppTarget = &f->FOnDestroy;
+      else if( strcasecmp( event, "OnKeyDown" ) == 0 )   ppTarget = &f->FOnKeyDown;
+      else if( strcasecmp( event, "OnKeyUp" ) == 0 )     ppTarget = &f->FOnKeyUp;
+      else if( strcasecmp( event, "OnKeyPress" ) == 0 )  ppTarget = &f->FOnKeyPress;
+      else if( strcasecmp( event, "OnMouseDown" ) == 0 )  ppTarget = &f->FOnMouseDown;
+      else if( strcasecmp( event, "OnMouseUp" ) == 0 )    ppTarget = &f->FOnMouseUp;
+      else if( strcasecmp( event, "OnMouseMove" ) == 0 )  ppTarget = &f->FOnMouseMove;
+      else if( strcasecmp( event, "OnDblClick" ) == 0 )   ppTarget = &f->FOnDblClick;
+      else if( strcasecmp( event, "OnMouseWheel" ) == 0 ) ppTarget = &f->FOnMouseWheel;
+   }
    if( ppTarget )
    {
       if( *ppTarget ) hb_itemRelease( *ppTarget );
@@ -412,6 +460,18 @@ static gboolean on_overlay_draw( GtkWidget * widget, cairo_t * cr, gpointer data
    HBForm * form = (HBForm *)data;
    if( !form->FDesignMode ) return FALSE;
 
+   /* Classic C++Builder dot grid */
+   {
+      GtkAllocation alloc;
+      gtk_widget_get_allocation( widget, &alloc );
+      cairo_set_source_rgba( cr, 0.0, 0.0, 0.0, 0.28 );
+      int gridStep = 8;
+      for( int y = 0; y < alloc.height; y += gridStep )
+         for( int x = 0; x < alloc.width; x += gridStep )
+            cairo_rectangle( cr, x, y, 1, 1 );
+      cairo_fill( cr );
+   }
+
    /* Draw selection handles */
    for( int i = 0; i < form->FSelCount; i++ )
    {
@@ -446,6 +506,25 @@ static gboolean on_overlay_draw( GtkWidget * widget, cairo_t * cr, gpointer data
          cairo_rectangle( cr, hx[j], hy[j], 7, 7 );
          cairo_stroke( cr );
       }
+   }
+
+   /* Rubber band rectangle */
+   if( form->FRubberBand )
+   {
+      int rx = form->FRubberX1 < form->FRubberX2 ? form->FRubberX1 : form->FRubberX2;
+      int ry = form->FRubberY1 < form->FRubberY2 ? form->FRubberY1 : form->FRubberY2;
+      int rw = abs(form->FRubberX2 - form->FRubberX1);
+      int rh = abs(form->FRubberY2 - form->FRubberY1);
+      cairo_set_source_rgba( cr, 0.0, 0.47, 0.84, 0.1 );
+      cairo_rectangle( cr, rx, ry, rw, rh );
+      cairo_fill( cr );
+      cairo_set_source_rgb( cr, 0.0, 0.47, 0.84 );
+      double dashes[] = { 3.0, 3.0 };
+      cairo_set_dash( cr, dashes, 2, 0 );
+      cairo_set_line_width( cr, 1.0 );
+      cairo_rectangle( cr, rx, ry, rw, rh );
+      cairo_stroke( cr );
+      cairo_set_dash( cr, NULL, 0, 0 );
    }
 
    return FALSE;
@@ -535,6 +614,16 @@ static gboolean on_overlay_button_press( GtkWidget * widget, GdkEventButton * ev
    int mx = (int)event->x, my = (int)event->y;
    int isShift = (event->state & GDK_SHIFT_MASK) != 0;
 
+   /* Component drop mode: start rubber band to define new control area */
+   if( form->FPendingControlType >= 0 )
+   {
+      HBForm_ClearSelection( form );
+      form->FRubberBand = 1;
+      form->FRubberX1 = mx; form->FRubberY1 = my;
+      form->FRubberX2 = mx; form->FRubberY2 = my;
+      return TRUE;
+   }
+
    int nHandle = HBForm_HitTestHandle( form, mx, my );
    if( nHandle >= 0 )
    {
@@ -579,6 +668,13 @@ static gboolean on_overlay_motion( GtkWidget * widget, GdkEventMotion * event, g
    if( !form->FDesignMode ) return FALSE;
 
    int mx = (int)event->x, my = (int)event->y;
+
+   if( form->FRubberBand )
+   {
+      form->FRubberX2 = mx; form->FRubberY2 = my;
+      gtk_widget_queue_draw( form->FOverlay );
+      return TRUE;
+   }
 
    if( form->FResizing && form->FSelCount > 0 )
    {
@@ -626,10 +722,136 @@ static gboolean on_overlay_motion( GtkWidget * widget, GdkEventMotion * event, g
    return TRUE;
 }
 
+static void HBControl_CreateWidget( HBControl * child, GtkWidget * fixed, const char * fontDesc )
+{
+   strcpy( child->FFontDesc, fontDesc );
+   switch( child->FControlType )
+   {
+      case CT_LABEL:    HBLabel_CreateWidget( (HBLabel *)child, fixed ); break;
+      case CT_EDIT:     HBEdit_CreateWidget( (HBEdit *)child, fixed ); break;
+      case CT_BUTTON:   HBButton_CreateWidget( (HBButton *)child, fixed ); break;
+      case CT_CHECKBOX: HBCheckBox_CreateWidget( (HBCheckBox *)child, fixed ); break;
+      case CT_COMBOBOX: HBComboBox_CreateWidget( (HBComboBox *)child, fixed ); break;
+      case CT_GROUPBOX: HBGroupBox_CreateWidget( (HBGroupBox *)child, fixed ); break;
+   }
+}
+
+static HBControl * HBForm_CreateControlOfType( HBForm * form, int ctrlType,
+   int nL, int nT, int nW, int nH )
+{
+   HBControl * newCtrl = NULL;
+   switch( ctrlType ) {
+      case CT_LABEL: {
+         HBLabel * p = (HBLabel*)calloc(1,sizeof(HBLabel));
+         HBControl_Init(&p->base); strcpy(p->base.FClassName,"TLabel");
+         p->base.FControlType=CT_LABEL; strcpy(p->base.FText,"Label");
+         p->base.FLeft=nL; p->base.FTop=nT; p->base.FWidth=nW; p->base.FHeight=nH;
+         newCtrl=&p->base; break;
+      }
+      case CT_EDIT: {
+         HBEdit * p = (HBEdit*)calloc(1,sizeof(HBEdit));
+         HBControl_Init(&p->base); strcpy(p->base.FClassName,"TEdit");
+         p->base.FControlType=CT_EDIT;
+         p->base.FLeft=nL; p->base.FTop=nT; p->base.FWidth=nW; p->base.FHeight=nH;
+         newCtrl=&p->base; break;
+      }
+      case CT_BUTTON: {
+         HBButton * p = (HBButton*)calloc(1,sizeof(HBButton));
+         HBControl_Init(&p->base); strcpy(p->base.FClassName,"TButton");
+         p->base.FControlType=CT_BUTTON; strcpy(p->base.FText,"Button");
+         p->base.FLeft=nL; p->base.FTop=nT; p->base.FWidth=nW; p->base.FHeight=nH;
+         newCtrl=&p->base; break;
+      }
+      case CT_CHECKBOX: {
+         HBCheckBox * p = (HBCheckBox*)calloc(1,sizeof(HBCheckBox));
+         HBControl_Init(&p->base); strcpy(p->base.FClassName,"TCheckBox");
+         p->base.FControlType=CT_CHECKBOX; strcpy(p->base.FText,"CheckBox");
+         p->base.FLeft=nL; p->base.FTop=nT; p->base.FWidth=nW; p->base.FHeight=nH;
+         newCtrl=&p->base; break;
+      }
+      case CT_COMBOBOX: {
+         HBComboBox * p = (HBComboBox*)calloc(1,sizeof(HBComboBox));
+         HBControl_Init(&p->base); strcpy(p->base.FClassName,"TComboBox");
+         p->base.FControlType=CT_COMBOBOX;
+         p->base.FLeft=nL; p->base.FTop=nT; p->base.FWidth=nW; p->base.FHeight=nH;
+         newCtrl=&p->base; break;
+      }
+      case CT_GROUPBOX: {
+         HBGroupBox * p = (HBGroupBox*)calloc(1,sizeof(HBGroupBox));
+         HBControl_Init(&p->base); strcpy(p->base.FClassName,"TGroupBox");
+         p->base.FControlType=CT_GROUPBOX; strcpy(p->base.FText,"GroupBox");
+         p->base.FLeft=nL; p->base.FTop=nT; p->base.FWidth=nW; p->base.FHeight=nH;
+         newCtrl=&p->base; break;
+      }
+   }
+   if( newCtrl )
+   {
+      KeepAlive( newCtrl );
+      strcpy( newCtrl->FFontDesc, form->FFormFontDesc );
+      HBControl_AddChild( &form->base, newCtrl );
+
+      /* Create GTK widget and add to the form's GtkFixed */
+      if( form->FFixed )
+      {
+         HBControl_CreateWidget( newCtrl, form->FFixed, form->FFormFontDesc );
+         gtk_widget_show_all( form->FFixed );
+      }
+
+      /* Select the new control */
+      HBForm_SelectControl( form, newCtrl, 0 );
+   }
+   return newCtrl;
+}
+
 static gboolean on_overlay_button_release( GtkWidget * widget, GdkEventButton * event, gpointer data )
 {
    HBForm * form = (HBForm *)data;
    if( !form->FDesignMode ) return FALSE;
+
+   if( form->FRubberBand )
+   {
+      form->FRubberBand = 0;
+      int rx1 = form->FRubberX1 < form->FRubberX2 ? form->FRubberX1 : form->FRubberX2;
+      int ry1 = form->FRubberY1 < form->FRubberY2 ? form->FRubberY1 : form->FRubberY2;
+      int rx2 = form->FRubberX1 > form->FRubberX2 ? form->FRubberX1 : form->FRubberX2;
+      int ry2 = form->FRubberY1 > form->FRubberY2 ? form->FRubberY1 : form->FRubberY2;
+      int rw = rx2 - rx1, rh = ry2 - ry1;
+
+      /* Component drop mode: create the control */
+      if( form->FPendingControlType >= 0 )
+      {
+         int ctrlType = form->FPendingControlType;
+         form->FPendingControlType = -1;
+         /* Reset cursor */
+         if( form->FWindow )
+            gdk_window_set_cursor( gtk_widget_get_window(form->FWindow), NULL );
+
+         /* Enforce minimum size */
+         if( rw < 20 ) rw = 80;
+         if( rh < 10 ) rh = 24;
+         /* Snap to 8-pixel grid */
+         rx1 = (rx1 / 8) * 8;
+         ry1 = (ry1 / 8) * 8;
+
+         HBControl * newCtrl = HBForm_CreateControlOfType( form, ctrlType, rx1, ry1, rw, rh );
+
+         if( newCtrl && form->FOnComponentDrop && HB_IS_BLOCK( form->FOnComponentDrop ) )
+         {
+            hb_vmPushEvalSym();
+            hb_vmPush( form->FOnComponentDrop );
+            hb_vmPushNumInt( (HB_PTRUINT) form );
+            hb_vmPushInteger( ctrlType );
+            hb_vmPushInteger( rx1 );
+            hb_vmPushInteger( ry1 );
+            hb_vmPushInteger( rw );
+            hb_vmPushInteger( rh );
+            hb_vmSend( 6 );
+         }
+      }
+
+      gtk_widget_queue_draw( form->FOverlay );
+      return TRUE;
+   }
 
    if( form->FDragging || form->FResizing )
    {
@@ -684,7 +906,8 @@ static gboolean on_overlay_key_press( GtkWidget * widget, GdkEventKey * event, g
    return FALSE;
 }
 
-/* Forward declarations for palette and statusbar (defined further down) */
+/* Forward declarations (defined further down) */
+static void HBToolBar_ApplyIcons( HBToolBar * tb );
 #define CT_TABCONTROL 10
 #define MAX_PALETTE_TABS 16
 #define MAX_PALETTE_BTNS 32
@@ -714,6 +937,8 @@ typedef struct {
 static PALDATA * s_palData = NULL;
 static GtkWidget * s_statusBar = NULL;
 static guint s_statusCtxId = 0;
+static GtkAccelGroup * s_accelGroup = NULL;
+static HBForm * s_designForm = NULL;
 
 /* ======================================================================
  * HBForm methods
@@ -733,6 +958,20 @@ static void HBForm_Init( HBForm * form )
    form->FOverlay = NULL; form->FFixed = NULL; form->FWindow = NULL;
    form->FToolBar = NULL; form->FClientTop = 0; form->FSizable = 0; form->FAppBar = 0;
    form->FMenuBar = NULL; form->FMenuItemCount = 0;
+   form->FBorderStyle = 2; form->FBorderIcons = 7; form->FBorderWidth = 0;
+   form->FPosition = 0; form->FWindowState = 0; form->FFormStyle = 0;
+   form->FCursor = 0; form->FKeyPreview = 0;
+   form->FAlphaBlend = 0; form->FAlphaBlendValue = 255;
+   form->FShowHint = 0; form->FHint[0] = 0;
+   form->FAutoScroll = 1; form->FDoubleBuffered = 0;
+   form->FPendingControlType = -1; form->FOnComponentDrop = NULL;
+   form->FOnActivate = NULL; form->FOnDeactivate = NULL;
+   form->FOnResize = NULL; form->FOnPaint = NULL;
+   form->FOnShow = NULL; form->FOnHide = NULL;
+   form->FOnCloseQuery = NULL; form->FOnCreate = NULL; form->FOnDestroy = NULL;
+   form->FOnKeyDown = NULL; form->FOnKeyUp = NULL; form->FOnKeyPress = NULL;
+   form->FOnMouseDown = NULL; form->FOnMouseUp = NULL; form->FOnMouseMove = NULL;
+   form->FOnDblClick = NULL; form->FOnMouseWheel = NULL;
    memset( form->FSelected, 0, sizeof(form->FSelected) );
    memset( form->FMenuActions, 0, sizeof(form->FMenuActions) );
    form->base.FWidth = 470; form->base.FHeight = 400;
@@ -757,6 +996,34 @@ static void on_menu_item_activated( GtkMenuItem * item, gpointer data )
    if( pBlock && HB_IS_BLOCK(pBlock) ) {
       hb_vmPushEvalSym(); hb_vmPush(pBlock); hb_vmSend(0);
    }
+}
+
+static gboolean on_window_configure( GtkWidget * widget, GdkEventConfigure * event, gpointer data )
+{
+   HBForm * form = (HBForm *)data;
+   int changed = 0;
+
+   if( form->base.FLeft != event->x || form->base.FTop != event->y )
+   {
+      form->base.FLeft = event->x;
+      form->base.FTop = event->y;
+      changed = 1;
+   }
+   if( form->base.FWidth != event->width || form->base.FHeight != event->height )
+   {
+      form->base.FWidth = event->width;
+      form->base.FHeight = event->height;
+      changed = 1;
+   }
+
+   if( changed && form->FOnResize && HB_IS_BLOCK( form->FOnResize ) )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( form->FOnResize );
+      hb_vmSend( 0 );
+   }
+
+   return FALSE;
 }
 
 static void on_window_destroy( GtkWidget * widget, gpointer data )
@@ -803,6 +1070,7 @@ static void HBForm_Run( HBForm * form )
    gtk_window_set_resizable( GTK_WINDOW(form->FWindow),
       (form->FSizable && !form->FAppBar) ? TRUE : FALSE );
    g_signal_connect( form->FWindow, "destroy", G_CALLBACK(on_window_destroy), form );
+   g_signal_connect( form->FWindow, "configure-event", G_CALLBACK(on_window_configure), form );
 
    /* Set background color via CSS */
    {
@@ -817,6 +1085,10 @@ static void HBForm_Run( HBForm * form )
          GTK_STYLE_PROVIDER_PRIORITY_APPLICATION );
       g_object_unref( provider );
    }
+
+   /* Attach accelerator group if menu accelerators were defined */
+   if( s_accelGroup )
+      gtk_window_add_accel_group( GTK_WINDOW(form->FWindow), s_accelGroup );
 
    /* VBox: menubar + toolbar + overlay(fixed + design) */
    GtkWidget * vbox = gtk_box_new( GTK_ORIENTATION_VERTICAL, 0 );
@@ -850,6 +1122,12 @@ static void HBForm_Run( HBForm * form )
             g_signal_connect( btn, "clicked", G_CALLBACK(on_toolbar_btn_clicked), tb );
             gtk_toolbar_insert( GTK_TOOLBAR(toolbar), btn, -1 );
          }
+      }
+
+      /* Apply deferred toolbar icons */
+      if( tb->FIconCount > 0 ) {
+         gtk_toolbar_set_style( GTK_TOOLBAR(toolbar), GTK_TOOLBAR_ICONS );
+         HBToolBar_ApplyIcons( tb );
       }
 
       /* If palette exists, pack toolbar + palette in an hbox */
@@ -934,6 +1212,7 @@ static void HBForm_Show( HBForm * form )
    gtk_window_set_resizable( GTK_WINDOW(form->FWindow),
       (form->FSizable && !form->FAppBar) ? TRUE : FALSE );
    g_signal_connect( form->FWindow, "destroy", G_CALLBACK(on_window_destroy), form );
+   g_signal_connect( form->FWindow, "configure-event", G_CALLBACK(on_window_configure), form );
 
    /* Background color */
    {
@@ -1223,6 +1502,44 @@ HB_FUNC( UI_SETPROP )
       ((HBForm *)p)->FSizable = hb_parl(3);
    else if( strcasecmp(szProp,"lAppBar")==0 && p->FControlType == CT_FORM )
       ((HBForm *)p)->FAppBar = hb_parl(3);
+   else if( strcasecmp(szProp,"nBorderStyle")==0 && p->FControlType == CT_FORM )
+      ((HBForm *)p)->FBorderStyle = hb_parni(3);
+   else if( strcasecmp(szProp,"nBorderIcons")==0 && p->FControlType == CT_FORM )
+      ((HBForm *)p)->FBorderIcons = hb_parni(3);
+   else if( strcasecmp(szProp,"nBorderWidth")==0 && p->FControlType == CT_FORM )
+      ((HBForm *)p)->FBorderWidth = hb_parni(3);
+   else if( strcasecmp(szProp,"nPosition")==0 && p->FControlType == CT_FORM )
+      ((HBForm *)p)->FPosition = hb_parni(3);
+   else if( strcasecmp(szProp,"nWindowState")==0 && p->FControlType == CT_FORM )
+      ((HBForm *)p)->FWindowState = hb_parni(3);
+   else if( strcasecmp(szProp,"nFormStyle")==0 && p->FControlType == CT_FORM ) {
+      ((HBForm *)p)->FFormStyle = hb_parni(3);
+      if( ((HBForm *)p)->FWindow )
+         gtk_window_set_keep_above( GTK_WINDOW(((HBForm *)p)->FWindow), hb_parni(3) == 1 );
+   }
+   else if( strcasecmp(szProp,"nCursor")==0 && p->FControlType == CT_FORM )
+      ((HBForm *)p)->FCursor = hb_parni(3);
+   else if( strcasecmp(szProp,"lKeyPreview")==0 && p->FControlType == CT_FORM )
+      ((HBForm *)p)->FKeyPreview = hb_parl(3);
+   else if( strcasecmp(szProp,"lAlphaBlend")==0 && p->FControlType == CT_FORM ) {
+      ((HBForm *)p)->FAlphaBlend = hb_parl(3);
+      if( ((HBForm *)p)->FWindow )
+         gtk_widget_set_opacity( ((HBForm *)p)->FWindow,
+            hb_parl(3) ? ((HBForm *)p)->FAlphaBlendValue / 255.0 : 1.0 );
+   }
+   else if( strcasecmp(szProp,"nAlphaBlendValue")==0 && p->FControlType == CT_FORM ) {
+      ((HBForm *)p)->FAlphaBlendValue = hb_parni(3);
+      if( ((HBForm *)p)->FAlphaBlend && ((HBForm *)p)->FWindow )
+         gtk_widget_set_opacity( ((HBForm *)p)->FWindow, hb_parni(3) / 255.0 );
+   }
+   else if( strcasecmp(szProp,"lShowHint")==0 && p->FControlType == CT_FORM )
+      ((HBForm *)p)->FShowHint = hb_parl(3);
+   else if( strcasecmp(szProp,"cHint")==0 && p->FControlType == CT_FORM && HB_ISCHAR(3) )
+      strncpy( ((HBForm *)p)->FHint, hb_parc(3), 255 );
+   else if( strcasecmp(szProp,"lAutoScroll")==0 && p->FControlType == CT_FORM )
+      ((HBForm *)p)->FAutoScroll = hb_parl(3);
+   else if( strcasecmp(szProp,"lDoubleBuffered")==0 && p->FControlType == CT_FORM )
+      ((HBForm *)p)->FDoubleBuffered = hb_parl(3);
    else if( strcasecmp(szProp,"nClrPane")==0 )
    {
       p->FClrPane = (unsigned int)hb_parnint(3);
@@ -1294,6 +1611,44 @@ HB_FUNC( UI_GETPROP )
       hb_retl( ((HBForm *)p)->FSizable );
    else if( strcasecmp(szProp,"lAppBar")==0 && p->FControlType==CT_FORM )
       hb_retl( ((HBForm *)p)->FAppBar );
+   else if( strcasecmp(szProp,"nBorderStyle")==0 && p->FControlType==CT_FORM )
+      hb_retni( ((HBForm *)p)->FBorderStyle );
+   else if( strcasecmp(szProp,"nBorderIcons")==0 && p->FControlType==CT_FORM )
+      hb_retni( ((HBForm *)p)->FBorderIcons );
+   else if( strcasecmp(szProp,"nBorderWidth")==0 && p->FControlType==CT_FORM )
+      hb_retni( ((HBForm *)p)->FBorderWidth );
+   else if( strcasecmp(szProp,"nPosition")==0 && p->FControlType==CT_FORM )
+      hb_retni( ((HBForm *)p)->FPosition );
+   else if( strcasecmp(szProp,"nWindowState")==0 && p->FControlType==CT_FORM )
+      hb_retni( ((HBForm *)p)->FWindowState );
+   else if( strcasecmp(szProp,"nFormStyle")==0 && p->FControlType==CT_FORM )
+      hb_retni( ((HBForm *)p)->FFormStyle );
+   else if( strcasecmp(szProp,"nCursor")==0 && p->FControlType==CT_FORM )
+      hb_retni( ((HBForm *)p)->FCursor );
+   else if( strcasecmp(szProp,"lKeyPreview")==0 && p->FControlType==CT_FORM )
+      hb_retl( ((HBForm *)p)->FKeyPreview );
+   else if( strcasecmp(szProp,"lAlphaBlend")==0 && p->FControlType==CT_FORM )
+      hb_retl( ((HBForm *)p)->FAlphaBlend );
+   else if( strcasecmp(szProp,"nAlphaBlendValue")==0 && p->FControlType==CT_FORM )
+      hb_retni( ((HBForm *)p)->FAlphaBlendValue );
+   else if( strcasecmp(szProp,"lShowHint")==0 && p->FControlType==CT_FORM )
+      hb_retl( ((HBForm *)p)->FShowHint );
+   else if( strcasecmp(szProp,"cHint")==0 && p->FControlType==CT_FORM )
+      hb_retc( ((HBForm *)p)->FHint );
+   else if( strcasecmp(szProp,"lAutoScroll")==0 && p->FControlType==CT_FORM )
+      hb_retl( ((HBForm *)p)->FAutoScroll );
+   else if( strcasecmp(szProp,"lDoubleBuffered")==0 && p->FControlType==CT_FORM )
+      hb_retl( ((HBForm *)p)->FDoubleBuffered );
+   else if( strcasecmp(szProp,"nClientWidth")==0 && p->FControlType==CT_FORM ) {
+      HBForm * f = (HBForm *)p;
+      if( f->FWindow ) { int w, h; gtk_window_get_size(GTK_WINDOW(f->FWindow),&w,&h); hb_retni(w); }
+      else hb_retni( f->base.FWidth );
+   }
+   else if( strcasecmp(szProp,"nClientHeight")==0 && p->FControlType==CT_FORM ) {
+      HBForm * f = (HBForm *)p;
+      if( f->FWindow ) { int w, h; gtk_window_get_size(GTK_WINDOW(f->FWindow),&w,&h); hb_retni(h); }
+      else hb_retni( f->base.FHeight );
+   }
    else if( strcasecmp(szProp,"nItemIndex")==0 && p->FControlType==CT_COMBOBOX )
       hb_retni( ((HBComboBox *)p)->FItemIndex );
    else if( strcasecmp(szProp,"nClrPane")==0 )   hb_retnint( (HB_MAXINT)p->FClrPane );
@@ -1451,6 +1806,29 @@ HB_FUNC( UI_GETALLPROPS )
    ADD_C("nClrPane",p->FClrPane,"Appearance");
 
    switch( p->FControlType ) {
+      case CT_FORM: {
+         HBForm * f = (HBForm *)p;
+         ADD_N("nBorderStyle",f->FBorderStyle,"Appearance");
+         ADD_N("nBorderIcons",f->FBorderIcons,"Appearance");
+         ADD_N("nBorderWidth",f->FBorderWidth,"Appearance");
+         ADD_N("nPosition",f->FPosition,"Position");
+         ADD_N("nWindowState",f->FWindowState,"Appearance");
+         ADD_N("nFormStyle",f->FFormStyle,"Appearance");
+         ADD_L("lKeyPreview",f->FKeyPreview,"Behavior");
+         ADD_L("lAlphaBlend",f->FAlphaBlend,"Appearance");
+         ADD_N("nAlphaBlendValue",f->FAlphaBlendValue,"Appearance");
+         ADD_N("nCursor",f->FCursor,"Appearance");
+         ADD_L("lShowHint",f->FShowHint,"Behavior");
+         ADD_S("cHint",f->FHint,"Behavior");
+         ADD_L("lAutoScroll",f->FAutoScroll,"Behavior");
+         ADD_L("lDoubleBuffered",f->FDoubleBuffered,"Behavior");
+         /* Read-only: client area */
+         int cw = f->base.FWidth, ch = f->base.FHeight;
+         if( f->FWindow ) gtk_window_get_size(GTK_WINDOW(f->FWindow),&cw,&ch);
+         ADD_N("nClientWidth",cw,"Position");
+         ADD_N("nClientHeight",ch,"Position");
+         break;
+      }
       case CT_BUTTON:
          ADD_L("lDefault",((HBButton*)p)->FDefault,"Behavior");
          ADD_L("lCancel",((HBButton*)p)->FCancel,"Behavior"); break;
@@ -1610,6 +1988,23 @@ HB_FUNC( UI_MENUITEMADDEX )
    PHB_ITEM pCopy = pBlock ? hb_itemNew(pBlock) : NULL;
    if( pCopy )
       g_signal_connect( item, "activate", G_CALLBACK(on_menu_item_activated), pCopy );
+
+   /* Keyboard accelerator (Ctrl+key) */
+   if( HB_ISCHAR(5) && hb_parclen(5) == 1 )
+   {
+      const char * accel = hb_parc(5);
+      guint key = gdk_unicode_to_keyval( (guint32) accel[0] );
+
+      if( !s_accelGroup )
+      {
+         s_accelGroup = gtk_accel_group_new();
+         if( pForm->FWindow )
+            gtk_window_add_accel_group( GTK_WINDOW(pForm->FWindow), s_accelGroup );
+      }
+      gtk_widget_add_accelerator( item, "activate", s_accelGroup,
+         key, GDK_CONTROL_MASK, GTK_ACCEL_VISIBLE );
+   }
+
    gtk_menu_shell_append( GTK_MENU_SHELL(popup), item );
 
    int idx = pForm->FMenuItemCount++;
@@ -1701,10 +2096,26 @@ HB_FUNC( UI_PALETTEADDTAB )
 
 static void on_palette_btn_clicked( GtkButton * button, gpointer data )
 {
+   int nType = GPOINTER_TO_INT( g_object_get_data( G_OBJECT(button), "ctrl_type" ) );
+
+   /* Set pending drop mode on the design form */
+   HBForm * targetForm = s_designForm;
+   if( targetForm && targetForm->FDesignMode && nType > 0 )
+   {
+      targetForm->FPendingControlType = nType;
+      if( targetForm->FWindow )
+      {
+         GdkCursor * cursor = gdk_cursor_new_from_name(
+            gdk_display_get_default(), "crosshair" );
+         gdk_window_set_cursor( gtk_widget_get_window(targetForm->FWindow), cursor );
+         if( cursor ) g_object_unref( cursor );
+      }
+   }
+
+   /* Also fire Harbour callback if set */
    PALDATA * pd = s_palData;
    if( pd && pd->pOnSelect && HB_IS_BLOCK(pd->pOnSelect) )
    {
-      int nType = GPOINTER_TO_INT( g_object_get_data( G_OBJECT(button), "ctrl_type" ) );
       hb_vmPushEvalSym();
       hb_vmPush( pd->pOnSelect );
       hb_vmPushInteger( nType );
@@ -1813,6 +2224,15 @@ HB_FUNC( UI_FORMSETPOS )
    }
 }
 
+/* --- BringToTop --- */
+
+HB_FUNC( GTK_BRINGTOTOP )
+{
+   HBForm * p = GetForm(1);
+   if( p && p->FWindow )
+      gtk_window_present( GTK_WINDOW(p->FWindow) );
+}
+
 /* --- MsgBox --- */
 
 HB_FUNC( GTK_MSGBOX )
@@ -1871,6 +2291,7 @@ HB_FUNC( GTK_GETWINDOWBOTTOM )
  * ====================================================================== */
 
 #define GUTTER_WIDTH 50
+#define CE_MAX_TABS  16
 
 typedef struct {
    GtkWidget *    window;
@@ -1878,6 +2299,13 @@ typedef struct {
    GtkWidget *    scrollView;
    GtkWidget *    gutterView;  /* GtkDrawingArea for line numbers */
    GtkTextBuffer * buffer;
+   /* Tabs */
+   GtkWidget *    tabBar;      /* GtkNotebook used as tab bar */
+   char           tabNames[CE_MAX_TABS][64];
+   char *         tabTexts[CE_MAX_TABS];  /* heap-allocated text per tab */
+   int            nTabs;
+   int            nActiveTab;  /* 0-based */
+   PHB_ITEM       pOnTabChange;
 } CODEEDITOR;
 
 /* Harbour/xBase keywords for syntax highlighting */
@@ -2105,6 +2533,61 @@ static gboolean on_editor_delete( GtkWidget * widget, GdkEvent * event, gpointer
    return TRUE;
 }
 
+/* Helper: save current tab text, load new tab text */
+static void CE_SwitchTab( CODEEDITOR * ed, int nNewTab )
+{
+   if( !ed || nNewTab < 0 || nNewTab >= ed->nTabs || nNewTab == ed->nActiveTab ) return;
+
+   /* Save current tab text */
+   if( ed->nActiveTab >= 0 && ed->nActiveTab < ed->nTabs && ed->buffer )
+   {
+      GtkTextIter start, end;
+      gtk_text_buffer_get_start_iter( ed->buffer, &start );
+      gtk_text_buffer_get_end_iter( ed->buffer, &end );
+      char * text = gtk_text_buffer_get_text( ed->buffer, &start, &end, FALSE );
+      if( ed->tabTexts[ed->nActiveTab] ) free( ed->tabTexts[ed->nActiveTab] );
+      ed->tabTexts[ed->nActiveTab] = text ? strdup( text ) : strdup( "" );
+      if( text ) g_free( text );
+   }
+
+   ed->nActiveTab = nNewTab;
+
+   /* Load new tab text */
+   if( ed->buffer )
+   {
+      const char * newText = ed->tabTexts[nNewTab] ? ed->tabTexts[nNewTab] : "";
+      g_signal_handlers_block_matched( ed->buffer, G_SIGNAL_MATCH_FUNC,
+         0, 0, NULL, (gpointer)on_editor_buffer_changed, NULL );
+      gtk_text_buffer_set_text( ed->buffer, newText, -1 );
+      CE_HighlightCode( ed->buffer );
+      g_signal_handlers_unblock_matched( ed->buffer, G_SIGNAL_MATCH_FUNC,
+         0, 0, NULL, (gpointer)on_editor_buffer_changed, NULL );
+      if( ed->gutterView ) gtk_widget_queue_draw( ed->gutterView );
+      /* Scroll to top */
+      GtkTextIter top;
+      gtk_text_buffer_get_start_iter( ed->buffer, &top );
+      gtk_text_view_scroll_to_iter( GTK_TEXT_VIEW(ed->textView), &top, 0, FALSE, 0, 0 );
+   }
+}
+
+static void on_editor_tab_switched( GtkNotebook * nb, GtkWidget * page, guint nPage, gpointer data )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)data;
+   if( !ed || (int)nPage == ed->nActiveTab ) return;
+
+   CE_SwitchTab( ed, (int)nPage );
+
+   /* Fire Harbour callback */
+   if( ed->pOnTabChange && HB_IS_BLOCK( ed->pOnTabChange ) )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( ed->pOnTabChange );
+      hb_vmPushNumInt( (HB_PTRUINT) ed );
+      hb_vmPushInteger( (int)nPage + 1 );  /* 1-based for Harbour */
+      hb_vmSend( 2 );
+   }
+}
+
 /* CodeEditorCreate( nLeft, nTop, nWidth, nHeight ) --> hEditor */
 HB_FUNC( CODEEDITORCREATE )
 {
@@ -2124,9 +2607,26 @@ HB_FUNC( CODEEDITORCREATE )
    gtk_window_move( GTK_WINDOW(ed->window), nLeft, nTop );
    g_signal_connect( ed->window, "delete-event", G_CALLBACK(on_editor_delete), ed );
 
-   /* HBox: gutter + scrolled text view */
+   /* VBox: tab bar + (HBox: gutter + scrolled text view) */
+   GtkWidget * vbox = gtk_box_new( GTK_ORIENTATION_VERTICAL, 0 );
+   gtk_container_add( GTK_CONTAINER(ed->window), vbox );
+
+   /* Tab bar using GtkNotebook (tabs only, no child pages) */
+   ed->tabBar = gtk_notebook_new();
+   gtk_notebook_set_show_border( GTK_NOTEBOOK(ed->tabBar), FALSE );
+   /* Add initial "Project1.prg" tab */
+   strncpy( ed->tabNames[0], "Project1.prg", 63 );
+   ed->tabTexts[0] = strdup( "" );
+   ed->nTabs = 1;
+   ed->nActiveTab = 0;
+   ed->pOnTabChange = NULL;
+   GtkWidget * dummyPage = gtk_box_new( GTK_ORIENTATION_HORIZONTAL, 0 );
+   GtkWidget * tabLabel = gtk_label_new( ed->tabNames[0] );
+   gtk_notebook_append_page( GTK_NOTEBOOK(ed->tabBar), dummyPage, tabLabel );
+   gtk_box_pack_start( GTK_BOX(vbox), ed->tabBar, FALSE, FALSE, 0 );
+
    GtkWidget * hbox = gtk_box_new( GTK_ORIENTATION_HORIZONTAL, 0 );
-   gtk_container_add( GTK_CONTAINER(ed->window), hbox );
+   gtk_box_pack_start( GTK_BOX(vbox), hbox, TRUE, TRUE, 0 );
 
    /* Gutter (line numbers) */
    ed->gutterView = gtk_drawing_area_new();
@@ -2183,6 +2683,9 @@ HB_FUNC( CODEEDITORCREATE )
       GTK_SCROLLED_WINDOW(ed->scrollView) );
    g_signal_connect( vadj, "value-changed", G_CALLBACK(on_editor_vadjust_changed), ed );
 
+   /* Tab switch callback */
+   g_signal_connect( ed->tabBar, "switch-page", G_CALLBACK(on_editor_tab_switched), ed );
+
    gtk_widget_show_all( ed->window );
 
    hb_retnint( (HB_PTRUINT) ed );
@@ -2231,5 +2734,744 @@ HB_FUNC( CODEEDITORDESTROY )
       if( ed->window ) gtk_widget_destroy( ed->window );
       free( ed );
    }
+}
+
+/* ======================================================================
+ * BMP Strip Loader - slice a BMP strip into 32x32 icons with magenta transparency
+ * ====================================================================== */
+
+static GdkPixbuf ** SliceBmpStrip( const char * szPath, int * outCount )
+{
+   *outCount = 0;
+   GError * err = NULL;
+   GdkPixbuf * strip = gdk_pixbuf_new_from_file( szPath, &err );
+   if( !strip ) { if( err ) g_error_free( err ); return NULL; }
+
+   int pixelW = gdk_pixbuf_get_width( strip );
+   int pixelH = gdk_pixbuf_get_height( strip );
+   int iconW = 32, iconH = pixelH;
+   int nIcons = pixelW / iconW;
+   if( nIcons <= 0 ) { g_object_unref( strip ); return NULL; }
+
+   GdkPixbuf ** icons = (GdkPixbuf **) calloc( nIcons, sizeof(GdkPixbuf*) );
+
+   for( int i = 0; i < nIcons; i++ )
+   {
+      /* Extract tile from strip */
+      GdkPixbuf * tile = gdk_pixbuf_new( GDK_COLORSPACE_RGB, TRUE, 8, iconW, iconH );
+      gdk_pixbuf_copy_area( strip, i * iconW, 0, iconW, iconH, tile, 0, 0 );
+
+      /* Ensure alpha channel */
+      GdkPixbuf * rgba = tile;
+      if( !gdk_pixbuf_get_has_alpha( tile ) )
+      {
+         rgba = gdk_pixbuf_add_alpha( tile, FALSE, 0, 0, 0 );
+         g_object_unref( tile );
+      }
+
+      /* Replace magenta (R>240, G<16, B>240) with transparent */
+      int rowstride = gdk_pixbuf_get_rowstride( rgba );
+      int nChannels = gdk_pixbuf_get_n_channels( rgba );
+      guchar * pixels = gdk_pixbuf_get_pixels( rgba );
+      int w = gdk_pixbuf_get_width( rgba );
+      int h = gdk_pixbuf_get_height( rgba );
+
+      for( int y = 0; y < h; y++ )
+      {
+         guchar * row = pixels + y * rowstride;
+         for( int x = 0; x < w; x++ )
+         {
+            guchar r = row[x * nChannels];
+            guchar g = row[x * nChannels + 1];
+            guchar b = row[x * nChannels + 2];
+            if( r > 240 && g < 16 && b > 240 )
+            {
+               row[x * nChannels]     = 0;
+               row[x * nChannels + 1] = 0;
+               row[x * nChannels + 2] = 0;
+               row[x * nChannels + 3] = 0;
+            }
+         }
+      }
+
+      icons[i] = rgba;
+   }
+
+   g_object_unref( strip );
+   *outCount = nIcons;
+   return icons;
+}
+
+/* Apply stored toolbar icons to the GtkToolbar widget */
+static void HBToolBar_ApplyIcons( HBToolBar * tb )
+{
+   if( !tb->FToolBarWidget || tb->FIconCount <= 0 ) return;
+
+   GList * items = gtk_container_get_children( GTK_CONTAINER(tb->FToolBarWidget) );
+   int imgIdx = 0;
+   for( GList * l = items; l != NULL; l = l->next )
+   {
+      if( imgIdx >= tb->FIconCount ) break;
+      GtkWidget * item = GTK_WIDGET( l->data );
+      if( !GTK_IS_TOOL_BUTTON(item) ) continue;  /* skip separators */
+
+      GdkPixbuf * scaled = gdk_pixbuf_scale_simple( tb->FIconImages[imgIdx], 28, 28, GDK_INTERP_BILINEAR );
+      GtkWidget * img = gtk_image_new_from_pixbuf( scaled );
+      g_object_unref( scaled );
+
+      gtk_tool_button_set_icon_widget( GTK_TOOL_BUTTON(item), img );
+      gtk_tool_button_set_label( GTK_TOOL_BUTTON(item), NULL );
+      gtk_widget_show( img );
+      imgIdx++;
+   }
+   g_list_free( items );
+}
+
+/* UI_ToolBarLoadImages( hToolBar, cBmpPath )
+ * Load a BMP strip of 32x32 icons and apply to toolbar buttons.
+ * Magenta (255,0,255) is treated as transparency mask. */
+HB_FUNC( UI_TOOLBARLOADIMAGES )
+{
+   HBToolBar * p = (HBToolBar *) GetCtrl(1);
+   const char * szPath = hb_parc(2);
+   if( !p || p->base.FControlType != CT_TOOLBAR || !szPath ) return;
+
+   int nIcons = 0;
+   GdkPixbuf ** icons = SliceBmpStrip( szPath, &nIcons );
+   if( !icons || nIcons == 0 ) return;
+
+   /* Store icons for deferred application (toolbar widget may not exist yet) */
+   int nStore = nIcons < MAX_TOOLBTNS ? nIcons : MAX_TOOLBTNS;
+   for( int i = 0; i < nStore; i++ )
+      p->FIconImages[i] = icons[i];  /* transfer ownership */
+   /* Free any extra beyond MAX_TOOLBTNS */
+   for( int i = nStore; i < nIcons; i++ )
+      if( icons[i] ) g_object_unref( icons[i] );
+   free( icons );
+   p->FIconCount = nStore;
+
+   /* If toolbar widget already exists, apply icons now */
+   if( p->FToolBarWidget )
+      HBToolBar_ApplyIcons( p );
+}
+
+/* UI_PaletteLoadImages( hPalette, cBmpPath )
+ * Load a BMP strip of 32x32 icons for component palette buttons.
+ * Magenta (255,0,255) is treated as transparency mask. */
+HB_FUNC( UI_PALETTELOADIMAGES )
+{
+   PALDATA * pd = s_palData;
+   const char * szPath = hb_parc(2);
+   if( !pd || !szPath ) return;
+
+   int nIcons = 0;
+   GdkPixbuf ** icons = SliceBmpStrip( szPath, &nIcons );
+   if( !icons || nIcons == 0 ) return;
+
+   /* Apply icons to palette buttons across all tabs */
+   for( int t = 0; t < pd->nTabCount; t++ )
+   {
+      GtkWidget * box = pd->tabBoxes[t];
+      if( !box ) continue;
+
+      GList * children = gtk_container_get_children( GTK_CONTAINER(box) );
+      int btnIdx = 0;
+      for( GList * l = children; l != NULL; l = l->next )
+      {
+         GtkWidget * btn = GTK_WIDGET( l->data );
+         if( !GTK_IS_BUTTON(btn) ) continue;
+
+         PaletteTab * pt = &pd->tabs[t];
+         if( btnIdx >= pt->nBtnCount ) break;
+
+         int nCtrlType = pt->btns[btnIdx].nControlType;
+         if( nCtrlType > 0 && nCtrlType <= nIcons )
+         {
+            GdkPixbuf * scaled = gdk_pixbuf_scale_simple( icons[nCtrlType - 1], 28, 28, GDK_INTERP_BILINEAR );
+            GtkWidget * img = gtk_image_new_from_pixbuf( scaled );
+            g_object_unref( scaled );
+
+            /* Remove text label, set image */
+            gtk_button_set_label( GTK_BUTTON(btn), NULL );
+            gtk_button_set_image( GTK_BUTTON(btn), img );
+            gtk_button_set_always_show_image( GTK_BUTTON(btn), TRUE );
+         }
+         btnIdx++;
+      }
+      g_list_free( children );
+   }
+
+   /* Free icon pixbufs */
+   for( int i = 0; i < nIcons; i++ )
+      if( icons[i] ) g_object_unref( icons[i] );
+   free( icons );
+}
+
+/* ======================================================================
+ * New HbBuilder functions (ported from macOS Cocoa backend)
+ * ====================================================================== */
+
+/* UI_SetDesignForm( hForm ) - set active design form for palette drops */
+HB_FUNC( UI_SETDESIGNFORM )
+{
+   HBForm * p = GetForm(1);
+   s_designForm = p;
+}
+
+/* UI_FormBringToFront( hForm ) */
+HB_FUNC( UI_FORMBRINGTOFRONT )
+{
+   HBForm * p = GetForm(1);
+   if( p && p->FWindow )
+      gtk_window_present( GTK_WINDOW(p->FWindow) );
+}
+
+/* UI_FormClearChildren( hForm ) - remove all child controls */
+HB_FUNC( UI_FORMCLEARCHILDREN )
+{
+   HBForm * pForm = GetForm(1);
+   if( !pForm ) return;
+
+   /* Remove child widgets from GtkFixed */
+   if( pForm->FFixed )
+   {
+      GList * children = gtk_container_get_children( GTK_CONTAINER(pForm->FFixed) );
+      for( GList * l = children; l; l = l->next )
+         gtk_container_remove( GTK_CONTAINER(pForm->FFixed), GTK_WIDGET(l->data) );
+      g_list_free( children );
+   }
+
+   /* Release child objects */
+   for( int i = 0; i < pForm->base.FChildCount; i++ )
+   {
+      RemoveControl( pForm->base.FChildren[i] );
+      pForm->base.FChildren[i] = NULL;
+   }
+   pForm->base.FChildCount = 0;
+
+   /* Clear selection */
+   HBForm_ClearSelection( pForm );
+
+   /* Redraw overlay */
+   if( pForm->FOverlay )
+      gtk_widget_queue_draw( pForm->FOverlay );
+}
+
+/* UI_FormOnComponentDrop( hForm, bBlock ) */
+HB_FUNC( UI_FORMONCOMPONENTDROP )
+{
+   HBForm * p = GetForm(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( p ) {
+      if( p->FOnComponentDrop ) hb_itemRelease( p->FOnComponentDrop );
+      p->FOnComponentDrop = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
+}
+
+/* UI_FormSetPending( hForm, nControlType ) - set pending control type for palette drop */
+HB_FUNC( UI_FORMSETPENDING )
+{
+   HBForm * p = GetForm(1);
+   if( p ) {
+      p->FPendingControlType = hb_parni(2);
+      /* Change cursor to crosshair when in drop mode */
+      if( p->FPendingControlType >= 0 && p->FWindow )
+      {
+         GdkCursor * cursor = gdk_cursor_new_from_name(
+            gdk_display_get_default(), "crosshair" );
+         gdk_window_set_cursor( gtk_widget_get_window(p->FWindow), cursor );
+         g_object_unref( cursor );
+      }
+      else if( p->FWindow )
+         gdk_window_set_cursor( gtk_widget_get_window(p->FWindow), NULL );
+   }
+}
+
+/* UI_GetAllEvents( hCtrl ) --> aEvents
+ * Each event: { cName, lAssigned, cCategory } */
+HB_FUNC( UI_GETALLEVENTS )
+{
+   HBControl * p = GetCtrl(1);
+   PHB_ITEM pArray, pRow;
+   if( !p ) { hb_reta(0); return; }
+   pArray = hb_itemArrayNew(0);
+
+   #define ADD_E(n,assigned,c) pRow=hb_itemArrayNew(3); hb_arraySetC(pRow,1,n); \
+      hb_arraySetL(pRow,2,assigned); hb_arraySetC(pRow,3,c); \
+      hb_arrayAdd(pArray,pRow); hb_itemRelease(pRow);
+
+   switch( p->FControlType ) {
+      case CT_FORM: {
+         HBForm * f = (HBForm *)( (char*)p - offsetof(HBForm, base) );
+         ADD_E("OnClick",       f->base.FOnClick != NULL,  "Action");
+         ADD_E("OnDblClick",    f->FOnDblClick != NULL,    "Action");
+         ADD_E("OnCreate",      f->FOnCreate != NULL,      "Lifecycle");
+         ADD_E("OnDestroy",     f->FOnDestroy != NULL,     "Lifecycle");
+         ADD_E("OnShow",        f->FOnShow != NULL,        "Lifecycle");
+         ADD_E("OnHide",        f->FOnHide != NULL,        "Lifecycle");
+         ADD_E("OnClose",       f->base.FOnClose != NULL,  "Lifecycle");
+         ADD_E("OnCloseQuery",  f->FOnCloseQuery != NULL,  "Lifecycle");
+         ADD_E("OnActivate",    f->FOnActivate != NULL,    "Lifecycle");
+         ADD_E("OnDeactivate",  f->FOnDeactivate != NULL,  "Lifecycle");
+         ADD_E("OnResize",      f->FOnResize != NULL,      "Layout");
+         ADD_E("OnPaint",       f->FOnPaint != NULL,       "Layout");
+         ADD_E("OnKeyDown",     f->FOnKeyDown != NULL,     "Keyboard");
+         ADD_E("OnKeyUp",       f->FOnKeyUp != NULL,       "Keyboard");
+         ADD_E("OnKeyPress",    f->FOnKeyPress != NULL,    "Keyboard");
+         ADD_E("OnMouseDown",   f->FOnMouseDown != NULL,   "Mouse");
+         ADD_E("OnMouseUp",     f->FOnMouseUp != NULL,     "Mouse");
+         ADD_E("OnMouseMove",   f->FOnMouseMove != NULL,   "Mouse");
+         ADD_E("OnMouseWheel",  f->FOnMouseWheel != NULL,  "Mouse");
+         break;
+      }
+      case CT_BUTTON:
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnEnter",    0,                    "Focus");
+         ADD_E("OnExit",     0,                    "Focus");
+         ADD_E("OnKeyDown",  0,                    "Keyboard");
+         ADD_E("OnKeyUp",    0,                    "Keyboard");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         ADD_E("OnMouseUp",  0,                    "Mouse");
+         break;
+      case CT_EDIT:
+         ADD_E("OnChange",   p->FOnChange != NULL, "Action");
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnEnter",    0,                    "Focus");
+         ADD_E("OnExit",     0,                    "Focus");
+         ADD_E("OnKeyDown",  0,                    "Keyboard");
+         ADD_E("OnKeyUp",    0,                    "Keyboard");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         ADD_E("OnMouseUp",  0,                    "Mouse");
+         break;
+      case CT_CHECKBOX:
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnEnter",    0,                    "Focus");
+         ADD_E("OnExit",     0,                    "Focus");
+         ADD_E("OnKeyDown",  0,                    "Keyboard");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         break;
+      case CT_COMBOBOX:
+         ADD_E("OnChange",   p->FOnChange != NULL, "Action");
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnEnter",    0,                    "Focus");
+         ADD_E("OnExit",     0,                    "Focus");
+         ADD_E("OnKeyDown",  0,                    "Keyboard");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         break;
+      case CT_LABEL:
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnDblClick", 0,                    "Action");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         break;
+      case CT_GROUPBOX:
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         break;
+      default:
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnChange",   p->FOnChange != NULL, "Action");
+         ADD_E("OnKeyDown",  0,                    "Keyboard");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         break;
+   }
+   #undef ADD_E
+   hb_itemReturnRelease(pArray);
+}
+
+/* ======================================================================
+ * Code Editor - Tab support functions
+ * ====================================================================== */
+
+/* CodeEditorAddTab( hEditor, cName ) --> nTabCount */
+HB_FUNC( CODEEDITORADDTAB )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed || !ed->tabBar || !HB_ISCHAR(2) || ed->nTabs >= CE_MAX_TABS )
+   { hb_retni(0); return; }
+
+   const char * name = hb_parc(2);
+   strncpy( ed->tabNames[ed->nTabs], name, 63 );
+   ed->tabTexts[ed->nTabs] = strdup( "" );
+   ed->nTabs++;
+
+   /* Add new page to notebook */
+   GtkWidget * dummyPage = gtk_box_new( GTK_ORIENTATION_HORIZONTAL, 0 );
+   GtkWidget * label = gtk_label_new( name );
+   g_signal_handlers_block_matched( ed->tabBar, G_SIGNAL_MATCH_FUNC,
+      0, 0, NULL, (gpointer)on_editor_tab_switched, NULL );
+   gtk_notebook_append_page( GTK_NOTEBOOK(ed->tabBar), dummyPage, label );
+   gtk_widget_show_all( dummyPage );
+   g_signal_handlers_unblock_matched( ed->tabBar, G_SIGNAL_MATCH_FUNC,
+      0, 0, NULL, (gpointer)on_editor_tab_switched, NULL );
+
+   hb_retni( ed->nTabs );
+}
+
+/* CodeEditorSetTabText( hEditor, nTab, cText ) */
+HB_FUNC( CODEEDITORSETTABTEXT )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   int nTab = hb_parni(2) - 1;
+   if( !ed || nTab < 0 || nTab >= ed->nTabs || !HB_ISCHAR(3) ) return;
+
+   if( ed->tabTexts[nTab] ) free( ed->tabTexts[nTab] );
+   ed->tabTexts[nTab] = strdup( hb_parc(3) );
+
+   /* If this is the active tab, update the editor view */
+   if( nTab == ed->nActiveTab && ed->buffer )
+   {
+      g_signal_handlers_block_matched( ed->buffer, G_SIGNAL_MATCH_FUNC,
+         0, 0, NULL, (gpointer)on_editor_buffer_changed, NULL );
+      gtk_text_buffer_set_text( ed->buffer, ed->tabTexts[nTab], -1 );
+      CE_HighlightCode( ed->buffer );
+      g_signal_handlers_unblock_matched( ed->buffer, G_SIGNAL_MATCH_FUNC,
+         0, 0, NULL, (gpointer)on_editor_buffer_changed, NULL );
+      if( ed->gutterView ) gtk_widget_queue_draw( ed->gutterView );
+   }
+}
+
+/* CodeEditorGetTabText( hEditor, nTab ) --> cText */
+HB_FUNC( CODEEDITORGETTABTEXT )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   int nTab = hb_parni(2) - 1;
+   if( !ed || nTab < 0 || nTab >= ed->nTabs ) { hb_retc(""); return; }
+
+   /* If active tab, get from editor (may have been edited) */
+   if( nTab == ed->nActiveTab && ed->buffer )
+   {
+      GtkTextIter start, end;
+      gtk_text_buffer_get_start_iter( ed->buffer, &start );
+      gtk_text_buffer_get_end_iter( ed->buffer, &end );
+      char * text = gtk_text_buffer_get_text( ed->buffer, &start, &end, FALSE );
+      hb_retc( text ? text : "" );
+      if( text ) g_free( text );
+   }
+   else
+      hb_retc( ed->tabTexts[nTab] ? ed->tabTexts[nTab] : "" );
+}
+
+/* CodeEditorSelectTab( hEditor, nTab ) */
+HB_FUNC( CODEEDITORSELECTTAB )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   int nTab = hb_parni(2) - 1;
+   if( !ed || !ed->tabBar || nTab < 0 || nTab >= ed->nTabs ) return;
+
+   /* Block signal to prevent recursive callback */
+   g_signal_handlers_block_matched( ed->tabBar, G_SIGNAL_MATCH_FUNC,
+      0, 0, NULL, (gpointer)on_editor_tab_switched, NULL );
+   CE_SwitchTab( ed, nTab );
+   gtk_notebook_set_current_page( GTK_NOTEBOOK(ed->tabBar), nTab );
+   g_signal_handlers_unblock_matched( ed->tabBar, G_SIGNAL_MATCH_FUNC,
+      0, 0, NULL, (gpointer)on_editor_tab_switched, NULL );
+}
+
+/* CodeEditorClearTabs( hEditor ) - reset to single Project1.prg tab */
+HB_FUNC( CODEEDITORCLEARTABS )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed ) return;
+
+   for( int i = 1; i < ed->nTabs; i++ )
+   {
+      if( ed->tabTexts[i] ) { free( ed->tabTexts[i] ); ed->tabTexts[i] = NULL; }
+      ed->tabNames[i][0] = 0;
+   }
+
+   /* Remove extra notebook pages */
+   g_signal_handlers_block_matched( ed->tabBar, G_SIGNAL_MATCH_FUNC,
+      0, 0, NULL, (gpointer)on_editor_tab_switched, NULL );
+   while( gtk_notebook_get_n_pages( GTK_NOTEBOOK(ed->tabBar) ) > 1 )
+      gtk_notebook_remove_page( GTK_NOTEBOOK(ed->tabBar), -1 );
+   g_signal_handlers_unblock_matched( ed->tabBar, G_SIGNAL_MATCH_FUNC,
+      0, 0, NULL, (gpointer)on_editor_tab_switched, NULL );
+
+   ed->nTabs = 1;
+   ed->nActiveTab = 0;
+}
+
+/* CodeEditorOnTabChange( hEditor, bBlock ) */
+HB_FUNC( CODEEDITORONTABCHANGE )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( ed ) {
+      if( ed->pOnTabChange ) hb_itemRelease( ed->pOnTabChange );
+      ed->pOnTabChange = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
+}
+
+/* CodeEditorAppendText( hEditor, cText [, nCursorOffset] ) */
+HB_FUNC( CODEEDITORAPPENDTEXT )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( ed && ed->buffer && HB_ISCHAR(2) )
+   {
+      const char * text = hb_parc(2);
+      GtkTextIter end;
+      gtk_text_buffer_get_end_iter( ed->buffer, &end );
+      int endOffset = gtk_text_iter_get_offset( &end );
+
+      g_signal_handlers_block_matched( ed->buffer, G_SIGNAL_MATCH_FUNC,
+         0, 0, NULL, (gpointer)on_editor_buffer_changed, NULL );
+      gtk_text_buffer_insert( ed->buffer, &end, text, -1 );
+      CE_HighlightCode( ed->buffer );
+      g_signal_handlers_unblock_matched( ed->buffer, G_SIGNAL_MATCH_FUNC,
+         0, 0, NULL, (gpointer)on_editor_buffer_changed, NULL );
+
+      if( ed->gutterView ) gtk_widget_queue_draw( ed->gutterView );
+
+      /* Position cursor */
+      GtkTextIter cursor;
+      if( HB_ISNUM(3) )
+         gtk_text_buffer_get_iter_at_offset( ed->buffer, &cursor, endOffset + hb_parni(3) );
+      else
+         gtk_text_buffer_get_end_iter( ed->buffer, &cursor );
+      gtk_text_buffer_place_cursor( ed->buffer, &cursor );
+      gtk_text_view_scroll_to_iter( GTK_TEXT_VIEW(ed->textView), &cursor, 0.1, FALSE, 0, 0 );
+
+      /* Bring editor window to front */
+      if( ed->window ) gtk_window_present( GTK_WINDOW(ed->window) );
+   }
+}
+
+/* CodeEditorInsertAfter( hEditor, cSearch, cInsert ) */
+HB_FUNC( CODEEDITORINSERTAFTER )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed || !ed->buffer || !HB_ISCHAR(2) || !HB_ISCHAR(3) ) return;
+
+   const char * search = hb_parc(2);
+   const char * insert = hb_parc(3);
+
+   GtkTextIter start, end;
+   gtk_text_buffer_get_start_iter( ed->buffer, &start );
+   gtk_text_buffer_get_end_iter( ed->buffer, &end );
+   char * fullText = gtk_text_buffer_get_text( ed->buffer, &start, &end, FALSE );
+   if( !fullText ) return;
+
+   /* Case-insensitive search */
+   char * found = strcasestr( fullText, search );
+   if( !found ) { g_free( fullText ); return; }
+
+   /* Find end of the line containing the match */
+   char * eol = strchr( found, '\n' );
+   int insertOffset = eol ? (int)(eol - fullText) + 1 : (int)strlen(fullText);
+   g_free( fullText );
+
+   /* Insert text */
+   GtkTextIter insertIter;
+   gtk_text_buffer_get_iter_at_offset( ed->buffer, &insertIter, insertOffset );
+
+   g_signal_handlers_block_matched( ed->buffer, G_SIGNAL_MATCH_FUNC,
+      0, 0, NULL, (gpointer)on_editor_buffer_changed, NULL );
+   gtk_text_buffer_insert( ed->buffer, &insertIter, insert, -1 );
+   CE_HighlightCode( ed->buffer );
+   g_signal_handlers_unblock_matched( ed->buffer, G_SIGNAL_MATCH_FUNC,
+      0, 0, NULL, (gpointer)on_editor_buffer_changed, NULL );
+   if( ed->gutterView ) gtk_widget_queue_draw( ed->gutterView );
+}
+
+/* CodeEditorGotoFunction( hEditor, cFuncName ) --> lFound */
+HB_FUNC( CODEEDITORGOTOFUNCTION )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed || !ed->buffer || !HB_ISCHAR(2) ) { hb_retl(0); return; }
+
+   const char * funcName = hb_parc(2);
+
+   GtkTextIter start, end;
+   gtk_text_buffer_get_start_iter( ed->buffer, &start );
+   gtk_text_buffer_get_end_iter( ed->buffer, &end );
+   char * fullText = gtk_text_buffer_get_text( ed->buffer, &start, &end, FALSE );
+   if( !fullText ) { hb_retl(0); return; }
+
+   /* Search for "METHOD name(" or "function name(" */
+   char patterns[4][128];
+   snprintf( patterns[0], 128, "METHOD %s(", funcName );
+   snprintf( patterns[1], 128, "function %s(", funcName );
+   snprintf( patterns[2], 128, "METHOD %s (", funcName );
+   snprintf( patterns[3], 128, "function %s (", funcName );
+
+   char * found = NULL;
+   for( int i = 0; i < 4 && !found; i++ )
+      found = strcasestr( fullText, patterns[i] );
+
+   if( found )
+   {
+      int offset = (int)(found - fullText);
+      /* Move 2 lines down to land inside the body */
+      char * nl = strchr( found, '\n' );
+      if( nl ) { nl = strchr( nl + 1, '\n' ); if( nl ) offset = (int)(nl - fullText) + 1; }
+
+      GtkTextIter cursor;
+      gtk_text_buffer_get_iter_at_offset( ed->buffer, &cursor, offset );
+      gtk_text_buffer_place_cursor( ed->buffer, &cursor );
+      gtk_text_view_scroll_to_iter( GTK_TEXT_VIEW(ed->textView), &cursor, 0.1, TRUE, 0, 0.5 );
+      if( ed->window ) gtk_window_present( GTK_WINDOW(ed->window) );
+   }
+
+   g_free( fullText );
+   hb_retl( found != NULL );
+}
+
+/* CodeEditorBringToFront( hEditor ) */
+HB_FUNC( CODEEDITORBRINGTOFRONT )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( ed && ed->window ) gtk_window_present( GTK_WINDOW(ed->window) );
+}
+
+/* CodeEditorGetText2( hEditor ) --> cText (alias for search) */
+HB_FUNC( CODEEDITORGETTEXT2 )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( ed && ed->buffer )
+   {
+      GtkTextIter start, end;
+      gtk_text_buffer_get_start_iter( ed->buffer, &start );
+      gtk_text_buffer_get_end_iter( ed->buffer, &end );
+      char * text = gtk_text_buffer_get_text( ed->buffer, &start, &end, FALSE );
+      hb_retc( text ? text : "" );
+      if( text ) g_free( text );
+   }
+   else
+      hb_retc( "" );
+}
+
+/* ======================================================================
+ * Platform dialogs & utilities (GTK3 equivalents of MAC_*)
+ * ====================================================================== */
+
+/* GTK_ShellExec( cCommand ) --> cOutput */
+HB_FUNC( GTK_SHELLEXEC )
+{
+   if( !HB_ISCHAR(1) ) { hb_retc(""); return; }
+   char * output = NULL;
+   GError * err = NULL;
+   gint exitStatus = 0;
+   char * argv[] = { "/bin/bash", "-c", (char*)hb_parc(1), NULL };
+   g_spawn_sync( NULL, argv, NULL,
+      G_SPAWN_SEARCH_PATH, NULL, NULL,
+      &output, NULL, &exitStatus, &err );
+   hb_retc( output ? output : "" );
+   if( output ) g_free( output );
+   if( err ) g_error_free( err );
+}
+
+/* GTK_OpenFileDialog( cTitle, cExtension ) --> cPath */
+HB_FUNC( GTK_OPENFILEDIALOG )
+{
+   EnsureGTK();
+   GtkWidget * dialog = gtk_file_chooser_dialog_new(
+      HB_ISCHAR(1) ? hb_parc(1) : "Open",
+      NULL, GTK_FILE_CHOOSER_ACTION_OPEN,
+      "_Cancel", GTK_RESPONSE_CANCEL,
+      "_Open", GTK_RESPONSE_ACCEPT, NULL );
+   if( HB_ISCHAR(2) )
+   {
+      GtkFileFilter * filter = gtk_file_filter_new();
+      char pattern[32];
+      snprintf( pattern, sizeof(pattern), "*.%s", hb_parc(2) );
+      gtk_file_filter_add_pattern( filter, pattern );
+      gtk_file_filter_set_name( filter, pattern );
+      gtk_file_chooser_add_filter( GTK_FILE_CHOOSER(dialog), filter );
+   }
+   if( gtk_dialog_run( GTK_DIALOG(dialog) ) == GTK_RESPONSE_ACCEPT )
+   {
+      char * filename = gtk_file_chooser_get_filename( GTK_FILE_CHOOSER(dialog) );
+      hb_retc( filename ? filename : "" );
+      if( filename ) g_free( filename );
+   }
+   else
+      hb_retc( "" );
+   gtk_widget_destroy( dialog );
+}
+
+/* GTK_SaveFileDialog( cTitle, cDefaultName, cExtension ) --> cPath */
+HB_FUNC( GTK_SAVEFILEDIALOG )
+{
+   EnsureGTK();
+   GtkWidget * dialog = gtk_file_chooser_dialog_new(
+      HB_ISCHAR(1) ? hb_parc(1) : "Save",
+      NULL, GTK_FILE_CHOOSER_ACTION_SAVE,
+      "_Cancel", GTK_RESPONSE_CANCEL,
+      "_Save", GTK_RESPONSE_ACCEPT, NULL );
+   gtk_file_chooser_set_do_overwrite_confirmation( GTK_FILE_CHOOSER(dialog), TRUE );
+   if( HB_ISCHAR(2) )
+      gtk_file_chooser_set_current_name( GTK_FILE_CHOOSER(dialog), hb_parc(2) );
+   if( HB_ISCHAR(3) )
+   {
+      GtkFileFilter * filter = gtk_file_filter_new();
+      char pattern[32];
+      snprintf( pattern, sizeof(pattern), "*.%s", hb_parc(3) );
+      gtk_file_filter_add_pattern( filter, pattern );
+      gtk_file_filter_set_name( filter, pattern );
+      gtk_file_chooser_add_filter( GTK_FILE_CHOOSER(dialog), filter );
+   }
+   if( gtk_dialog_run( GTK_DIALOG(dialog) ) == GTK_RESPONSE_ACCEPT )
+   {
+      char * filename = gtk_file_chooser_get_filename( GTK_FILE_CHOOSER(dialog) );
+      hb_retc( filename ? filename : "" );
+      if( filename ) g_free( filename );
+   }
+   else
+      hb_retc( "" );
+   gtk_widget_destroy( dialog );
+}
+
+/* GTK_SelectFromList( cTitle, aItems ) --> nSelected (1-based, 0=cancel) */
+HB_FUNC( GTK_SELECTFROMLIST )
+{
+   EnsureGTK();
+   const char * szTitle = HB_ISCHAR(1) ? hb_parc(1) : "Select";
+   PHB_ITEM pArray = hb_param(2, HB_IT_ARRAY);
+   if( !pArray ) { hb_retni(0); return; }
+   HB_SIZE nLen = hb_arrayLen( pArray );
+   if( nLen == 0 ) { hb_retni(0); return; }
+
+   GtkWidget * dialog = gtk_dialog_new_with_buttons( szTitle, NULL,
+      GTK_DIALOG_MODAL, "_OK", GTK_RESPONSE_ACCEPT,
+      "_Cancel", GTK_RESPONSE_CANCEL, NULL );
+   GtkWidget * content = gtk_dialog_get_content_area( GTK_DIALOG(dialog) );
+
+   GtkWidget * combo = gtk_combo_box_text_new();
+   for( HB_SIZE i = 1; i <= nLen; i++ )
+      gtk_combo_box_text_append_text( GTK_COMBO_BOX_TEXT(combo),
+         hb_arrayGetCPtr( pArray, i ) );
+   gtk_combo_box_set_active( GTK_COMBO_BOX(combo), 0 );
+   gtk_container_add( GTK_CONTAINER(content), combo );
+   gtk_widget_show_all( content );
+
+   int result = 0;
+   if( gtk_dialog_run( GTK_DIALOG(dialog) ) == GTK_RESPONSE_ACCEPT )
+      result = gtk_combo_box_get_active( GTK_COMBO_BOX(combo) ) + 1;
+   gtk_widget_destroy( dialog );
+   hb_retni( result );
+}
+
+/* GTK_AboutDialog( cTitle, cMessage, cIconPath ) */
+HB_FUNC( GTK_ABOUTDIALOG )
+{
+   EnsureGTK();
+   GtkWidget * dialog = gtk_message_dialog_new( NULL,
+      GTK_DIALOG_MODAL, GTK_MESSAGE_INFO, GTK_BUTTONS_OK,
+      "%s", HB_ISCHAR(2) ? hb_parc(2) : "" );
+   gtk_window_set_title( GTK_WINDOW(dialog),
+      HB_ISCHAR(1) ? hb_parc(1) : "About" );
+   if( HB_ISCHAR(3) )
+   {
+      GdkPixbuf * logo = gdk_pixbuf_new_from_file_at_size( hb_parc(3), 128, 128, NULL );
+      if( logo )
+      {
+         GtkWidget * img = gtk_image_new_from_pixbuf( logo );
+         gtk_message_dialog_set_image( GTK_MESSAGE_DIALOG(dialog), img );
+         gtk_widget_show( img );
+         g_object_unref( logo );
+      }
+   }
+   gtk_dialog_run( GTK_DIALOG(dialog) );
+   gtk_widget_destroy( dialog );
 }
 
