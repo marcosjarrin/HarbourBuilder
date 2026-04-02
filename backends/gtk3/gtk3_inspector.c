@@ -257,11 +257,7 @@ static void InsApplyValue( INSDATA * d, int nReal )
 
    /* Notify property changed (two-way sync) */
    if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) )
-   {
-      hb_vmPushEvalSym();
-      hb_vmPush( d->pOnPropChanged );
-      hb_vmSend( 0 );
-   }
+      hb_itemDo( d->pOnPropChanged, 0 );
 }
 
 /* ======================================================================
@@ -429,11 +425,11 @@ static void on_row_activated( GtkTreeView * treeView, GtkTreePath * path,
       if( d->pOnEventDblClick && HB_IS_BLOCK( d->pOnEventDblClick ) )
       {
          const char * szEvent = d->rows[nReal].szName;
-         hb_vmPushEvalSym();
-         hb_vmPush( d->pOnEventDblClick );
-         hb_vmPushNumInt( d->hCtrl );
-         hb_vmPushString( szEvent, strlen(szEvent) );
-         hb_vmSend( 2 );
+         PHB_ITEM pArg1 = hb_itemPutNInt( hb_itemNew(NULL), d->hCtrl );
+         PHB_ITEM pArg2 = hb_itemPutC( hb_itemNew(NULL), szEvent );
+         hb_itemDo( d->pOnEventDblClick, 2, pArg1, pArg2 );
+         hb_itemRelease( pArg1 );
+         hb_itemRelease( pArg2 );
       }
       return;
    }
@@ -446,10 +442,9 @@ static void on_combo_sel_changed( GtkComboBox * widget, gpointer data )
    int idx = gtk_combo_box_get_active( widget );
    if( idx >= 0 && d->pOnComboSel && HB_IS_BLOCK( d->pOnComboSel ) )
    {
-      hb_vmPushEvalSym();
-      hb_vmPush( d->pOnComboSel );
-      hb_vmPushInteger( idx );
-      hb_vmSend( 1 );
+      PHB_ITEM pArg = hb_itemPutNI( hb_itemNew(NULL), idx );
+      hb_itemDo( d->pOnComboSel, 1, pArg );
+      hb_itemRelease( pArg );
    }
 }
 
@@ -743,8 +738,15 @@ HB_FUNC( INS_SETEVENTS )
       if( !pRow || hb_arrayLen( pRow ) < 3 ) continue;
 
       const char * name = hb_arrayGetCPtr( pRow, 1 );
-      int assigned = hb_arrayGetL( pRow, 2 );
       const char * cat = hb_arrayGetCPtr( pRow, 3 );
+
+      /* Field 2: handler name (string) or assigned flag (logical) */
+      char handlerName[64] = "";
+      PHB_ITEM pField2 = hb_arrayGetItemPtr( pRow, 2 );
+      if( pField2 && HB_IS_STRING( pField2 ) )
+         strncpy( handlerName, hb_itemGetCPtr( pField2 ), 63 );
+      else if( pField2 && HB_IS_LOGICAL( pField2 ) && hb_itemGetL( pField2 ) )
+         strcpy( handlerName, "(assigned)" );
 
       /* Insert category header if new category */
       if( strcmp( cat, lastCat ) != 0 && d->nEvRows < MAX_ROWS )
@@ -764,7 +766,7 @@ HB_FUNC( INS_SETEVENTS )
       {
          IROW * r = &d->evRows[d->nEvRows++];
          strncpy( r->szName, name, 31 );
-         snprintf( r->szValue, sizeof(r->szValue), "%s", assigned ? "(assigned)" : "" );
+         strncpy( r->szValue, handlerName, 255 );
          strncpy( r->szCategory, cat, 31 );
          r->cType = 'S';
          r->bIsCat = 0;

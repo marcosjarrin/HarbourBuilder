@@ -463,10 +463,12 @@ static void EnsureNSApp( void )
 - (void)fireEvent:(PHB_ITEM)block
 {
    if( block && HB_IS_BLOCK( block ) ) {
-      hb_vmPushEvalSym();
-      hb_vmPush( block );
-      hb_vmPushNumInt( (HB_PTRUINT) self );
-      hb_vmSend( 1 );
+      if( hb_vmRequestReenter() ) {
+         hb_vmPushEvalSym();
+         hb_vmPush( block );
+         hb_vmSend( 0 );
+         hb_vmRequestRestore();
+      }
    }
 }
 

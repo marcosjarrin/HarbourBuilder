@@ -11,10 +11,34 @@ return nil
 function InspectorRefresh( hCtrl )
    local h := _InsGetData()
    local aProps, aEvents
+   local i, cName, cHandler, cCode
    if h != 0
       if hCtrl != nil .and. hCtrl != 0
          aProps  := UI_GetAllProps( hCtrl )
          aEvents := UI_GetAllEvents( hCtrl )
+
+         // Resolve handler names from editor code
+         cCode := _InsGetEditorCode()
+         cName := UI_GetProp( hCtrl, "cName" )
+         if Empty( cName )
+            if UI_GetProp( hCtrl, "cClassName" ) == "TForm"
+               cName := "Form1"
+            else
+               cName := "ctrl"
+            endif
+         endif
+         if ! Empty( cCode ) .and. ! Empty( aEvents )
+            for i := 1 to Len( aEvents )
+               if Len( aEvents[i] ) >= 3 .and. ! Empty( aEvents[i][1] )
+                  // Handler name = ControlName + EventWithoutOn
+                  cHandler := cName + SubStr( aEvents[i][1], 3 )
+                  if ( "function " + cHandler ) $ cCode
+                     aEvents[i][2] := cHandler
+                  endif
+               endif
+            next
+         endif
+
          INS_RefreshWithData( h, hCtrl, aProps )
          INS_SetEvents( h, aEvents )
       else

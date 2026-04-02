@@ -395,7 +395,8 @@ static function RegenerateFormCode( cName, hForm )
             cHandlerName := cCtrlName + cEvSuffix
             if cHandlerName $ cExistingCode
                cEvents += "   ::o" + cCtrlName + ":" + cEvName + ;
-                  " := { |oSender| oSelf:" + cHandlerName + "( oSender ) }" + e
+                  " := { || " + cHandlerName + "( Self ) }" + e
+
             endif
          next
       next
@@ -412,9 +413,10 @@ static function RegenerateFormCode( cName, hForm )
          cEvName := aEvents[j]
          cEvSuffix := SubStr( cEvName, 3 )
          cHandlerName := cName + cEvSuffix
-         if ( "METHOD " + cHandlerName ) $ cExistingCode
+         if ( "function " + cHandlerName ) $ cExistingCode
             cEvents += "   ::" + cEvName + ;
-               " := { |oSender| oSelf:" + cHandlerName + "( oSender ) }" + e
+               " := { || " + cHandlerName + "( Self ) }" + e
+
          endif
       next
    endif
@@ -438,8 +440,6 @@ static function RegenerateFormCode( cName, hForm )
    cCode += cSep
    cCode += e
    cCode += "METHOD CreateForm() CLASS " + cClass + e
-   cCode += e
-   cCode += "   local oSelf := Self" + e
    cCode += e
    cCode += '   ::Title  := "' + cTitle + '"' + e
    cCode += "   ::Left   := " + LTrim(Str(nFL)) + e
@@ -522,7 +522,7 @@ static function OnEventDblClick( hCtrl, cEvent )
 
    // Generate the METHOD implementation (C++Builder pattern)
    cCode := cSep
-   cCode += "METHOD " + cHandler + "( oSender ) CLASS TForm1" + e
+   cCode += "static function " + cHandler + "( oForm )" + e
    cCode += e
    cCode += "   " + e
    cCode += e
@@ -530,19 +530,17 @@ static function OnEventDblClick( hCtrl, cEvent )
 
    // Cursor offset: place cursor on the empty line inside the method body
    nCursorOfs := Len( cSep ) + ;
-                 Len( "METHOD " + cHandler + "( oSender ) CLASS TForm1" ) + ;
+                 Len( "static function " + cHandler + "( oForm )" ) + ;
                  Len( e ) + Len( e ) + 3  // "   " indent
 
    // Append METHOD implementation to code editor
    CodeEditorAppendText( hCodeEditor, cCode, nCursorOfs )
 
-   // Also insert METHOD declaration in the CLASS block
-   // Find "// Event handlers" line and insert after it
-   cDecl := "   METHOD " + cHandler + "( oSender )" + e
-   CodeEditorInsertAfter( hCodeEditor, "// Event handlers", cDecl )
-
-   // Regenerate CreateForm to include event wiring
+   // Regenerate CreateForm to include event wiring (preserves METHOD implementations)
    SyncDesignerToCode()
+
+   // Refresh inspector to show handler name in Events tab
+   InspectorRefresh( hCtrl )
 
 return cHandler
 
@@ -601,14 +599,43 @@ return nil
 // Two-way sync: regenerate code from designer state
 static function SyncDesignerToCode()
 
-   local cNewCode
+   local cNewCode, cOldCode, cMethods, nPos, nPos2
+   local cSep := "//" + Replicate( "-", 68 )
 
    if nActiveForm < 1 .or. nActiveForm > Len( aForms )
       return nil
    endif
 
-   // Regenerate form code from current designer state
+   // Get existing code to preserve METHOD implementations
+   cOldCode := CodeEditorGetTabText( hCodeEditor, nActiveForm + 1 )
+
+   // Find METHOD implementations after CreateForm
+   cMethods := ""
+   nPos := At( "METHOD CreateForm()", cOldCode )
+   if nPos > 0
+      nPos2 := At( "return nil", SubStr( cOldCode, nPos ) )
+      if nPos2 > 0
+         nPos := nPos + nPos2 - 1 + Len( "return nil" )
+         nPos2 := At( cSep, SubStr( cOldCode, nPos ) )
+         if nPos2 > 0
+            nPos := nPos + nPos2 - 1 + Len( cSep )
+            if nPos <= Len( cOldCode )
+               cMethods := SubStr( cOldCode, nPos )
+               do while Left( cMethods, 1 ) == Chr(10) .or. Left( cMethods, 1 ) == Chr(13)
+                  cMethods := SubStr( cMethods, 2 )
+               enddo
+            endif
+         endif
+      endif
+   endif
+
+   // Regenerate CLASS + CreateForm
    cNewCode := RegenerateFormCode( aForms[ nActiveForm ][ 1 ], oDesignForm:hCpp )
+
+   // Append preserved METHOD implementations
+   if ! Empty( cMethods )
+      cNewCode += Chr(13) + Chr(10) + cMethods
+   endif
 
    // Update stored code and editor tab
    aForms[ nActiveForm ][ 3 ] := cNewCode
@@ -1085,6 +1112,15 @@ static function ShowAbout()
 return nil
 
 // MsgInfo() is now in classes.prg (cross-platform)
+
+// Helper for inspector: get current editor code for handler name resolution
+function _InsGetEditorCode()
+
+   if hCodeEditor != nil .and. nActiveForm > 0
+      return CodeEditorGetTabText( hCodeEditor, nActiveForm + 1 )
+   endif
+
+return ""
 
 // Framework
 #include "../harbour/classes.prg"

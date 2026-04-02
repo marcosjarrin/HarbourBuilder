@@ -209,11 +209,13 @@ void TControl::FireEvent( PHB_ITEM pBlock )
 {
    if( pBlock && HB_IS_BLOCK( pBlock ) )
    {
-      /* Eval block passing Self handle as parameter */
-      hb_vmPushEvalSym();
-      hb_vmPush( pBlock );
-      hb_vmPushNumInt( (HB_PTRUINT) this );
-      hb_vmSend( 1 );
+      if( hb_vmRequestReenter() )
+      {
+         hb_vmPushEvalSym();
+         hb_vmPush( pBlock );
+         hb_vmSend( 0 );
+         hb_vmRequestRestore();
+      }
    }
 }
 

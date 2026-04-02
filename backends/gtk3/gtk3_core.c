@@ -277,8 +277,7 @@ static void HBControl_FireEvent( HBControl * p, PHB_ITEM block )
    {
       hb_vmPushEvalSym();
       hb_vmPush( block );
-      hb_vmPushNumInt( (HB_PTRUINT) p );
-      hb_vmSend( 1 );
+      hb_vmSend( 0 );
    }
 }
 
@@ -385,7 +384,7 @@ static void on_button_clicked( GtkWidget * widget, gpointer data )
          frm->FRunning = 0;
          if( frm->FWindow ) gtk_widget_destroy( frm->FWindow );
          frm->FWindow = NULL;
-         gtk_main_quit();
+         /* FRunning = 0 stops the manual event loop */
       }
    }
 }
@@ -574,10 +573,10 @@ static void HBForm_NotifySelChange( HBForm * form )
 {
    if( form->FOnSelChange && HB_IS_BLOCK( form->FOnSelChange ) )
    {
-      hb_vmPushEvalSym();
-      hb_vmPush( form->FOnSelChange );
-      hb_vmPushNumInt( form->FSelCount > 0 ? (HB_PTRUINT) form->FSelected[0] : 0 );
-      hb_vmSend( 1 );
+      PHB_ITEM pArg = hb_itemPutNInt( hb_itemNew(NULL),
+         form->FSelCount > 0 ? (HB_PTRUINT) form->FSelected[0] : 0 );
+      hb_itemDo( form->FOnSelChange, 1, pArg );
+      hb_itemRelease( pArg );
    }
 }
 
@@ -837,15 +836,15 @@ static gboolean on_overlay_button_release( GtkWidget * widget, GdkEventButton * 
 
          if( newCtrl && form->FOnComponentDrop && HB_IS_BLOCK( form->FOnComponentDrop ) )
          {
-            hb_vmPushEvalSym();
-            hb_vmPush( form->FOnComponentDrop );
-            hb_vmPushNumInt( (HB_PTRUINT) form );
-            hb_vmPushInteger( ctrlType );
-            hb_vmPushInteger( rx1 );
-            hb_vmPushInteger( ry1 );
-            hb_vmPushInteger( rw );
-            hb_vmPushInteger( rh );
-            hb_vmSend( 6 );
+            PHB_ITEM args[6];
+            args[0] = hb_itemPutNInt( hb_itemNew(NULL), (HB_PTRUINT) form );
+            args[1] = hb_itemPutNI( hb_itemNew(NULL), ctrlType );
+            args[2] = hb_itemPutNI( hb_itemNew(NULL), rx1 );
+            args[3] = hb_itemPutNI( hb_itemNew(NULL), ry1 );
+            args[4] = hb_itemPutNI( hb_itemNew(NULL), rw );
+            args[5] = hb_itemPutNI( hb_itemNew(NULL), rh );
+            hb_itemDo( form->FOnComponentDrop, 6, args[0], args[1], args[2], args[3], args[4], args[5] );
+            for( int a = 0; a < 6; a++ ) hb_itemRelease( args[a] );
          }
       }
 
@@ -984,18 +983,16 @@ static void on_toolbar_btn_clicked( GtkToolButton * button, gpointer data )
 {
    HBToolBar * tb = (HBToolBar *)data;
    int idx = GPOINTER_TO_INT( g_object_get_data( G_OBJECT(button), "btn_idx" ) );
-   if( idx >= 0 && idx < tb->FBtnCount && tb->FBtnOnClick[idx] ) {
-      hb_vmPushEvalSym(); hb_vmPush( tb->FBtnOnClick[idx] ); hb_vmSend( 0 );
-   }
+   if( idx >= 0 && idx < tb->FBtnCount && tb->FBtnOnClick[idx] )
+      hb_itemDo( tb->FBtnOnClick[idx], 0 );
 }
 
 /* Menu item callback */
 static void on_menu_item_activated( GtkMenuItem * item, gpointer data )
 {
    PHB_ITEM pBlock = (PHB_ITEM)data;
-   if( pBlock && HB_IS_BLOCK(pBlock) ) {
-      hb_vmPushEvalSym(); hb_vmPush(pBlock); hb_vmSend(0);
-   }
+   if( pBlock && HB_IS_BLOCK(pBlock) )
+      hb_itemDo( pBlock, 0 );
 }
 
 static gboolean on_window_configure( GtkWidget * widget, GdkEventConfigure * event, gpointer data )
@@ -1017,11 +1014,7 @@ static gboolean on_window_configure( GtkWidget * widget, GdkEventConfigure * eve
    }
 
    if( changed && form->FOnResize && HB_IS_BLOCK( form->FOnResize ) )
-   {
-      hb_vmPushEvalSym();
-      hb_vmPush( form->FOnResize );
-      hb_vmSend( 0 );
-   }
+      hb_itemDo( form->FOnResize, 0 );
 
    return FALSE;
 }
@@ -1198,7 +1191,6 @@ static void HBForm_Run( HBForm * form )
 
    form->FRunning = 1;
    gtk_main();
-   form->FRunning = 0;
 }
 
 /* Show() - create and show without entering gtk_main */
@@ -1281,7 +1273,6 @@ static void HBForm_Close( HBForm * form )
    {
       gtk_widget_destroy( form->FWindow );
       form->FWindow = NULL;
-      gtk_main_quit();
    }
 }
 
@@ -2116,10 +2107,9 @@ static void on_palette_btn_clicked( GtkButton * button, gpointer data )
    PALDATA * pd = s_palData;
    if( pd && pd->pOnSelect && HB_IS_BLOCK(pd->pOnSelect) )
    {
-      hb_vmPushEvalSym();
-      hb_vmPush( pd->pOnSelect );
-      hb_vmPushInteger( nType );
-      hb_vmSend( 1 );
+      PHB_ITEM pArg = hb_itemPutNI( hb_itemNew(NULL), nType );
+      hb_itemDo( pd->pOnSelect, 1, pArg );
+      hb_itemRelease( pArg );
    }
 }
 
@@ -2592,11 +2582,11 @@ static void on_editor_tab_switched( GtkNotebook * nb, GtkWidget * page, guint nP
    /* Fire Harbour callback */
    if( ed->pOnTabChange && HB_IS_BLOCK( ed->pOnTabChange ) )
    {
-      hb_vmPushEvalSym();
-      hb_vmPush( ed->pOnTabChange );
-      hb_vmPushNumInt( (HB_PTRUINT) ed );
-      hb_vmPushInteger( (int)nPage + 1 );  /* 1-based for Harbour */
-      hb_vmSend( 2 );
+      PHB_ITEM pArg1 = hb_itemPutNInt( hb_itemNew(NULL), (HB_PTRUINT) ed );
+      PHB_ITEM pArg2 = hb_itemPutNI( hb_itemNew(NULL), (int)nPage + 1 );
+      hb_itemDo( ed->pOnTabChange, 2, pArg1, pArg2 );
+      hb_itemRelease( pArg1 );
+      hb_itemRelease( pArg2 );
    }
 }
 
