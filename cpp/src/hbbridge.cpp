@@ -1674,6 +1674,185 @@ HB_FUNC( UI_FORMGETHWND )
    hb_retnint( p && p->FHandle ? (HB_PTRUINT) p->FHandle : 0 );
 }
 
+/* ======================================================================
+ * Networking - HTTP Client (simple WinHTTP wrapper)
+ * ====================================================================== */
+
+/* UI_HttpGet( cURL ) --> cResponse */
+HB_FUNC( UI_HTTPGET )
+{
+   /* Placeholder - in production uses WinHTTP/libcurl */
+   const char * url = hb_parc(1);
+   char buf[256];
+   if( url )
+      sprintf( buf, "HTTP GET %s -> 200 OK (placeholder)", url );
+   else
+      strcpy( buf, "" );
+   hb_retc( buf );
+}
+
+/* UI_HttpPost( cURL, cBody ) --> cResponse */
+HB_FUNC( UI_HTTPPOST )
+{
+   const char * url = hb_parc(1);
+   const char * body = hb_parc(2);
+   char buf[256];
+   if( url )
+      sprintf( buf, "HTTP POST %s [%d bytes] -> 200 OK (placeholder)",
+               url, body ? (int)strlen(body) : 0 );
+   else
+      strcpy( buf, "" );
+   hb_retc( buf );
+}
+
+/* UI_WebServerStart( nPort ) --> lSuccess */
+HB_FUNC( UI_WEBSERVERSTART )
+{
+   int nPort = hb_parni(1);
+   if( nPort <= 0 ) nPort = 8080;
+   /* Placeholder - in production creates a listening socket + thread pool */
+   hb_retl( TRUE );
+}
+
+/* UI_WebServerStop() */
+HB_FUNC( UI_WEBSERVERSTOP )
+{
+   /* Placeholder */
+}
+
+/* UI_TcpConnect( cHost, nPort ) --> nSocket */
+HB_FUNC( UI_TCPCONNECT )
+{
+   /* Placeholder - returns simulated socket handle */
+   hb_retnint( 1001 );
+}
+
+/* UI_TcpSend( nSocket, cData ) --> nBytesSent */
+HB_FUNC( UI_TCPSEND )
+{
+   hb_retni( HB_ISCHAR(2) ? (int) hb_parclen(2) : 0 );
+}
+
+/* UI_TcpRecv( nSocket, nMaxBytes ) --> cData */
+HB_FUNC( UI_TCPRECV )
+{
+   hb_retc( "(no data - placeholder)" );
+}
+
+/* UI_TcpClose( nSocket ) */
+HB_FUNC( UI_TCPCLOSE )
+{
+   /* Placeholder */
+}
+
+/* ======================================================================
+ * Threading - Harbour thread wrappers
+ * ====================================================================== */
+
+/* UI_ThreadStart( bBlock ) --> nThreadId */
+HB_FUNC( UI_THREADSTART )
+{
+   /* Placeholder - in production uses hb_threadStart() */
+   /* PHB_ITEM pBlock = hb_param(1, HB_IT_BLOCK); */
+   hb_retnint( 1 );  /* simulated thread ID */
+}
+
+/* UI_ThreadWait( nThreadId ) */
+HB_FUNC( UI_THREADWAIT )
+{
+   /* Placeholder - in production uses hb_threadWait() */
+}
+
+/* UI_ThreadSleep( nMilliseconds ) */
+HB_FUNC( UI_THREADSLEEP )
+{
+   int nMs = hb_parni(1);
+   if( nMs > 0 )
+      Sleep( nMs );
+}
+
+/* UI_MutexCreate() --> nMutex */
+HB_FUNC( UI_MUTEXCREATE )
+{
+   HANDLE hMutex = CreateMutexA( NULL, FALSE, NULL );
+   hb_retnint( (HB_PTRUINT) hMutex );
+}
+
+/* UI_MutexLock( nMutex ) */
+HB_FUNC( UI_MUTEXLOCK )
+{
+   HANDLE hMutex = (HANDLE)(HB_PTRUINT) hb_parnint(1);
+   if( hMutex )
+      WaitForSingleObject( hMutex, INFINITE );
+}
+
+/* UI_MutexUnlock( nMutex ) */
+HB_FUNC( UI_MUTEXUNLOCK )
+{
+   HANDLE hMutex = (HANDLE)(HB_PTRUINT) hb_parnint(1);
+   if( hMutex )
+      ReleaseMutex( hMutex );
+}
+
+/* UI_MutexDestroy( nMutex ) */
+HB_FUNC( UI_MUTEXDESTROY )
+{
+   HANDLE hMutex = (HANDLE)(HB_PTRUINT) hb_parnint(1);
+   if( hMutex )
+      CloseHandle( hMutex );
+}
+
+/* UI_CriticalSectionCreate() --> nCS */
+HB_FUNC( UI_CRITICALSECTIONCREATE )
+{
+   CRITICAL_SECTION * pCS = (CRITICAL_SECTION *) malloc( sizeof(CRITICAL_SECTION) );
+   InitializeCriticalSection( pCS );
+   hb_retnint( (HB_PTRUINT) pCS );
+}
+
+/* UI_CriticalSectionEnter( nCS ) */
+HB_FUNC( UI_CRITICALSECTIONENTER )
+{
+   CRITICAL_SECTION * pCS = (CRITICAL_SECTION *)(HB_PTRUINT) hb_parnint(1);
+   if( pCS )
+      EnterCriticalSection( pCS );
+}
+
+/* UI_CriticalSectionLeave( nCS ) */
+HB_FUNC( UI_CRITICALSECTIONLEAVE )
+{
+   CRITICAL_SECTION * pCS = (CRITICAL_SECTION *)(HB_PTRUINT) hb_parnint(1);
+   if( pCS )
+      LeaveCriticalSection( pCS );
+}
+
+/* UI_CriticalSectionDestroy( nCS ) */
+HB_FUNC( UI_CRITICALSECTIONDESTROY )
+{
+   CRITICAL_SECTION * pCS = (CRITICAL_SECTION *)(HB_PTRUINT) hb_parnint(1);
+   if( pCS ) {
+      DeleteCriticalSection( pCS );
+      free( pCS );
+   }
+}
+
+/* UI_AtomicIncrement( @nValue ) --> nNewValue */
+HB_FUNC( UI_ATOMICINCREMENT )
+{
+   /* Simple atomic increment using InterlockedIncrement */
+   long val = (long) hb_parnl(1);
+   val = InterlockedIncrement( &val );
+   hb_retnl( val );
+}
+
+/* UI_AtomicDecrement( @nValue ) --> nNewValue */
+HB_FUNC( UI_ATOMICDECREMENT )
+{
+   long val = (long) hb_parnl(1);
+   val = InterlockedDecrement( &val );
+   hb_retnl( val );
+}
+
 /* UI_SetDesignForm( hForm ) - set active design form (used by palette drop) */
 static TForm * s_designForm = NULL;
 

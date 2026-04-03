@@ -97,32 +97,32 @@ function Main()
    MENUITEM "Forms..."     OF oView ACTION MenuViewForms()
    MENUITEM "Code Editor"  OF oView ACTION CodeEditorBringToFront( hCodeEditor )
    MENUITEM "Inspector"        OF oView ACTION InspectorOpen()
-   MENUITEM "Project Inspector" OF oView ACTION MsgInfo( "Project Inspector" )
+   MENUITEM "Project Inspector" OF oView ACTION ShowProjectInspector()
    MENUITEM "Debugger"          OF oView ACTION MsgInfo( "Debugger" )
 
    DEFINE POPUP oProject PROMPT "Project" OF oIDE
    MENUITEM "Add to Project..."    OF oProject ACTION MsgInfo( "Add to Project" )
    MENUITEM "Remove from Project"  OF oProject ACTION MsgInfo( "Remove" )
    MENUSEPARATOR OF oProject
-   MENUITEM "Options..."           OF oProject ACTION MsgInfo( "Project Options" )
+   MENUITEM "Options..."           OF oProject ACTION ShowProjectOptions()
 
    DEFINE POPUP oRun PROMPT "Run" OF oIDE
    MENUITEM "Run"           OF oRun ACTION MsgInfo( "Run" )        ACCEL "r"
    MENUITEM "Step Over"     OF oRun ACTION MsgInfo( "Step Over" )
    MENUITEM "Step Into"     OF oRun ACTION MsgInfo( "Step Into" )
    MENUSEPARATOR OF oRun
-   MENUITEM "Toggle Breakpoint"  OF oRun ACTION MsgInfo( "Toggle Breakpoint" )
-   MENUITEM "Clear Breakpoints"  OF oRun ACTION MsgInfo( "Clear Breakpoints" )
+   MENUITEM "Toggle Breakpoint"  OF oRun ACTION ToggleBreakpoint()
+   MENUITEM "Clear Breakpoints"  OF oRun ACTION ClearBreakpoints()
 
    DEFINE POPUP oComp PROMPT "Component" OF oIDE
    MENUITEM "Install Component..." OF oComp ACTION MsgInfo( "Install" )
    MENUITEM "New Component..."     OF oComp ACTION MsgInfo( "New Component" )
 
    DEFINE POPUP oTools PROMPT "Tools" OF oIDE
-   MENUITEM "Editor Colors..."        OF oTools ACTION MsgInfo( "Editor Colors" )
+   MENUITEM "Editor Colors..."        OF oTools ACTION ShowEditorSettings()
    MENUITEM "Environment Options..."  OF oTools ACTION MsgInfo( "Options" )
    MENUSEPARATOR OF oTools
-   MENUITEM "AI Assistant..."         OF oTools ACTION MsgInfo( "AI Assistant (Ollama)" )
+   MENUITEM "AI Assistant..."         OF oTools ACTION ShowAIAssistant()
 
    DEFINE POPUP oHelp PROMPT "Help" OF oIDE
    MENUITEM "Documentation"        OF oHelp ACTION MAC_ShellExec( "open ../docs/en/index.html" )
@@ -1246,6 +1246,63 @@ static function TBRun()
 
 return nil
 
+return nil
+
+// === Debugger (placeholder) ===
+
+static function ToggleBreakpoint()
+   static aBreakpoints := {}
+   AAdd( aBreakpoints, { "Form1.prg", 1 } )
+   MsgInfo( "Breakpoints: " + LTrim(Str(Len(aBreakpoints))) )
+return nil
+
+static function ClearBreakpoints()
+   MsgInfo( "All breakpoints cleared" )
+return nil
+
+// === AI Assistant (placeholder) ===
+
+static function ShowAIAssistant()
+   MsgInfo( "AI Assistant (Ollama)" + Chr(10) + Chr(10) + ;
+            "Connect to localhost:11434 for local AI" + Chr(10) + ;
+            "Models: codellama, llama3, deepseek-coder" + Chr(10) + Chr(10) + ;
+            "Coming soon: full chat interface" )
+return nil
+
+// === Project Inspector (placeholder) ===
+
+static function ShowProjectInspector()
+   local cInfo := "Project Inspector" + Chr(10) + Chr(10)
+   local i
+   cInfo += "Project1" + Chr(10)
+   for i := 1 to Len( aForms )
+      cInfo += "  " + aForms[i][1] + ".prg" + Chr(10)
+   next
+   cInfo += "  classes.prg" + Chr(10)
+   cInfo += "  hbbuilder.ch" + Chr(10)
+   MsgInfo( cInfo )
+return nil
+
+// === Editor Settings (placeholder) ===
+
+static function ShowEditorSettings()
+   MsgInfo( "Editor Colors" + Chr(10) + Chr(10) + ;
+            "Font: Helvetica Neue, 12pt" + Chr(10) + ;
+            "Theme: Dark" + Chr(10) + ;
+            "Keywords: Blue bold" + Chr(10) + ;
+            "Commands: Teal" + Chr(10) + ;
+            "Strings: Orange" + Chr(10) + ;
+            "Comments: Green" )
+return nil
+
+// === Project Options (placeholder) ===
+
+static function ShowProjectOptions()
+   MsgInfo( "Project Options" + Chr(10) + Chr(10) + ;
+            "Harbour: /Users/usuario/harbour" + Chr(10) + ;
+            "Flags: -n -w -q" + Chr(10) + ;
+            "Compiler: clang" + Chr(10) + ;
+            "Backend: Cocoa (AppKit)" )
 return nil
 
 // === Helpers ===
