@@ -1985,10 +1985,9 @@ HB_FUNC( W32_SELECTFROMLIST )
    nCount = (int) hb_arrayLen( pArray );
    if( nCount == 0 ) { hb_retni(0); return; }
 
-   /* Center dialog */
-   GetWindowRect( GetActiveWindow(), &rcOwner );
-   x = rcOwner.left + ( (rcOwner.right - rcOwner.left) - dlgW ) / 2;
-   y = rcOwner.top + ( (rcOwner.bottom - rcOwner.top) - dlgH ) / 2;
+   /* Center dialog on screen */
+   x = ( GetSystemMetrics(SM_CXSCREEN) - dlgW ) / 2;
+   y = ( GetSystemMetrics(SM_CYSCREEN) - dlgH ) / 2;
 
    hDlg = CreateWindowExA( WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
       "STATIC", hb_parc(1),
@@ -2930,9 +2929,10 @@ static void SwitchTab( CODEEDITOR * ed, int nNewTab )
 static void GutterPaint( CODEEDITOR * ed )
 {
    PAINTSTRUCT ps;
-   HDC hDC;
+   HDC hDC, hMemDC;
+   HBITMAP hBmp, hOldBmp;
    RECT rcGutter;
-   int firstLine, lineCount, lineH, y, i;
+   int firstLine, lineCount, lineH, y, i, w, h;
    HFONT hOld;
    char szNum[16];
 
@@ -2940,27 +2940,33 @@ static void GutterPaint( CODEEDITOR * ed )
 
    hDC = BeginPaint( ed->hGutter, &ps );
    GetClientRect( ed->hGutter, &rcGutter );
+   w = rcGutter.right; h = rcGutter.bottom;
+
+   /* Double buffer: paint to memory DC then BitBlt */
+   hMemDC = CreateCompatibleDC( hDC );
+   hBmp = CreateCompatibleBitmap( hDC, w, h );
+   hOldBmp = (HBITMAP) SelectObject( hMemDC, hBmp );
 
    /* Dark fill background */
    {
       HBRUSH hBr = CreateSolidBrush( RGB(37, 37, 38) );
-      FillRect( hDC, &rcGutter, hBr );
+      FillRect( hMemDC, &rcGutter, hBr );
       DeleteObject( hBr );
    }
 
    /* Right border line */
    {
       HPEN hPen = CreatePen( PS_SOLID, 1, RGB(60, 60, 60) );
-      HPEN hOldPen = (HPEN) SelectObject( hDC, hPen );
-      MoveToEx( hDC, rcGutter.right - 1, 0, NULL );
-      LineTo( hDC, rcGutter.right - 1, rcGutter.bottom );
-      SelectObject( hDC, hOldPen );
+      HPEN hOldPen = (HPEN) SelectObject( hMemDC, hPen );
+      MoveToEx( hMemDC, w - 1, 0, NULL );
+      LineTo( hMemDC, w - 1, h );
+      SelectObject( hMemDC, hOldPen );
       DeleteObject( hPen );
    }
 
-   hOld = (HFONT) SelectObject( hDC, ed->hFont );
-   SetBkMode( hDC, TRANSPARENT );
-   SetTextColor( hDC, RGB(133, 133, 133) );
+   hOld = (HFONT) SelectObject( hMemDC, ed->hFont );
+   SetBkMode( hMemDC, TRANSPARENT );
+   SetTextColor( hMemDC, RGB(133, 133, 133) );
 
    /* Get first visible line and line height */
    firstLine = (int) SendMessage( ed->hEdit, EM_GETFIRSTVISIBLELINE, 0, 0 );
@@ -2985,7 +2991,7 @@ static void GutterPaint( CODEEDITOR * ed )
    }
 
    /* Draw line numbers */
-   for( i = firstLine; i < lineCount && y < rcGutter.bottom; i++ )
+   for( i = firstLine; i < lineCount && y < h; i++ )
    {
       RECT rcNum;
       sprintf( szNum, "%d", i + 1 );
@@ -2993,11 +2999,18 @@ static void GutterPaint( CODEEDITOR * ed )
       rcNum.top = y;
       rcNum.right = GUTTER_WIDTH - 6;
       rcNum.bottom = y + lineH;
-      DrawTextA( hDC, szNum, -1, &rcNum, DT_RIGHT | DT_SINGLELINE | DT_VCENTER );
+      DrawTextA( hMemDC, szNum, -1, &rcNum, DT_RIGHT | DT_SINGLELINE | DT_VCENTER );
       y += lineH;
    }
 
-   SelectObject( hDC, hOld );
+   SelectObject( hMemDC, hOld );
+
+   /* BitBlt from memory DC to screen - no flicker */
+   BitBlt( hDC, 0, 0, w, h, hMemDC, 0, 0, SRCCOPY );
+
+   SelectObject( hMemDC, hOldBmp );
+   DeleteObject( hBmp );
+   DeleteDC( hMemDC );
    EndPaint( ed->hGutter, &ps );
 }
 
