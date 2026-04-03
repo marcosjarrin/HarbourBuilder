@@ -1380,6 +1380,24 @@ void TComponentPalette::ShowTab( int nTab )
                   SendMessage( FTabCtrl, WM_GETFONT, 0, 0 ), TRUE );
          }
 
+         /* Add tooltip for this button */
+         if( FBtns[i] && t->btns[i].szTooltip[0] )
+         {
+            HWND hTT = CreateWindowExA( WS_EX_TOPMOST, TOOLTIPS_CLASSA, NULL,
+               WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
+               0, 0, 0, 0, FTabCtrl, NULL, GetModuleHandle(NULL), NULL );
+            if( hTT )
+            {
+               TOOLINFOA ti = {0};
+               ti.cbSize = sizeof(ti);
+               ti.uFlags = TTF_SUBCLASS | TTF_IDISHWND;
+               ti.hwnd = FTabCtrl;
+               ti.uId = (UINT_PTR) FBtns[i];
+               ti.lpszText = t->btns[i].szTooltip;
+               SendMessageA( hTT, TTM_ADDTOOLA, 0, (LPARAM) &ti );
+            }
+         }
+
          xPos += btnSize + 2;
       }
    }
