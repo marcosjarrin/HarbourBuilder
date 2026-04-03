@@ -1645,9 +1645,28 @@ HB_FUNC( W32_DEBUGPANEL )
 }
 
 /* W32_ProjectInspector( aItems ) - show project tree */
+static LRESULT CALLBACK ProjInsWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
+{
+   switch( msg ) {
+      case WM_SIZE: {
+         HWND hTree = GetWindow(hWnd, GW_CHILD);
+         if( hTree ) {
+            RECT rc; GetClientRect(hWnd, &rc);
+            MoveWindow(hTree, 0, 0, rc.right, rc.bottom, TRUE);
+         }
+         return 0;
+      }
+      case WM_CLOSE:
+         ShowWindow(hWnd, SW_HIDE);
+         return 0;
+   }
+   return DefWindowProc(hWnd, msg, wParam, lParam);
+}
+
 HB_FUNC( W32_PROJECTINSPECTOR )
 {
    static HWND s_hProjWnd = NULL;
+   static BOOL bReg = FALSE;
    PHB_ITEM pArray = hb_param(1, HB_IT_ARRAY);
    HWND hTree, hOwner;
    HFONT hFont;
@@ -1655,17 +1674,29 @@ HB_FUNC( W32_PROJECTINSPECTOR )
    RECT rc;
    TVINSERTSTRUCT tvis;
    HTREEITEM hRoot, hParent;
+   WNDCLASSA wc = {0};
 
    if( s_hProjWnd && IsWindow(s_hProjWnd) ) {
       SetWindowPos(s_hProjWnd,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE);
+      ShowWindow(s_hProjWnd, SW_SHOW);
       return;
+   }
+
+   if( !bReg ) {
+      wc.lpfnWndProc = ProjInsWndProc;
+      wc.hInstance = GetModuleHandle(NULL);
+      wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+      wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
+      wc.lpszClassName = "HbProjInspector";
+      RegisterClassA(&wc);
+      bReg = TRUE;
    }
 
    hOwner = GetActiveWindow();
    GetWindowRect(hOwner,&rc);
 
    s_hProjWnd = CreateWindowExA(WS_EX_TOOLWINDOW,
-      "STATIC","Project Inspector",
+      "HbProjInspector","Project Inspector",
       WS_POPUP|WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_VISIBLE,
       rc.right-260, rc.top+80, 250, 400,
       NULL,NULL,GetModuleHandle(NULL),NULL);
