@@ -424,6 +424,9 @@ static LRESULT CALLBACK InsWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                lviCheck.mask = LVIF_PARAM;
                lviCheck.iItem = pe->iItem;
                SendMessageA( d->hEventList, LVM_GETITEMA, 0, (LPARAM) &lviCheck );
+               { FILE*f=fopen("c:\\HarbourBuilder\\inspector_trace.log","a");
+                 if(f){fprintf(f,"EventList NM_CLICK: iItem=%d lParam=%d\n",
+                   pe->iItem,(int)lviCheck.lParam);fclose(f);} }
 
                /* If it's a category row (lParam=1), toggle visibility of following event rows */
                if( lviCheck.lParam == 1 )
