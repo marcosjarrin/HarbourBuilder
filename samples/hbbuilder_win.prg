@@ -3067,8 +3067,6 @@ static const char * s_commands[] = {
    "ITEMS", "CHECKED", "DEFAULT", "CANCEL", "OF", "VAR", "ACTION",
    "TOOLBAR", "SEPARATOR", "TOOLTIP", "MENUBAR", "POPUP", "MENUITEM", "MENUSEPARATOR",
    "PALETTE", "REQUEST", "ACCEL",
-   "CLASS", "ENDCLASS", "METHOD", "DATA", "FROM", "INHERIT",
-   "PROCEDURE", "FUNCTION",
    NULL
 };
 
@@ -3191,6 +3189,15 @@ static void HighlightCode( HWND hEdit )
          i++;
          while( i < nLen && buf[i] != '.' && IsWordChar(buf[i]) ) i++;
          if( i < nLen && buf[i] == '.' ) { i++; SetRichColor( hEdit, start, i, RGB(198,120,221), FALSE ); }
+         continue;
+      }
+
+      /* Numbers: 123, 0x1A, etc. */
+      if( buf[i] >= '0' && buf[i] <= '9' )
+      {
+         ws = i;
+         while( i < nLen && ((buf[i]>='0'&&buf[i]<='9')||buf[i]=='.') ) i++;
+         SetRichColor( hEdit, ws, i, RGB(181,206,168), FALSE ); /* light green for numbers */
          continue;
       }
 
