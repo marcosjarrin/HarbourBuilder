@@ -41,6 +41,11 @@ function Main()
    // Check if Harbour and BCC are installed
    CheckHarbourInstall()
 
+   // Auto-generate palette icons if they don't exist yet
+   if ! File( HB_DirBase() + "..\resources\palette_new.bmp" )
+      W32_GeneratePaletteIcons( .T. )  // silent mode
+   endif
+
    nScreenW := W32_GetScreenWidth()
    nScreenH := W32_GetScreenHeight()
    cCurrentFile := ""
@@ -128,7 +133,7 @@ function Main()
    MENUITEM "&Editor Colors..." OF oTools ACTION ShowEditorSettings()
    MENUITEM "&Environment Options..." OF oTools ACTION MsgInfo( "Options" )
    MENUSEPARATOR OF oTools
-   MENUITEM "&Generate Palette Icons" OF oTools ACTION W32_GeneratePaletteIcons()
+   MENUITEM "&Generate Palette Icons" OF oTools ACTION W32_GeneratePaletteIcons( .F. )
    MENUSEPARATOR OF oTools
    MENUITEM "&AI Assistant..."        OF oTools ACTION ShowAIAssistant()
 
@@ -2715,11 +2720,15 @@ HB_FUNC( W32_GENERATEPALETTEICONS )
    if(fp) {
       fwrite(&bf,sizeof(bf),1,fp); fwrite(&bi,sizeof(bi),1,fp);
       fwrite(pB,ds,1,fp); fclose(fp);
+      { FILE*fl=fopen("c:\\HarbourBuilder\\palette_gen_trace.log","a");
+        if(fl){fprintf(fl,"Generated: %s (%d icons)\n",szPath,IC);fclose(fl);} }
+      if( !hb_parl(1) ) /* not silent */
       { char msg[300]; sprintf(msg,"Generated: %s\n\n%d icons, %dx%d pixels\n\nRename to palette.bmp to use.",
          szPath,IC,IS,IS);
         MessageBoxA(NULL,msg,"Palette Icons Generated",MB_OK|MB_ICONINFORMATION); }
    } else {
-      MessageBoxA(NULL,"Error creating file!","Error",MB_OK|MB_ICONERROR);
+      if( !hb_parl(1) )
+         MessageBoxA(NULL,"Error creating file!","Error",MB_OK|MB_ICONERROR);
    }
    SelectObject(hM,hO); DeleteObject(hB); DeleteDC(hM); ReleaseDC(NULL,hS);
 }
