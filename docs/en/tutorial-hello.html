@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tutorial: Hello World - HarbourBuilder Documentation</title>
+  <link rel="stylesheet" href="../assets/css/docs.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <a class="logo" href="index.html">
+    <span>HB</span> HarbourBuilder Docs
+  </a>
+  <nav>
+    <input class="search-box" type="text" placeholder="Search docs..." oninput="doSearch(this.value)">
+    <button class="lang-btn active">EN</button>
+    <a class="lang-btn" href="../es/index.html">ES</a>
+    <a class="lang-btn" href="../pt/index.html">PT</a>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9788;</button>
+  </nav>
+</div>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="nav-section">
+    <h3>Getting Started</h3>
+    <a href="index.html">Overview</a>
+    <a href="quickstart.html">Quick Start</a>
+    <a href="installation.html">Installation</a>
+    <a href="architecture.html">Architecture</a>
+  </div>
+  <div class="nav-section">
+    <h3>Component Palette</h3>
+    <a href="controls-standard.html">Standard (11)</a>
+    <a href="controls-additional.html">Additional (10)</a>
+    <a href="controls-native.html">Win32 / Cocoa / GTK3 (9)</a>
+    <a href="controls-system.html">System (2)</a>
+    <a href="controls-dialogs.html">Dialogs (6)</a>
+    <a href="controls-database.html">Data Access (9)</a>
+    <a href="controls-internet.html">Internet (9)</a>
+    <a href="controls-threading.html">Threading (8)</a>
+    <a href="controls-ai.html">AI (7)</a>
+    <a href="controls-erp.html">ERP / Business (12)</a>
+  </div>
+  <div class="nav-section">
+    <h3>IDE Features</h3>
+    <a href="form-designer.html">Form Designer</a>
+    <a href="object-inspector.html">Object Inspector</a>
+    <a href="code-editor.html">Code Editor</a>
+    <a href="two-way-tools.html">Two-Way Tools</a>
+    <a href="debugger.html">Debugger</a>
+    <a href="ai-assistant.html">AI Assistant</a>
+    <a href="build-run.html">Build &amp; Run</a>
+  </div>
+  <div class="nav-section">
+    <h3>Tutorials</h3>
+    <a href="tutorial-hello.html" class="active">Hello World</a>
+    <a href="tutorial-forms.html">Working with Forms</a>
+    <a href="tutorial-events.html">Event Handling</a>
+    <a href="tutorial-database.html">Database CRUD</a>
+    <a href="tutorial-webserver.html">Web Server</a>
+    <a href="tutorial-ai.html">AI Integration</a>
+    <a href="tutorial-transformer.html">Transformer</a>
+  </div>
+  <div class="nav-section">
+    <h3>Reference</h3>
+    <a href="ref-properties.html">Properties A-Z</a>
+    <a href="ref-events.html">Events A-Z</a>
+    <a href="ref-methods.html">Methods A-Z</a>
+    <a href="ref-commands.html">xBase Commands</a>
+    <a href="ref-functions.html">HB_FUNC Bridge</a>
+  </div>
+  <div class="nav-section">
+    <h3>Platforms</h3>
+    <a href="platform-windows.html">Windows</a>
+    <a href="platform-macos.html">macOS</a>
+    <a href="platform-linux.html">Linux</a>
+    <a href="platform-android.html">Android <span class="badge planned">Planned</span></a>
+    <a href="platform-ios.html">iOS <span class="badge planned">Planned</span></a>
+  </div>
+</div>
+
+<!-- Content -->
+<div class="content">
+
+<div class="breadcrumbs">
+  <a href="index.html">Docs</a> <span>/</span> Tutorials <span>/</span> Hello World
+</div>
+
+<h1>Tutorial: Hello World</h1>
+<p>In this tutorial you will build your very first HarbourBuilder application from scratch &mdash; a simple
+window with a button that displays a greeting. By the end, you will understand the basic project
+workflow: create, design, code, build, and run.</p>
+
+<h2>Step 1: Create a New Project</h2>
+<ol>
+  <li>Launch <strong>HarbourBuilder</strong>.</li>
+  <li>Select <strong>File &rarr; New Project</strong> from the menu bar.</li>
+  <li>In the New Project dialog, choose a folder (e.g. <code>C:\Projects\HelloWorld</code>) and enter the project name <code>HelloWorld</code>.</li>
+  <li>Click <strong>OK</strong>. The IDE creates a <code>HelloWorld.hbp</code> project file and a <code>main.prg</code> source file with a starter template.</li>
+</ol>
+
+<!-- Screenshot placeholder: IDE with the empty project just created, showing Project Manager on the left -->
+
+<div class="info-box tip">
+  <strong>Project folder structure</strong>
+  <p>HarbourBuilder creates a clean folder with your <code>.hbp</code> project file and a <code>main.prg</code> source.
+  All compiled output goes into a <code>build/</code> subfolder that you can safely add to <code>.gitignore</code>.</p>
+</div>
+
+<h2>Step 2: Open the Form Designer</h2>
+<ol>
+  <li>In the <strong>Project Manager</strong> panel, double-click <code>main.prg</code>.</li>
+  <li>The <strong>Form Designer</strong> opens showing an empty form titled "My First App".</li>
+  <li>The <strong>Object Inspector</strong> on the left displays the form's properties.</li>
+  <li>Change the <code>cTitle</code> property to <code>"Hello World"</code> and press Enter &mdash; the form title bar updates immediately.</li>
+</ol>
+
+<!-- Screenshot placeholder: Form Designer with empty form, Object Inspector visible on the left -->
+
+<h2>Step 3: Add a Button</h2>
+<ol>
+  <li>Click the <strong>Standard</strong> tab in the <strong>Component Palette</strong> at the top of the IDE.</li>
+  <li>Click the <strong>Button</strong> icon in the palette.</li>
+  <li>Click on the form surface near the center &mdash; a button appears.</li>
+  <li>In the Object Inspector, set the button's <code>cPrompt</code> property to <code>"Say Hello"</code>.</li>
+  <li>Optionally adjust the <code>nTop</code>, <code>nLeft</code>, <code>nWidth</code>, and <code>nHeight</code> properties to position and size the button.</li>
+</ol>
+
+<!-- Screenshot placeholder: Form Designer with the button placed on the form, Object Inspector showing button properties -->
+
+<h2>Step 4: Add a Label</h2>
+<ol>
+  <li>From the <strong>Standard</strong> palette tab, click the <strong>Label</strong> icon.</li>
+  <li>Click on the form above the button to place the label.</li>
+  <li>Set the label's <code>cValue</code> property to <code>"Click the button below!"</code>.</li>
+  <li>Set <code>nWidth</code> to <code>300</code> so the text fits comfortably.</li>
+</ol>
+
+<h2>Step 5: Set the OnClick Event</h2>
+<ol>
+  <li>Select the button on the form (click it once).</li>
+  <li>In the Object Inspector, switch to the <strong>Events</strong> tab.</li>
+  <li>Double-click the <code>OnClick</code> event row. The IDE switches to the Code Editor and creates a handler stub.</li>
+  <li>Fill in the handler so it updates the label text:</li>
+</ol>
+
+<pre>oBtn:<span class="fn">OnClick</span> := { || oLabel:<span class="fn">SetValue</span>( <span class="st">"Hello from HarbourBuilder!"</span> ) }</pre>
+
+<div class="info-box tip">
+  <strong>Code blocks vs. function calls</strong>
+  <p>For simple one-liners, an inline code block <code>{ || ... }</code> is perfect. For more complex logic,
+  call a separate <code>static function</code> from the block. See the <a href="tutorial-events.html">Event Handling</a> tutorial for details.</p>
+</div>
+
+<h2>Step 6: Build and Run</h2>
+<ol>
+  <li>Press <strong>F9</strong> (or select <strong>Run &rarr; Build &amp; Run</strong>).</li>
+  <li>Watch the <strong>Messages</strong> panel at the bottom &mdash; it shows preprocessing, compiling, linking, and launching steps.</li>
+  <li>Your application window appears. Click the <strong>"Say Hello"</strong> button.</li>
+  <li>The label text changes to <strong>"Hello from HarbourBuilder!"</strong>.</li>
+</ol>
+
+<!-- Screenshot placeholder: The running Hello World application with the label showing the greeting after clicking the button -->
+
+<h2>Full Code Listing</h2>
+<p>Here is the complete <code>main.prg</code> for the Hello World application:</p>
+
+<pre><span class="pp">#include</span> <span class="st">"hbbuilder.ch"</span>
+
+<span class="kw">function</span> <span class="fn">Main</span>()
+
+   <span class="kw">local</span> oForm, oBtn, oLabel
+
+   <span class="cmd">DEFINE FORM</span> oForm <span class="cmd">TITLE</span> <span class="st">"Hello World"</span> ;
+      <span class="cmd">SIZE</span> <span class="nb">640</span>, <span class="nb">480</span> <span class="cmd">FONT</span> <span class="st">"Segoe UI"</span>, <span class="nb">10</span>
+
+   @ <span class="nb">30</span>, <span class="nb">50</span> <span class="cmd">LABEL</span> oLabel <span class="cmd">VALUE</span> <span class="st">"Click the button below!"</span> ;
+      <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">300</span>, <span class="nb">24</span>
+
+   @ <span class="nb">70</span>, <span class="nb">50</span> <span class="cmd">BUTTON</span> oBtn <span class="cmd">PROMPT</span> <span class="st">"Say Hello"</span> ;
+      <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">120</span>, <span class="nb">32</span> ;
+      <span class="cmd">ACTION</span> oLabel:<span class="fn">SetValue</span>( <span class="st">"Hello from HarbourBuilder!"</span> )
+
+   <span class="cmd">ACTIVATE FORM</span> oForm <span class="cmd">CENTERED</span>
+
+<span class="kw">return</span> <span class="kw">nil</span></pre>
+
+<h2>What You Learned</h2>
+<ul>
+  <li>How to create a new HarbourBuilder project.</li>
+  <li>How to use the Form Designer to place controls visually.</li>
+  <li>How to set properties via the Object Inspector.</li>
+  <li>How to wire up an <code>OnClick</code> event handler.</li>
+  <li>How to build and run your application with <strong>F9</strong>.</li>
+</ul>
+
+<div class="info-box tip">
+  <strong>Next step</strong>
+  <p>Ready for more? Continue to the <a href="tutorial-forms.html">Working with Forms</a> tutorial to learn
+  how to create multi-form applications with modal dialogs and data passing between forms.</p>
+</div>
+
+</div>
+
+<script src="../assets/js/docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tutorial: Event Handling - HarbourBuilder Documentation</title>
+  <link rel="stylesheet" href="../assets/css/docs.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <a class="logo" href="index.html">
+    <span>HB</span> HarbourBuilder Docs
+  </a>
+  <nav>
+    <input class="search-box" type="text" placeholder="Search docs..." oninput="doSearch(this.value)">
+    <button class="lang-btn active">EN</button>
+    <a class="lang-btn" href="../es/index.html">ES</a>
+    <a class="lang-btn" href="../pt/index.html">PT</a>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9788;</button>
+  </nav>
+</div>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="nav-section">
+    <h3>Getting Started</h3>
+    <a href="index.html">Overview</a>
+    <a href="quickstart.html">Quick Start</a>
+    <a href="installation.html">Installation</a>
+    <a href="architecture.html">Architecture</a>
+  </div>
+  <div class="nav-section">
+    <h3>Component Palette</h3>
+    <a href="controls-standard.html">Standard (11)</a>
+    <a href="controls-additional.html">Additional (10)</a>
+    <a href="controls-native.html">Win32 / Cocoa / GTK3 (9)</a>
+    <a href="controls-system.html">System (2)</a>
+    <a href="controls-dialogs.html">Dialogs (6)</a>
+    <a href="controls-database.html">Data Access (9)</a>
+    <a href="controls-internet.html">Internet (9)</a>
+    <a href="controls-threading.html">Threading (8)</a>
+    <a href="controls-ai.html">AI (7)</a>
+    <a href="controls-erp.html">ERP / Business (12)</a>
+  </div>
+  <div class="nav-section">
+    <h3>IDE Features</h3>
+    <a href="form-designer.html">Form Designer</a>
+    <a href="object-inspector.html">Object Inspector</a>
+    <a href="code-editor.html">Code Editor</a>
+    <a href="two-way-tools.html">Two-Way Tools</a>
+    <a href="debugger.html">Debugger</a>
+    <a href="ai-assistant.html">AI Assistant</a>
+    <a href="build-run.html">Build &amp; Run</a>
+  </div>
+  <div class="nav-section">
+    <h3>Tutorials</h3>
+    <a href="tutorial-hello.html">Hello World</a>
+    <a href="tutorial-forms.html">Working with Forms</a>
+    <a href="tutorial-events.html" class="active">Event Handling</a>
+    <a href="tutorial-database.html">Database CRUD</a>
+    <a href="tutorial-webserver.html">Web Server</a>
+    <a href="tutorial-ai.html">AI Integration</a>
+    <a href="tutorial-transformer.html">Transformer</a>
+  </div>
+  <div class="nav-section">
+    <h3>Reference</h3>
+    <a href="ref-properties.html">Properties A-Z</a>
+    <a href="ref-events.html">Events A-Z</a>
+    <a href="ref-methods.html">Methods A-Z</a>
+    <a href="ref-commands.html">xBase Commands</a>
+    <a href="ref-functions.html">HB_FUNC Bridge</a>
+  </div>
+  <div class="nav-section">
+    <h3>Platforms</h3>
+    <a href="platform-windows.html">Windows</a>
+    <a href="platform-macos.html">macOS</a>
+    <a href="platform-linux.html">Linux</a>
+    <a href="platform-android.html">Android <span class="badge planned">Planned</span></a>
+    <a href="platform-ios.html">iOS <span class="badge planned">Planned</span></a>
+  </div>
+</div>
+
+<!-- Content -->
+<div class="content">
+
+<div class="breadcrumbs">
+  <a href="index.html">Docs</a> <span>/</span> Tutorials <span>/</span> Event Handling
+</div>
+
+<h1>Tutorial: Event Handling</h1>
+<p>Events are the backbone of interactive applications. Every time a user clicks a button, types
+a key, resizes a window, or closes a form, HarbourBuilder fires an event that your code can
+handle. This tutorial covers all the major event types and the different ways to respond to them.</p>
+
+<h2>Step 1: Understanding Events in HarbourBuilder</h2>
+<p>Every HarbourBuilder control exposes a set of event properties (e.g. <code>OnClick</code>, <code>OnChange</code>).
+You assign a <strong>code block</strong> or a <strong>method reference</strong> to these properties. When the event
+fires, HarbourBuilder executes your handler.</p>
+
+<div class="mermaid">
+graph LR
+    A["User Action<br/>(click, key, resize)"] --> B["OS Message<br/>WM_COMMAND etc."]
+    B --> C["HarbourBuilder<br/>Event Dispatcher"]
+    C --> D["Your Handler<br/>Code Block / Method"]
+    style A fill:#58a6ff,stroke:#388bfd,color:#0d1117
+    style B fill:#d2a8ff,stroke:#bc8cff,color:#0d1117
+    style C fill:#3fb950,stroke:#2ea043,color:#0d1117
+    style D fill:#f0883e,stroke:#d18616,color:#0d1117
+</div>
+
+<h2>Step 2: Generating Event Handlers via the Object Inspector</h2>
+<ol>
+  <li>Select a control on the form (e.g. a Button).</li>
+  <li>In the Object Inspector, switch to the <strong>Events</strong> tab.</li>
+  <li><strong>Double-click</strong> the event name (e.g. <code>OnClick</code>).</li>
+  <li>The IDE automatically:
+    <ul>
+      <li>Creates a <code>static function</code> stub in your source file.</li>
+      <li>Assigns the code block to call that function.</li>
+      <li>Jumps the cursor to the new function body so you can start coding.</li>
+    </ul>
+  </li>
+</ol>
+
+<div class="info-box tip">
+  <strong>Double-click is the fastest way</strong>
+  <p>Double-clicking an event in the Object Inspector is the recommended workflow. It generates
+  properly named handlers (e.g. <code>OnBtnSaveClick</code>) and wires up the code block automatically.</p>
+</div>
+
+<h2>Step 3: OnClick &mdash; Button and Control Clicks</h2>
+<p>The most common event. Fires when the user clicks a button, label, image, or any clickable control.</p>
+
+<p><strong>Inline code block (simple logic):</strong></p>
+<pre>oBtn:<span class="fn">OnClick</span> := { || MsgInfo( <span class="st">"Button was clicked!"</span> ) }</pre>
+
+<p><strong>Calling a separate function (complex logic):</strong></p>
+<pre>oBtn:<span class="fn">OnClick</span> := { || <span class="fn">OnBtnSaveClick</span>( oForm, oGet ) }
+
+<span class="kw">static function</span> <span class="fn">OnBtnSaveClick</span>( oForm, oGet )
+
+   <span class="kw">local</span> cValue := oGet:<span class="fn">GetValue</span>()
+
+   <span class="kw">if</span> Empty( cValue )
+      MsgAlert( <span class="st">"Please enter a value."</span> )
+      <span class="kw">return</span> <span class="kw">nil</span>
+   <span class="kw">endif</span>
+
+   MsgInfo( <span class="st">"Saved: "</span> + cValue )
+   oForm:<span class="fn">SetTitle</span>( <span class="st">"Saved!"</span> )
+
+<span class="kw">return</span> <span class="kw">nil</span></pre>
+
+<h2>Step 4: OnChange &mdash; Value Changes</h2>
+<p>Fires whenever the value of an input control changes. Useful for TextBox (<code>TGet</code>), ComboBox,
+CheckBox, and Spinner controls.</p>
+
+<pre>oGetSearch:<span class="fn">OnChange</span> := { || <span class="fn">OnSearchChange</span>( oGetSearch, oListBox ) }
+
+<span class="kw">static function</span> <span class="fn">OnSearchChange</span>( oGet, oList )
+
+   <span class="kw">local</span> cFilter := oGet:<span class="fn">GetValue</span>()
+
+   oList:<span class="fn">Filter</span>( { |cItem| Upper( cFilter ) $ Upper( cItem ) } )
+
+<span class="kw">return</span> <span class="kw">nil</span></pre>
+
+<div class="info-box tip">
+  <strong>OnChange fires on every keystroke</strong>
+  <p>For TextBox controls, <code>OnChange</code> fires after each character typed. If you are doing expensive
+  operations (like database queries), consider using a <code>TTimer</code> to debounce the input.</p>
+</div>
+
+<h2>Step 5: OnKeyDown &mdash; Keyboard Input</h2>
+<p>Fires when a key is pressed while the control has focus. The handler receives the key code
+and modifier flags as parameters.</p>
+
+<pre>oGet:<span class="fn">OnKeyDown</span> := { |nKey, nFlags| <span class="fn">OnGetKeyDown</span>( nKey, nFlags, oGet ) }
+
+<span class="kw">static function</span> <span class="fn">OnGetKeyDown</span>( nKey, nFlags, oGet )
+
+   <span class="kw">do case</span>
+   <span class="kw">case</span> nKey == VK_RETURN
+      MsgInfo( <span class="st">"Enter pressed! Value: "</span> + oGet:<span class="fn">GetValue</span>() )
+
+   <span class="kw">case</span> nKey == VK_ESCAPE
+      oGet:<span class="fn">SetValue</span>( <span class="st">""</span> )
+
+   <span class="kw">case</span> nKey == VK_F1
+      MsgInfo( <span class="st">"Help: type a value and press Enter."</span> )
+
+   <span class="kw">endcase</span>
+
+<span class="kw">return</span> <span class="kw">nil</span></pre>
+
+<p>Common key constants: <code>VK_RETURN</code>, <code>VK_ESCAPE</code>, <code>VK_TAB</code>, <code>VK_DELETE</code>,
+<code>VK_F1</code> through <code>VK_F12</code>, <code>VK_UP</code>, <code>VK_DOWN</code>, <code>VK_LEFT</code>, <code>VK_RIGHT</code>.</p>
+
+<h2>Step 6: OnResize &mdash; Form and Control Resizing</h2>
+<p>Fires when the user resizes the form. Use this to reposition or resize controls dynamically
+for a responsive layout.</p>
+
+<pre>oForm:<span class="fn">OnResize</span> := { || <span class="fn">OnFormResize</span>( oForm, oMemo, oStatusBar ) }
+
+<span class="kw">static function</span> <span class="fn">OnFormResize</span>( oForm, oMemo, oStatusBar )
+
+   <span class="kw">local</span> nW := oForm:<span class="fn">nWidth</span>
+   <span class="kw">local</span> nH := oForm:<span class="fn">nHeight</span>
+
+   <span class="cm">// Make the memo fill the form with a 10-pixel margin</span>
+   oMemo:<span class="fn">SetSize</span>( nW - <span class="nb">20</span>, nH - <span class="nb">80</span> )
+
+   <span class="cm">// Keep status bar at the bottom</span>
+   oStatusBar:<span class="fn">SetPos</span>( nH - <span class="nb">30</span>, <span class="nb">0</span> )
+   oStatusBar:<span class="fn">SetSize</span>( nW, <span class="nb">30</span> )
+
+<span class="kw">return</span> <span class="kw">nil</span></pre>
+
+<h2>Step 7: OnClose &mdash; Form Closing</h2>
+<p>Fires when the user tries to close the form (clicking the X button, pressing Alt+F4, or calling
+<code>Close()</code>). Return <code>.F.</code> from the handler to <strong>prevent</strong> the form from closing &mdash; useful for
+unsaved-changes prompts.</p>
+
+<pre>oForm:<span class="fn">OnClose</span> := { || <span class="fn">OnFormClose</span>( oForm ) }
+
+<span class="kw">static function</span> <span class="fn">OnFormClose</span>( oForm )
+
+   <span class="kw">local</span> nAnswer
+
+   <span class="kw">if</span> lDataModified
+      nAnswer := MsgYesNoCancel( <span class="st">"Save changes before closing?"</span> )
+
+      <span class="kw">do case</span>
+      <span class="kw">case</span> nAnswer == <span class="nb">1</span>   <span class="cm">// Yes</span>
+         <span class="fn">SaveData</span>()
+         <span class="kw">return</span> .T.
+
+      <span class="kw">case</span> nAnswer == <span class="nb">2</span>   <span class="cm">// No</span>
+         <span class="kw">return</span> .T.
+
+      <span class="kw">case</span> nAnswer == <span class="nb">3</span>   <span class="cm">// Cancel</span>
+         <span class="kw">return</span> .F.         <span class="cm">// Prevent closing</span>
+
+      <span class="kw">endcase</span>
+   <span class="kw">endif</span>
+
+<span class="kw">return</span> .T.</pre>
+
+<div class="info-box tip">
+  <strong>Returning .F. prevents closing</strong>
+  <p>This is a powerful pattern for data-entry forms. Always give the user a way to force-close
+  (e.g. the Cancel option) so they are never trapped in a form they cannot exit.</p>
+</div>
+
+<h2>Event Parameters Summary</h2>
+<table style="width:100%; border-collapse:collapse; margin:1em 0;">
+  <tr style="border-bottom:1px solid #444;">
+    <th style="text-align:left; padding:8px;">Event</th>
+    <th style="text-align:left; padding:8px;">Parameters</th>
+    <th style="text-align:left; padding:8px;">Return</th>
+    <th style="text-align:left; padding:8px;">Controls</th>
+  </tr>
+  <tr style="border-bottom:1px solid #333;">
+    <td style="padding:8px;"><code>OnClick</code></td>
+    <td style="padding:8px;">(none)</td>
+    <td style="padding:8px;">ignored</td>
+    <td style="padding:8px;">Button, Label, Image, Panel</td>
+  </tr>
+  <tr style="border-bottom:1px solid #333;">
+    <td style="padding:8px;"><code>OnChange</code></td>
+    <td style="padding:8px;">(none)</td>
+    <td style="padding:8px;">ignored</td>
+    <td style="padding:8px;">TGet, ComboBox, CheckBox, Spinner</td>
+  </tr>
+  <tr style="border-bottom:1px solid #333;">
+    <td style="padding:8px;"><code>OnKeyDown</code></td>
+    <td style="padding:8px;"><code>nKey</code>, <code>nFlags</code></td>
+    <td style="padding:8px;">ignored</td>
+    <td style="padding:8px;">All focusable controls</td>
+  </tr>
+  <tr style="border-bottom:1px solid #333;">
+    <td style="padding:8px;"><code>OnResize</code></td>
+    <td style="padding:8px;">(none)</td>
+    <td style="padding:8px;">ignored</td>
+    <td style="padding:8px;">TForm</td>
+  </tr>
+  <tr>
+    <td style="padding:8px;"><code>OnClose</code></td>
+    <td style="padding:8px;">(none)</td>
+    <td style="padding:8px;"><code>.T.</code> allow, <code>.F.</code> prevent</td>
+    <td style="padding:8px;">TForm</td>
+  </tr>
+</table>
+
+<h2>Code Block vs. Method Handler</h2>
+<p>HarbourBuilder supports two styles for event handlers:</p>
+
+<p><strong>Code block</strong> &mdash; best for short, inline logic:</p>
+<pre>oBtn:<span class="fn">OnClick</span> := { || oLabel:<span class="fn">SetValue</span>( Time() ) }</pre>
+
+<p><strong>Method handler</strong> &mdash; best for complex logic that needs its own function:</p>
+<pre>oBtn:<span class="fn">OnClick</span> := { || <span class="fn">OnBtnClick</span>( oForm ) }
+
+<span class="kw">static function</span> <span class="fn">OnBtnClick</span>( oForm )
+   <span class="cm">// Complex logic here: database calls, validation, etc.</span>
+   ...
+<span class="kw">return</span> <span class="kw">nil</span></pre>
+
+<div class="info-box tip">
+  <strong>Rule of thumb</strong>
+  <p>If the handler is more than one expression, use a separate function. It keeps your form
+  definition clean and makes the logic easier to debug and test.</p>
+</div>
+
+<div class="info-box tip">
+  <strong>Next step</strong>
+  <p>Now that you understand events, continue to the <a href="tutorial-database.html">Database CRUD</a>
+  tutorial to build a data-driven application with SQLite.</p>
+</div>
+
+</div>
+
+<script src="../assets/js/docs.js"></script>
+</body>
+</html>

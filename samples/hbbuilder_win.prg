@@ -50,7 +50,7 @@ function Main()
    nInsW    := Int( nScreenW * 0.18 )        // ~18% of screen width
 
    // === Window 1: Main Bar (full screen width) ===
-   DEFINE FORM oIDE TITLE "HbBuilder" ;
+   DEFINE FORM oIDE TITLE "HbBuilder 1.0 - Visual IDE for Harbour" ;
       SIZE nScreenW, nBarH FONT "Segoe UI", 9 APPBAR
 
    UI_FormSetPos( oIDE:hCpp, 0, 0 )
@@ -3003,6 +3003,117 @@ typedef struct {
    const char * lpstrText;
 } FINDTEXTINFO;
 
+/* ======================================================================
+ * Auto-completion popup
+ * ====================================================================== */
+
+static const char * s_hbKeywords[] = {
+   "function", "procedure", "return", "local", "static", "private", "public",
+   "if", "else", "elseif", "endif", "do", "while", "enddo", "for", "next",
+   "class", "endclass", "method", "data", "access", "assign",
+   "switch", "case", "otherwise", "endswitch", "endcase",
+   "begin", "end", "exit", "loop", "nil", "self", "with",
+   NULL
+};
+
+static const char * s_hbFunctions[] = {
+   "MsgInfo(", "MsgYesNo(", "MsgStop(", "MemoRead(", "MemoWrit(",
+   "AllTrim(", "LTrim(", "RTrim(", "Upper(", "Lower(", "Len(",
+   "SubStr(", "At(", "RAt(", "StrTran(", "Replicate(", "Space(",
+   "Val(", "Str(", "HB_ValToStr(", "ValType(", "Type(",
+   "AAdd(", "ASize(", "ADel(", "AIns(", "ASort(", "AScan(", "AEval(",
+   "Array(", "AFill(", "AClone(", "HB_ATokens(",
+   "Date(", "Time(", "Seconds(", "DToC(", "CToD(",
+   "File(", "FOpen(", "FClose(", "FRead(", "FWrite(",
+   "GetEnv(", "HB_DirCreate(", "HB_FNameDir(",
+   "Empty(", "Iif(", "If(", "Max(", "Min(", "Abs(", "Int(", "Round(",
+   "Chr(", "Asc(", "HB_UTF8ToStr(", "HB_StrToUTF8(",
+   "Eval(", "HB_Random(", "HB_CRC32(",
+   NULL
+};
+
+static const char * s_xbaseCommands[] = {
+   "DEFINE FORM", "ACTIVATE FORM", "DEFINE TOOLBAR", "DEFINE PALETTE",
+   "DEFINE MENUBAR", "DEFINE POPUP", "MENUITEM", "MENUSEPARATOR",
+   "BUTTON", "CHECKBOX", "COMBOBOX", "GROUPBOX",
+   "SAY", "GET", "PROMPT", "OF", "SIZE", "FONT", "ACTION",
+   "TITLE", "APPBAR", "CENTERED", "SIZABLE", "TOOLWINDOW",
+   "ITEMS", "CHECKED", "DEFAULT", "CANCEL", "VAR",
+   "TOOLBAR", "SEPARATOR", "TOOLTIP",
+   NULL
+};
+
+static void CE_ShowAutoComplete( CODEEDITOR * ed, const char * prefix )
+{
+   static HWND s_hPopup = NULL;
+   HWND hList;
+   HFONT hFont;
+   RECT rc;
+   POINTL pt;
+   CHARRANGE cr;
+   int i, nMatches = 0, prefLen;
+
+   if( !ed || !ed->hEdit || !prefix || !prefix[0] ) {
+      if( s_hPopup && IsWindow(s_hPopup) ) { DestroyWindow(s_hPopup); s_hPopup = NULL; }
+      return;
+   }
+
+   prefLen = lstrlenA(prefix);
+
+   /* Get cursor position on screen */
+   SendMessage(ed->hEdit, EM_EXGETSEL, 0, (LPARAM)&cr);
+   SendMessage(ed->hEdit, EM_POSFROMCHAR, (WPARAM)&pt, cr.cpMin);
+   { POINT sp; sp.x = pt.x; sp.y = pt.y + 20;
+     ClientToScreen(ed->hEdit, &sp);
+
+     if( s_hPopup && IsWindow(s_hPopup) ) DestroyWindow(s_hPopup);
+
+     s_hPopup = CreateWindowExA(WS_EX_TOOLWINDOW|WS_EX_TOPMOST,
+        "STATIC", NULL, WS_POPUP|WS_VISIBLE|WS_BORDER,
+        sp.x, sp.y, 280, 180,
+        NULL, NULL, GetModuleHandle(NULL), NULL);
+
+     hList = CreateWindowExA(0, "LISTBOX", NULL,
+        WS_CHILD|WS_VISIBLE|WS_VSCROLL|LBS_NOTIFY,
+        0, 0, 280, 180,
+        s_hPopup, (HMENU)950, GetModuleHandle(NULL), NULL);
+
+     hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+     SendMessage(hList, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+     /* Add matching keywords */
+     for( i = 0; s_hbKeywords[i]; i++ )
+        if( _strnicmp(s_hbKeywords[i], prefix, prefLen) == 0 ) {
+           SendMessageA(hList, LB_ADDSTRING, 0, (LPARAM)s_hbKeywords[i]);
+           nMatches++;
+        }
+     /* Add matching functions */
+     for( i = 0; s_hbFunctions[i]; i++ )
+        if( _strnicmp(s_hbFunctions[i], prefix, prefLen) == 0 ) {
+           SendMessageA(hList, LB_ADDSTRING, 0, (LPARAM)s_hbFunctions[i]);
+           nMatches++;
+        }
+     /* Add matching commands */
+     for( i = 0; s_xbaseCommands[i]; i++ )
+        if( _strnicmp(s_xbaseCommands[i], prefix, prefLen) == 0 ) {
+           SendMessageA(hList, LB_ADDSTRING, 0, (LPARAM)s_xbaseCommands[i]);
+           nMatches++;
+        }
+
+     if( nMatches == 0 ) {
+        DestroyWindow(s_hPopup); s_hPopup = NULL;
+     } else {
+        SendMessage(hList, LB_SETCURSEL, 0, 0);
+     }
+   }
+}
+
+static void CE_CloseAutoComplete( void )
+{
+   HWND hPop = FindWindowA(NULL, NULL); /* handled by static var in ShowAutoComplete */
+   /* The popup is managed by s_hPopup static in CE_ShowAutoComplete */
+}
+
 /* Show/hide the find bar */
 static void CE_ShowFindBar( CODEEDITOR * ed, BOOL bShow, BOOL bReplace )
 {
@@ -3169,6 +3280,116 @@ static LRESULT CALLBACK CodeEditSubProc( HWND hWnd, UINT msg, WPARAM wParam, LPA
       }
       if( wParam == VK_F3 ) {
          CE_FindNext(ed, !(GetKeyState(VK_SHIFT) & 0x8000));
+         return 0;
+      }
+
+      /* Ctrl+Space = auto-complete */
+      if( ctrl && wParam == VK_SPACE ) {
+         /* Get word before cursor */
+         CHARRANGE cra;
+         int nPos, nStart;
+         char wordBuf[64] = {0};
+         SendMessage(hWnd, EM_EXGETSEL, 0, (LPARAM)&cra);
+         nPos = cra.cpMin;
+         /* Scan backward for word start */
+         if( nPos > 0 ) {
+            int nLen = GetWindowTextLengthA(hWnd);
+            char * allText = (char*)malloc(nLen+1);
+            GetWindowTextA(hWnd, allText, nLen+1);
+            nStart = nPos - 1;
+            while( nStart > 0 && (IsWordChar(allText[nStart-1])) ) nStart--;
+            if( nPos - nStart > 0 && nPos - nStart < 60 ) {
+               memcpy(wordBuf, allText+nStart, nPos-nStart);
+               wordBuf[nPos-nStart] = 0;
+               CE_ShowAutoComplete(ed, wordBuf);
+            }
+            free(allText);
+         }
+         return 0;
+      }
+
+      /* Ctrl+Shift+[ = fold current block, Ctrl+Shift+] = unfold */
+      if( ctrl && (GetKeyState(VK_SHIFT) & 0x8000) ) {
+         if( wParam == VK_OEM_4 ) { /* [ key */
+            /* Simple fold: hide lines from current to matching end */
+            /* For now, just show a message - full folding needs custom line tracking */
+            return 0;
+         }
+         if( wParam == VK_OEM_6 ) { /* ] key */
+            return 0;
+         }
+      }
+
+      /* Ctrl+G = Go to line */
+      if( ctrl && wParam == 'G' ) {
+         char buf[16] = "";
+         CHARRANGE crg;
+         int nLine;
+         /* Simple input box via a prompt */
+         /* For now, scroll to top as placeholder */
+         crg.cpMin = 0; crg.cpMax = 0;
+         SendMessage(hWnd, EM_EXSETSEL, 0, (LPARAM)&crg);
+         SendMessage(hWnd, EM_SCROLLCARET, 0, 0);
+         return 0;
+      }
+
+      /* Ctrl+/ = toggle line comment */
+      if( ctrl && wParam == VK_OEM_2 ) { /* / key */
+         CHARRANGE crc;
+         int nLine;
+         SendMessage(hWnd, EM_EXGETSEL, 0, (LPARAM)&crc);
+         nLine = (int) SendMessage(hWnd, EM_LINEFROMCHAR, crc.cpMin, 0);
+         /* Get line start */
+         { int lineStart = (int) SendMessage(hWnd, EM_LINEINDEX, nLine, 0);
+           int lineLen = (int) SendMessage(hWnd, EM_LINELENGTH, lineStart, 0);
+           char lineBuf[512] = {0};
+           CHARRANGE sel;
+           if( lineLen > 0 && lineLen < 510 ) {
+              *(WORD*)lineBuf = 510;
+              SendMessageA(hWnd, EM_GETLINE, nLine, (LPARAM)lineBuf);
+              lineBuf[lineLen] = 0;
+              sel.cpMin = lineStart; sel.cpMax = lineStart;
+              SendMessage(hWnd, EM_EXSETSEL, 0, (LPARAM)&sel);
+              if( lineBuf[0] == '/' && lineBuf[1] == '/' ) {
+                 /* Remove comment: select first 3 chars (// + space) */
+                 int rmLen = (lineLen > 2 && lineBuf[2] == ' ') ? 3 : 2;
+                 sel.cpMax = lineStart + rmLen;
+                 SendMessage(hWnd, EM_EXSETSEL, 0, (LPARAM)&sel);
+                 SendMessageA(hWnd, EM_REPLACESEL, TRUE, (LPARAM)"");
+              } else {
+                 /* Add comment */
+                 SendMessageA(hWnd, EM_REPLACESEL, TRUE, (LPARAM)"// ");
+              }
+           }
+         }
+         return 0;
+      }
+
+      /* Ctrl+Shift+D = duplicate line */
+      if( ctrl && (GetKeyState(VK_SHIFT) & 0x8000) && wParam == 'D' ) {
+         CHARRANGE crd;
+         int nLine, lineStart, lineLen;
+         char dupBuf[1024] = {0};
+         SendMessage(hWnd, EM_EXGETSEL, 0, (LPARAM)&crd);
+         nLine = (int) SendMessage(hWnd, EM_LINEFROMCHAR, crd.cpMin, 0);
+         lineStart = (int) SendMessage(hWnd, EM_LINEINDEX, nLine, 0);
+         lineLen = (int) SendMessage(hWnd, EM_LINELENGTH, lineStart, 0);
+         if( lineLen > 0 && lineLen < 1020 ) {
+            *(WORD*)dupBuf = 1020;
+            SendMessageA(hWnd, EM_GETLINE, nLine, (LPARAM)dupBuf);
+            dupBuf[lineLen] = 0;
+            /* Position at end of line */
+            crd.cpMin = lineStart + lineLen;
+            crd.cpMax = lineStart + lineLen;
+            SendMessage(hWnd, EM_EXSETSEL, 0, (LPARAM)&crd);
+            /* Insert newline + duplicate */
+            { char ins[1030];
+              ins[0] = '\r'; ins[1] = '\n';
+              memcpy(ins+2, dupBuf, lineLen);
+              ins[lineLen+2] = 0;
+              SendMessageA(hWnd, EM_REPLACESEL, TRUE, (LPARAM)ins);
+            }
+         }
          return 0;
       }
    }

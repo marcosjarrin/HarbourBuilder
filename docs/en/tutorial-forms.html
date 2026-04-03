@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tutorial: Working with Forms - HarbourBuilder Documentation</title>
+  <link rel="stylesheet" href="../assets/css/docs.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <a class="logo" href="index.html">
+    <span>HB</span> HarbourBuilder Docs
+  </a>
+  <nav>
+    <input class="search-box" type="text" placeholder="Search docs..." oninput="doSearch(this.value)">
+    <button class="lang-btn active">EN</button>
+    <a class="lang-btn" href="../es/index.html">ES</a>
+    <a class="lang-btn" href="../pt/index.html">PT</a>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9788;</button>
+  </nav>
+</div>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="nav-section">
+    <h3>Getting Started</h3>
+    <a href="index.html">Overview</a>
+    <a href="quickstart.html">Quick Start</a>
+    <a href="installation.html">Installation</a>
+    <a href="architecture.html">Architecture</a>
+  </div>
+  <div class="nav-section">
+    <h3>Component Palette</h3>
+    <a href="controls-standard.html">Standard (11)</a>
+    <a href="controls-additional.html">Additional (10)</a>
+    <a href="controls-native.html">Win32 / Cocoa / GTK3 (9)</a>
+    <a href="controls-system.html">System (2)</a>
+    <a href="controls-dialogs.html">Dialogs (6)</a>
+    <a href="controls-database.html">Data Access (9)</a>
+    <a href="controls-internet.html">Internet (9)</a>
+    <a href="controls-threading.html">Threading (8)</a>
+    <a href="controls-ai.html">AI (7)</a>
+    <a href="controls-erp.html">ERP / Business (12)</a>
+  </div>
+  <div class="nav-section">
+    <h3>IDE Features</h3>
+    <a href="form-designer.html">Form Designer</a>
+    <a href="object-inspector.html">Object Inspector</a>
+    <a href="code-editor.html">Code Editor</a>
+    <a href="two-way-tools.html">Two-Way Tools</a>
+    <a href="debugger.html">Debugger</a>
+    <a href="ai-assistant.html">AI Assistant</a>
+    <a href="build-run.html">Build &amp; Run</a>
+  </div>
+  <div class="nav-section">
+    <h3>Tutorials</h3>
+    <a href="tutorial-hello.html">Hello World</a>
+    <a href="tutorial-forms.html" class="active">Working with Forms</a>
+    <a href="tutorial-events.html">Event Handling</a>
+    <a href="tutorial-database.html">Database CRUD</a>
+    <a href="tutorial-webserver.html">Web Server</a>
+    <a href="tutorial-ai.html">AI Integration</a>
+    <a href="tutorial-transformer.html">Transformer</a>
+  </div>
+  <div class="nav-section">
+    <h3>Reference</h3>
+    <a href="ref-properties.html">Properties A-Z</a>
+    <a href="ref-events.html">Events A-Z</a>
+    <a href="ref-methods.html">Methods A-Z</a>
+    <a href="ref-commands.html">xBase Commands</a>
+    <a href="ref-functions.html">HB_FUNC Bridge</a>
+  </div>
+  <div class="nav-section">
+    <h3>Platforms</h3>
+    <a href="platform-windows.html">Windows</a>
+    <a href="platform-macos.html">macOS</a>
+    <a href="platform-linux.html">Linux</a>
+    <a href="platform-android.html">Android <span class="badge planned">Planned</span></a>
+    <a href="platform-ios.html">iOS <span class="badge planned">Planned</span></a>
+  </div>
+</div>
+
+<!-- Content -->
+<div class="content">
+
+<div class="breadcrumbs">
+  <a href="index.html">Docs</a> <span>/</span> Tutorials <span>/</span> Working with Forms
+</div>
+
+<h1>Tutorial: Working with Forms</h1>
+<p>Most real-world applications need more than one window. In this tutorial you will build a
+multi-form project with a main form and a settings dialog. You will learn how to open forms
+modally, pass data between them, and configure common form properties.</p>
+
+<h2>Step 1: Set Up the Project</h2>
+<ol>
+  <li>Create a new project called <code>MultiFormDemo</code> via <strong>File &rarr; New Project</strong>.</li>
+  <li>The IDE creates <code>main.prg</code> with a starter form.</li>
+  <li>We will add a second source file for the settings form in the next step.</li>
+</ol>
+
+<h2>Step 2: Design the Main Form</h2>
+<ol>
+  <li>Open <code>main.prg</code> in the Form Designer.</li>
+  <li>Set the form title to <code>"Multi-Form Demo"</code> and size to <code>700, 500</code>.</li>
+  <li>Add a <strong>Label</strong> at the top to display the current username &mdash; set <code>cValue</code> to <code>"User: (none)"</code>.</li>
+  <li>Add a <strong>Button</strong> with <code>cPrompt</code> set to <code>"Open Settings"</code>.</li>
+</ol>
+
+<p>Your main form code will look like this:</p>
+
+<pre><span class="pp">#include</span> <span class="st">"hbbuilder.ch"</span>
+
+<span class="kw">function</span> <span class="fn">Main</span>()
+
+   <span class="kw">local</span> oForm, oLblUser, oBtnSettings
+
+   <span class="cmd">DEFINE FORM</span> oForm <span class="cmd">TITLE</span> <span class="st">"Multi-Form Demo"</span> ;
+      <span class="cmd">SIZE</span> <span class="nb">700</span>, <span class="nb">500</span> <span class="cmd">FONT</span> <span class="st">"Segoe UI"</span>, <span class="nb">10</span>
+
+   @ <span class="nb">30</span>, <span class="nb">50</span> <span class="cmd">LABEL</span> oLblUser <span class="cmd">VALUE</span> <span class="st">"User: (none)"</span> ;
+      <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">300</span>, <span class="nb">24</span>
+
+   @ <span class="nb">80</span>, <span class="nb">50</span> <span class="cmd">BUTTON</span> oBtnSettings <span class="cmd">PROMPT</span> <span class="st">"Open Settings"</span> ;
+      <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">140</span>, <span class="nb">36</span> ;
+      <span class="cmd">ACTION</span> <span class="fn">OpenSettings</span>( oForm, oLblUser )
+
+   <span class="cmd">ACTIVATE FORM</span> oForm <span class="cmd">CENTERED</span>
+
+<span class="kw">return</span> <span class="kw">nil</span></pre>
+
+<h2>Step 3: Create the Settings Form</h2>
+<ol>
+  <li>Select <strong>File &rarr; New Form</strong> to add a second form to the project. Name it <code>settings.prg</code>.</li>
+  <li>In the Form Designer for <code>settings.prg</code>, set the title to <code>"Settings"</code> and size to <code>400, 300</code>.</li>
+  <li>Add a <strong>Label</strong> with <code>cValue</code> <code>"Your name:"</code> at row 30, col 30.</li>
+  <li>Add a <strong>TextBox</strong> (<code>TGet</code>) next to the label for the user to type their name.</li>
+  <li>Add a <strong>CheckBox</strong> below with <code>cPrompt</code> <code>"Enable dark mode"</code>.</li>
+  <li>Add two buttons: <strong>"OK"</strong> and <strong>"Cancel"</strong> at the bottom.</li>
+</ol>
+
+<h2>Step 4: Implement ShowModal and Data Passing</h2>
+<p>The key technique is to call <code>ShowModal()</code> on the settings form. This blocks the main form
+until the user closes the dialog. After the modal form closes, you read back the values the
+user entered.</p>
+
+<pre><span class="kw">static function</span> <span class="fn">OpenSettings</span>( oMainForm, oLblUser )
+
+   <span class="kw">local</span> oSettings, oGetName, oChkDark, oBtnOK, oBtnCancel
+   <span class="kw">local</span> cName := <span class="st">""</span>, lDark := .F., nResult
+
+   <span class="cmd">DEFINE FORM</span> oSettings <span class="cmd">TITLE</span> <span class="st">"Settings"</span> ;
+      <span class="cmd">SIZE</span> <span class="nb">400</span>, <span class="nb">300</span> <span class="cmd">FONT</span> <span class="st">"Segoe UI"</span>, <span class="nb">10</span> ;
+      <span class="cmd">STYLE</span> <span class="st">"dialog"</span>
+
+   @ <span class="nb">30</span>, <span class="nb">30</span> <span class="cmd">LABEL</span> oLbl <span class="cmd">VALUE</span> <span class="st">"Your name:"</span> ;
+      <span class="cmd">OF</span> oSettings <span class="cmd">SIZE</span> <span class="nb">100</span>, <span class="nb">24</span>
+
+   @ <span class="nb">30</span>, <span class="nb">140</span> <span class="cmd">GET</span> oGetName <span class="cmd">VAR</span> cName ;
+      <span class="cmd">OF</span> oSettings <span class="cmd">SIZE</span> <span class="nb">220</span>, <span class="nb">24</span>
+
+   @ <span class="nb">70</span>, <span class="nb">30</span> <span class="cmd">CHECKBOX</span> oChkDark <span class="cmd">VAR</span> lDark ;
+      <span class="cmd">PROMPT</span> <span class="st">"Enable dark mode"</span> ;
+      <span class="cmd">OF</span> oSettings <span class="cmd">SIZE</span> <span class="nb">200</span>, <span class="nb">24</span>
+
+   @ <span class="nb">220</span>, <span class="nb">180</span> <span class="cmd">BUTTON</span> oBtnOK <span class="cmd">PROMPT</span> <span class="st">"OK"</span> ;
+      <span class="cmd">OF</span> oSettings <span class="cmd">SIZE</span> <span class="nb">90</span>, <span class="nb">32</span> ;
+      <span class="cmd">ACTION</span> ( oSettings:<span class="fn">nModalResult</span> := <span class="nb">1</span>, oSettings:<span class="fn">Close</span>() )
+
+   @ <span class="nb">220</span>, <span class="nb">280</span> <span class="cmd">BUTTON</span> oBtnCancel <span class="cmd">PROMPT</span> <span class="st">"Cancel"</span> ;
+      <span class="cmd">OF</span> oSettings <span class="cmd">SIZE</span> <span class="nb">90</span>, <span class="nb">32</span> ;
+      <span class="cmd">ACTION</span> ( oSettings:<span class="fn">nModalResult</span> := <span class="nb">0</span>, oSettings:<span class="fn">Close</span>() )
+
+   nResult := oSettings:<span class="fn">ShowModal</span>( oMainForm )
+
+   <span class="kw">if</span> nResult == <span class="nb">1</span>
+      oLblUser:<span class="fn">SetValue</span>( <span class="st">"User: "</span> + cName )
+      <span class="kw">if</span> lDark
+         oMainForm:<span class="fn">SetDarkMode</span>( .T. )
+      <span class="kw">else</span>
+         oMainForm:<span class="fn">SetDarkMode</span>( .F. )
+      <span class="kw">endif</span>
+   <span class="kw">endif</span>
+
+<span class="kw">return</span> <span class="kw">nil</span></pre>
+
+<div class="info-box tip">
+  <strong>ShowModal vs. Show</strong>
+  <p>Use <code>ShowModal( oParent )</code> when the user must complete the dialog before returning to the parent.
+  Use <code>Show()</code> for non-blocking windows that the user can switch between freely.</p>
+</div>
+
+<h2>Step 5: Form Properties Reference</h2>
+<p>Here are the most commonly used form properties you can set in the Object Inspector or in code:</p>
+
+<table style="width:100%; border-collapse:collapse; margin:1em 0;">
+  <tr style="border-bottom:1px solid #444;">
+    <th style="text-align:left; padding:8px;">Property</th>
+    <th style="text-align:left; padding:8px;">Type</th>
+    <th style="text-align:left; padding:8px;">Description</th>
+  </tr>
+  <tr style="border-bottom:1px solid #333;">
+    <td style="padding:8px;"><code>cTitle</code></td>
+    <td style="padding:8px;">String</td>
+    <td style="padding:8px;">Text shown in the form's title bar.</td>
+  </tr>
+  <tr style="border-bottom:1px solid #333;">
+    <td style="padding:8px;"><code>nWidth</code> / <code>nHeight</code></td>
+    <td style="padding:8px;">Numeric</td>
+    <td style="padding:8px;">Form dimensions in pixels.</td>
+  </tr>
+  <tr style="border-bottom:1px solid #333;">
+    <td style="padding:8px;"><code>lMaximize</code></td>
+    <td style="padding:8px;">Logical</td>
+    <td style="padding:8px;">Whether the maximize button is enabled.</td>
+  </tr>
+  <tr style="border-bottom:1px solid #333;">
+    <td style="padding:8px;"><code>lMinimize</code></td>
+    <td style="padding:8px;">Logical</td>
+    <td style="padding:8px;">Whether the minimize button is enabled.</td>
+  </tr>
+  <tr style="border-bottom:1px solid #333;">
+    <td style="padding:8px;"><code>lResizable</code></td>
+    <td style="padding:8px;">Logical</td>
+    <td style="padding:8px;">Whether the user can resize the form.</td>
+  </tr>
+  <tr style="border-bottom:1px solid #333;">
+    <td style="padding:8px;"><code>cStyle</code></td>
+    <td style="padding:8px;">String</td>
+    <td style="padding:8px;"><code>"normal"</code>, <code>"dialog"</code>, or <code>"toolwindow"</code>.</td>
+  </tr>
+  <tr>
+    <td style="padding:8px;"><code>nModalResult</code></td>
+    <td style="padding:8px;">Numeric</td>
+    <td style="padding:8px;">Return value after <code>ShowModal()</code>. Set before calling <code>Close()</code>.</td>
+  </tr>
+</table>
+
+<h2>Step 6: Build and Test</h2>
+<ol>
+  <li>Press <strong>F9</strong> to build and run.</li>
+  <li>Click <strong>"Open Settings"</strong> on the main form &mdash; the settings dialog appears modally.</li>
+  <li>Type a name, toggle the checkbox, and click <strong>OK</strong>.</li>
+  <li>The main form label updates to show the name you entered.</li>
+  <li>Open the dialog again and click <strong>Cancel</strong> &mdash; the main form remains unchanged.</li>
+</ol>
+
+<!-- Screenshot placeholder: Main form showing "User: Antonio" after the settings dialog was submitted -->
+
+<h2>Form Lifecycle Flow</h2>
+
+<div class="mermaid">
+graph TD
+    A["Main Form<br/>ACTIVATE FORM CENTERED"] --> B["User clicks<br/>Open Settings"]
+    B --> C["Settings Form<br/>ShowModal( oMainForm )"]
+    C --> D{"User action"}
+    D -->|"OK"| E["nModalResult = 1<br/>Close()"]
+    D -->|"Cancel"| F["nModalResult = 0<br/>Close()"]
+    E --> G["Main form reads<br/>cName and lDark"]
+    F --> H["Main form ignores<br/>dialog values"]
+    style A fill:#58a6ff,stroke:#388bfd,color:#0d1117
+    style C fill:#d2a8ff,stroke:#bc8cff,color:#0d1117
+    style E fill:#3fb950,stroke:#2ea043,color:#0d1117
+    style F fill:#f0883e,stroke:#d18616,color:#0d1117
+</div>
+
+<div class="info-box tip">
+  <strong>Next step</strong>
+  <p>Now that you can work with multiple forms, continue to the <a href="tutorial-events.html">Event Handling</a>
+  tutorial to learn about all the event types available in HarbourBuilder.</p>
+</div>
+
+</div>
+
+<script src="../assets/js/docs.js"></script>
+</body>
+</html>

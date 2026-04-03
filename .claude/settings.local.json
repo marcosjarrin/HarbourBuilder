@@ -67,7 +67,8 @@
       "Bash(cmd:*)",
       "Bash(taskkill //f //im hbbuilder_win.exe)",
       "Bash(sed:*)",
-      "Bash(grep -v \"^$\"o tan)"
+      "Bash(grep -v \"^$\"o tan)",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }
