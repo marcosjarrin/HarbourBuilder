@@ -1386,13 +1386,12 @@ static function ShowProjectInspector()
 
    local aItems := {}, i
 
-   // Build tree items: project root + forms + includes
+   // Build tree items: project root + source files
    AAdd( aItems, "Project1" )
+   AAdd( aItems, "  Project1.prg" )
    for i := 1 to Len( aForms )
       AAdd( aItems, "  " + aForms[i][1] + ".prg" )
    next
-   AAdd( aItems, "  classes.prg" )
-   AAdd( aItems, "  hbbuilder.ch" )
 
    W32_ProjectInspector( aItems )
 
