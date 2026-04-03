@@ -545,9 +545,12 @@ static void InsStartEdit( INSDATA * d, int nLVRow )
    int nReal, nBtnW;
    ENUMDEF * pEnum;
 
+   if( !d ) return;
    if( d->hEdit ) InsEndEdit( d, FALSE );
    if( nLVRow < 0 || nLVRow >= d->nVisible ) return;
    nReal = d->map[nLVRow];
+   if( nReal < 0 || nReal >= d->nRows ) return;
+   if( d->rows[nReal].bIsCat ) return;  /* don't edit category rows */
    d->nEditRow = nLVRow;
    ListView_GetSubItemRect( d->hList, nLVRow, 1, LVIR_LABEL, &rc );
 
@@ -601,8 +604,13 @@ static void InsEndEdit( INSDATA * d, BOOL bApply )
 {
    char szVal[256];
    int nReal;
-   if( !d->hEdit || d->nEditRow < 0 ) return;
+   if( !d || !d->hEdit || d->nEditRow < 0 || d->nEditRow >= d->nVisible ) return;
    nReal = d->map[d->nEditRow];
+   if( nReal < 0 || nReal >= d->nRows ) {
+      if( d->hBtn ) { DestroyWindow(d->hBtn); d->hBtn=NULL; }
+      DestroyWindow(d->hEdit); d->hEdit=NULL; d->nEditRow=-1;
+      return;
+   }
    if( bApply )
    {
       ENUMDEF * pEnum = InsGetEnum( d->rows[nReal].szName );
