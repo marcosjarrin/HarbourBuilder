@@ -79,7 +79,8 @@
       "Bash(curl -s \"https://api.github.com/repos/fpc/Lazarus/contents/images/components\")",
       "Bash(curl -s \"https://api.github.com/repos/fpc/Lazarus/contents/images/menu\")",
       "Bash(curl -s \"https://api.github.com/repos/fpc/Lazarus/contents/images/general\")",
-      "Bash(curl -s \"https://api.github.com/repos/fpc/Lazarus/contents/images\")"
+      "Bash(curl -s \"https://api.github.com/repos/fpc/Lazarus/contents/images\")",
+      "Bash(taskkill:*)"
     ]
   }
 }

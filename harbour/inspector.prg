@@ -1144,22 +1144,26 @@ HB_FUNC( INS_SETONPROPCHANGED )
 static void InsAddEventCat( INSDATA * d, int nRow, const char * szCat )
 {
    LVITEMA lvi = {0};
+   char buf[80];
+   sprintf( buf, " %s", szCat );  /* space + category name */
    lvi.mask = LVIF_TEXT | LVIF_PARAM;
    lvi.iItem = nRow;
    lvi.iSubItem = 0;
-   lvi.pszText = (char *) szCat;
-   lvi.lParam = 1;  /* 1 = category row */
+   lvi.pszText = buf;
+   lvi.lParam = 1;  /* 1 = expanded category */
    SendMessageA( d->hEventList, LVM_INSERTITEMA, 0, (LPARAM) &lvi );
 }
 
-/* Add one event row to the Events ListView */
+/* Add one event row to the Events ListView (indented under category) */
 static void InsAddEvent( INSDATA * d, int nRow, const char * szEvent )
 {
    LVITEMA lvi = {0};
+   char buf[80];
+   sprintf( buf, "  %s", szEvent );  /* indent with 2 spaces */
    lvi.mask = LVIF_TEXT | LVIF_PARAM;
    lvi.iItem = nRow;
    lvi.iSubItem = 0;
-   lvi.pszText = (char *) szEvent;
+   lvi.pszText = buf;
    lvi.lParam = 0;  /* 0 = event row */
    SendMessageA( d->hEventList, LVM_INSERTITEMA, 0, (LPARAM) &lvi );
    lvi.iSubItem = 1;
