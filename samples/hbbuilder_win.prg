@@ -2081,32 +2081,39 @@ HB_FUNC( W32_SELECTFROMLIST )
    SendMessage( hList, LB_SETCURSEL, 0, 0 );
 
    /* Simple modal loop */
-   EnableWindow( GetActiveWindow(), FALSE );
-   while( GetMessage( &msg, NULL, 0, 0 ) )
-   {
-      if( msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE )
-         break;
+   { HWND hOwner = GetWindow(hDlg, GW_OWNER);
+     if( hOwner ) EnableWindow( hOwner, FALSE );
 
-      if( msg.message == WM_COMMAND )
-      {
-         WORD wId = LOWORD(msg.wParam);
-         WORD wNotify = HIWORD(msg.wParam);
+     while( IsWindow(hDlg) && GetMessage( &msg, NULL, 0, 0 ) )
+     {
+        if( msg.message == WM_KEYDOWN && msg.wParam == VK_ESCAPE )
+           break;
 
-         if( wId == IDOK || ( wId == 100 && wNotify == LBN_DBLCLK ) )
-         {
-            nSel = (int) SendMessage( hList, LB_GETCURSEL, 0, 0 );
-            nSel = ( nSel != LB_ERR ) ? nSel + 1 : 0;
-            break;
-         }
-         if( wId == IDCANCEL )
-            break;
-      }
+        /* WM_SYSCOMMAND SC_CLOSE = user clicked X button */
+        if( msg.message == WM_SYSCOMMAND && (msg.wParam & 0xFFF0) == SC_CLOSE )
+           break;
 
-      TranslateMessage( &msg );
-      DispatchMessage( &msg );
+        if( msg.message == WM_COMMAND )
+        {
+           WORD wId = LOWORD(msg.wParam);
+           WORD wNotify = HIWORD(msg.wParam);
+
+           if( wId == IDOK || ( wId == 100 && wNotify == LBN_DBLCLK ) )
+           {
+              nSel = (int) SendMessage( hList, LB_GETCURSEL, 0, 0 );
+              nSel = ( nSel != LB_ERR ) ? nSel + 1 : 0;
+              break;
+           }
+           if( wId == IDCANCEL )
+              break;
+        }
+
+        TranslateMessage( &msg );
+        DispatchMessage( &msg );
+     }
+     if( hOwner ) EnableWindow( hOwner, TRUE );
+     if( IsWindow(hDlg) ) DestroyWindow( hDlg );
    }
-   EnableWindow( GetActiveWindow(), TRUE );
-   DestroyWindow( hDlg );
 
    hb_retni( nSel );
 }
@@ -2685,9 +2692,9 @@ HB_FUNC( W32_ABOUTDIALOG )
    }
 
    hOwner = GetActiveWindow();
-   GetWindowRect( hOwner, &rcOwner );
-   x = rcOwner.left + ( (rcOwner.right - rcOwner.left) - dlgW ) / 2;
-   y = rcOwner.top + ( (rcOwner.bottom - rcOwner.top) - dlgH ) / 2;
+   /* Center on screen */
+   x = ( GetSystemMetrics(SM_CXSCREEN) - dlgW ) / 2;
+   y = ( GetSystemMetrics(SM_CYSCREEN) - dlgH ) / 2;
 
    hDlg = CreateWindowExA( WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
       "HbAboutDlg", HB_ISCHAR(1) ? hb_parc(1) : "About",
