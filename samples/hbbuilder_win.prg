@@ -3210,7 +3210,7 @@ static void HighlightCode( HWND hEdit )
          ws = i;
          while( i < nLen && IsWordChar(buf[i]) ) i++;
          if( IsKeyword( buf + ws, i - ws ) )
-         {  SetRichColor( hEdit, ws, i, RGB(50,150,255), TRUE ); nKeywords++;
+         {  SetRichColor( hEdit, ws, i, RGB(100,160,255), TRUE ); nKeywords++;
             if(nKeywords<=3){FILE*f=fopen("c:\\HarbourBuilder\\syntax_detail.log","a");
               if(f){char w[64]={0};memcpy(w,buf+ws,i-ws>60?60:i-ws);
                 fprintf(f,"KW[%d]: '%s' pos=%d-%d\n",nKeywords,w,ws,i);fclose(f);}} }
