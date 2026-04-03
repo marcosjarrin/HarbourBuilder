@@ -175,9 +175,31 @@ static LRESULT CALLBACK InsBtnProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
 static LRESULT CALLBACK InsEditProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
    INSDATA * d = (INSDATA *) GetPropA( hWnd, "InsData" );
+   if( !d ) return DefWindowProc( hWnd, msg, wParam, lParam );
+
    if( msg == WM_KEYDOWN && wParam == VK_RETURN ) { InsEndEdit( d, TRUE ); return 0; }
    if( msg == WM_KEYDOWN && wParam == VK_ESCAPE ) { InsEndEdit( d, FALSE ); return 0; }
-   if( msg == WM_KILLFOCUS ) { if( d->hBtn && (HWND)wParam == d->hBtn ) return 0; InsEndEdit( d, TRUE ); return 0; }
+
+   /* ComboBox: CBN_SELCHANGE means user picked a value -> apply */
+   if( msg == WM_COMMAND && HIWORD(wParam) == CBN_SELCHANGE )
+   {
+      /* Post a delayed end-edit so the combo finishes its selection */
+      PostMessage( GetParent(hWnd), WM_USER + 200, 0, 0 );
+      return 0;
+   }
+
+   if( msg == WM_KILLFOCUS )
+   {
+      HWND hFocus = (HWND) wParam;
+      /* Don't close if focus goes to our own button */
+      if( d->hBtn && hFocus == d->hBtn ) return 0;
+      /* Don't close if focus goes to a ComboBox dropdown (child of desktop or combo itself) */
+      { char cls[32]; GetClassNameA(hFocus, cls, 32);
+        if( lstrcmpiA(cls, "ComboLBox") == 0 ) return 0; }
+      InsEndEdit( d, TRUE );
+      return 0;
+   }
+
    return CallWindowProc( d->oldEditProc, hWnd, msg, wParam, lParam );
 }
 
@@ -464,6 +486,11 @@ static LRESULT CALLBACK InsWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
          }
          return 0;
       }
+
+      case WM_USER + 200:
+         /* Deferred combo selection end-edit (from InsEditProc CBN_SELCHANGE) */
+         if( d ) InsEndEdit( d, TRUE );
+         return 0;
 
       case WM_CLOSE:
          ShowWindow( hWnd, SW_HIDE );
