@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Additional Controls - HarbourBuilder Docs</title>
+  <link rel="stylesheet" href="../assets/css/docs.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head>
+<body>
+
+<div class="header">
+  <a class="logo" href="index.html"><span>HB</span> HarbourBuilder Docs</a>
+  <nav>
+    <input class="search-box" type="text" placeholder="Search docs..." oninput="doSearch(this.value)">
+    <button class="lang-btn active">EN</button>
+    <a class="lang-btn" href="../es/index.html">ES</a>
+    <a class="lang-btn" href="../pt/index.html">PT</a>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9788;</button>
+  </nav>
+</div>
+
+<div class="sidebar">
+  <div class="nav-section">
+    <h3>Getting Started</h3>
+    <a href="index.html">Overview</a>
+    <a href="quickstart.html">Quick Start</a>
+    <a href="installation.html">Installation</a>
+    <a href="architecture.html">Architecture</a>
+  </div>
+  <div class="nav-section">
+    <h3>Component Palette</h3>
+    <a href="controls-standard.html">Standard (11)</a>
+    <a href="controls-additional.html" class="active">Additional (10)</a>
+    <a href="controls-native.html">Win32 / Cocoa / GTK3 (9)</a>
+    <a href="controls-system.html">System (2)</a>
+    <a href="controls-dialogs.html">Dialogs (6)</a>
+    <a href="controls-database.html">Data Access (9)</a>
+    <a href="controls-datacontrols.html">Data Controls (8)</a>
+    <a href="controls-internet.html">Internet (9)</a>
+    <a href="controls-threading.html">Threading (8)</a>
+    <a href="controls-ai.html">AI (7)</a>
+    <a href="controls-erp.html">ERP / Business (12)</a>
+  </div>
+  <div class="nav-section">
+    <h3>IDE Features</h3>
+    <a href="form-designer.html">Form Designer</a>
+    <a href="code-editor.html">Code Editor</a>
+    <a href="debugger.html">Debugger</a>
+    <a href="ai-assistant.html">AI Assistant</a>
+  </div>
+  <div class="nav-section">
+    <h3>Platforms</h3>
+    <a href="platform-windows.html">Windows</a>
+    <a href="platform-macos.html">macOS</a>
+    <a href="platform-linux.html">Linux</a>
+  </div>
+</div>
+
+<div class="content">
+
+<div class="breadcrumbs">
+  <a href="index.html">Docs</a> <span>/</span>
+  <a href="controls-standard.html">Component Palette</a> <span>/</span> Additional
+</div>
+
+<h1>Additional Controls</h1>
+<p>The Additional tab provides enhanced visual and input controls that extend the standard set with graphics, grids, and specialized editors.</p>
+
+<!-- TBitBtn -->
+<h2 id="bitbtn">TBitBtn <span class="badge new">CT_BITBTN = 12</span></h2>
+<p>A button that displays both a caption and a glyph (bitmap icon). Ideal for toolbars and action buttons.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cText</code></td><td>String</td><td>"BitBtn"</td><td>Button caption</td></tr>
+  <tr><td><code>cGlyph</code></td><td>String</td><td>""</td><td>Path to glyph bitmap image</td></tr>
+  <tr><td><code>nGlyphAlign</code></td><td>Numeric</td><td>0</td><td>Glyph position: 0=Left, 1=Right, 2=Top, 3=Bottom</td></tr>
+  <tr><td><code>nSpacing</code></td><td>Numeric</td><td>4</td><td>Spacing between glyph and text (pixels)</td></tr>
+  <tr><td><code>nWidth, nHeight</code></td><td>Numeric</td><td>100, 30</td><td>Size</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnClick</code></td><td>Action</td><td>Button clicked</td></tr>
+  <tr><td><code>OnEnter</code></td><td>Focus</td><td>Control received focus</td></tr>
+  <tr><td><code>OnExit</code></td><td>Focus</td><td>Control lost focus</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>BUTTON (BS_BITMAP | BS_PUSHBUTTON)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSButton (NSBezelStyleTexturedSquare + image)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkButton + GtkImage</td></tr>
+</table>
+
+<pre><span class="cm">// BitBtn with glyph</span>
+@ <span class="nb">10</span>, <span class="nb">10</span> <span class="cmd">BITBTN</span> oBtn <span class="cmd">PROMPT</span> <span class="st">"Save"</span> <span class="cmd">OF</span> oForm <span class="cmd">GLYPH</span> <span class="st">"save.bmp"</span> <span class="cmd">SIZE</span> <span class="nb">100</span>, <span class="nb">30</span>
+oBtn:<span class="fn">OnClick</span> := { || SaveRecord() }</pre>
+
+<!-- TSpeedButton -->
+<h2 id="speedbutton">TSpeedButton <span class="badge new">CT_SPEEDBTN = 27</span></h2>
+<p>Flat button designed for toolbars. Can act as a toggle and does not receive focus.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cGlyph</code></td><td>String</td><td>""</td><td>Glyph bitmap path</td></tr>
+  <tr><td><code>lFlat</code></td><td>Logical</td><td>.T.</td><td>Flat appearance (no border until hover)</td></tr>
+  <tr><td><code>lDown</code></td><td>Logical</td><td>.F.</td><td>Pressed/toggle state</td></tr>
+  <tr><td><code>nGroupIndex</code></td><td>Numeric</td><td>0</td><td>Group for mutual exclusion (0 = none)</td></tr>
+  <tr><td><code>lAllowAllUp</code></td><td>Logical</td><td>.F.</td><td>Allow all buttons in group to be unpressed</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnClick</code></td><td>Action</td><td>Button clicked</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>BUTTON (BS_OWNERDRAW, flat rendering)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSButton (NSBezelStyleRoundRect, borderless)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkToggleButton (flat relief)</td></tr>
+</table>
+
+<pre><span class="cm">// Toolbar speed buttons with mutual exclusion</span>
+@ <span class="nb">2</span>, <span class="nb">2</span> <span class="cmd">SPEEDBTN</span> oBold <span class="cmd">GLYPH</span> <span class="st">"bold.bmp"</span> <span class="cmd">OF</span> oToolbar <span class="cmd">GROUP</span> <span class="nb">1</span> <span class="cmd">SIZE</span> <span class="nb">24</span>, <span class="nb">24</span>
+@ <span class="nb">2</span>, <span class="nb">28</span> <span class="cmd">SPEEDBTN</span> oItalic <span class="cmd">GLYPH</span> <span class="st">"italic.bmp"</span> <span class="cmd">OF</span> oToolbar <span class="cmd">GROUP</span> <span class="nb">1</span> <span class="cmd">SIZE</span> <span class="nb">24</span>, <span class="nb">24</span></pre>
+
+<!-- TImage -->
+<h2 id="image">TImage <span class="badge new">CT_IMAGE = 14</span></h2>
+<p>Displays a bitmap, JPEG, PNG, or GIF image on a form.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cFileName</code></td><td>String</td><td>""</td><td>Path to image file</td></tr>
+  <tr><td><code>lStretch</code></td><td>Logical</td><td>.F.</td><td>Stretch image to fit control</td></tr>
+  <tr><td><code>lProportional</code></td><td>Logical</td><td>.F.</td><td>Maintain aspect ratio when stretching</td></tr>
+  <tr><td><code>lCenter</code></td><td>Logical</td><td>.F.</td><td>Center image within control</td></tr>
+  <tr><td><code>nWidth, nHeight</code></td><td>Numeric</td><td>100, 100</td><td>Size</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnClick</code></td><td>Action</td><td>Image clicked</td></tr>
+  <tr><td><code>OnDblClick</code></td><td>Action</td><td>Image double-clicked</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>STATIC (SS_BITMAP | SS_REALSIZECONTROL)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSImageView</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkImage</td></tr>
+</table>
+
+<pre><span class="cm">// Display a logo image</span>
+@ <span class="nb">10</span>, <span class="nb">10</span> <span class="cmd">IMAGE</span> oLogo <span class="cmd">FILENAME</span> <span class="st">"logo.png"</span> <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">200</span>, <span class="nb">80</span> <span class="cmd">STRETCH</span></pre>
+
+<!-- TShape -->
+<h2 id="shape">TShape <span class="badge new">CT_SHAPE = 15</span></h2>
+<p>Draws geometric shapes (rectangle, circle, ellipse, rounded rectangle) on a form.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nShape</code></td><td>Numeric</td><td>0</td><td>0=Rectangle, 1=Circle, 2=Ellipse, 3=RoundRect</td></tr>
+  <tr><td><code>nPenColor</code></td><td>Color</td><td>CLR_BLACK</td><td>Border color</td></tr>
+  <tr><td><code>nPenWidth</code></td><td>Numeric</td><td>1</td><td>Border thickness</td></tr>
+  <tr><td><code>nBrushColor</code></td><td>Color</td><td>CLR_WHITE</td><td>Fill color</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>Owner-drawn STATIC (GDI drawing)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSView (Core Graphics drawRect:)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkDrawingArea (Cairo)</td></tr>
+</table>
+
+<!-- TBevel -->
+<h2 id="bevel">TBevel <span class="badge new">CT_BEVEL = 16</span></h2>
+<p>Non-interactive decorative control that draws raised or lowered beveled lines and boxes.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nStyle</code></td><td>Numeric</td><td>0</td><td>0=Lowered, 1=Raised</td></tr>
+  <tr><td><code>nBevelShape</code></td><td>Numeric</td><td>0</td><td>0=Box, 1=TopLine, 2=BottomLine, 3=LeftLine, 4=RightLine</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>STATIC (SS_ETCHEDHORZ / SS_ETCHEDFRAME)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSBox (NSBoxSeparator)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkSeparator / GtkFrame</td></tr>
+</table>
+
+<!-- TMaskEdit -->
+<h2 id="maskedit">TMaskEdit <span class="badge new">CT_MASKEDIT = 28</span></h2>
+<p>Text input with an input mask that constrains entry format (dates, phone numbers, SSN, etc.).</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cText</code></td><td>String</td><td>""</td><td>Current text content (with literals)</td></tr>
+  <tr><td><code>cMask</code></td><td>String</td><td>""</td><td>Input mask (e.g. "999-999-9999")</td></tr>
+  <tr><td><code>lSaveLiterals</code></td><td>Logical</td><td>.T.</td><td>Include mask literals in value</td></tr>
+  <tr><td><code>cPlaceholder</code></td><td>String</td><td>"_"</td><td>Placeholder character</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnChange</code></td><td>Action</td><td>Text content changed</td></tr>
+  <tr><td><code>OnValidate</code></td><td>Action</td><td>Mask validation completed</td></tr>
+  <tr><td><code>OnEnter</code></td><td>Focus</td><td>Control received focus</td></tr>
+  <tr><td><code>OnExit</code></td><td>Focus</td><td>Control lost focus</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>EDIT (ES_AUTOHSCROLL + mask logic)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSTextField + NSFormatter</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkEntry + input filtering</td></tr>
+</table>
+
+<pre><span class="cm">// Phone number mask</span>
+@ <span class="nb">50</span>, <span class="nb">120</span> <span class="cmd">MASKEDIT</span> oPhone <span class="cmd">MASK</span> <span class="st">"(999) 999-9999"</span> <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">160</span>, <span class="nb">24</span></pre>
+
+<!-- TStringGrid -->
+<h2 id="stringgrid">TStringGrid <span class="badge new">CT_STRINGGRID = 29</span></h2>
+<p>Editable grid of cells organized in rows and columns. Suitable for tabular data entry.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nColCount</code></td><td>Numeric</td><td>5</td><td>Number of columns</td></tr>
+  <tr><td><code>nRowCount</code></td><td>Numeric</td><td>5</td><td>Number of rows</td></tr>
+  <tr><td><code>nFixedCols</code></td><td>Numeric</td><td>1</td><td>Number of fixed (header) columns</td></tr>
+  <tr><td><code>nFixedRows</code></td><td>Numeric</td><td>1</td><td>Number of fixed (header) rows</td></tr>
+  <tr><td><code>nDefaultColWidth</code></td><td>Numeric</td><td>64</td><td>Default column width</td></tr>
+  <tr><td><code>nDefaultRowHeight</code></td><td>Numeric</td><td>24</td><td>Default row height</td></tr>
+  <tr><td><code>lEditing</code></td><td>Logical</td><td>.T.</td><td>Allow cell editing</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnSelectCell</code></td><td>Action</td><td>Cell selected</td></tr>
+  <tr><td><code>OnSetEditText</code></td><td>Action</td><td>Cell text changed</td></tr>
+  <tr><td><code>OnDrawCell</code></td><td>Draw</td><td>Custom cell painting</td></tr>
+  <tr><td><code>OnKeyDown</code></td><td>Keyboard</td><td>Key pressed in grid</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>Owner-drawn custom grid (WC_LISTVIEW based)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSTableView (multi-column editable)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkTreeView + GtkListStore (editable)</td></tr>
+</table>
+
+<pre><span class="cm">// Create a 3-column spreadsheet-like grid</span>
+@ <span class="nb">10</span>, <span class="nb">10</span> <span class="cmd">STRINGGRID</span> oGrid <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">400</span>, <span class="nb">200</span> <span class="cmd">COLS</span> <span class="nb">3</span> <span class="cmd">ROWS</span> <span class="nb">10</span>
+oGrid:<span class="fn">SetCell</span>( <span class="nb">0</span>, <span class="nb">0</span>, <span class="st">"Product"</span> )
+oGrid:<span class="fn">SetCell</span>( <span class="nb">0</span>, <span class="nb">1</span>, <span class="st">"Qty"</span> )
+oGrid:<span class="fn">SetCell</span>( <span class="nb">0</span>, <span class="nb">2</span>, <span class="st">"Price"</span> )</pre>
+
+<!-- TScrollBox -->
+<h2 id="scrollbox">TScrollBox <span class="badge new">CT_SCROLLBOX = 30</span></h2>
+<p>Scrollable container panel. Controls placed inside automatically get scroll bars when they exceed the visible area.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>lAutoScroll</code></td><td>Logical</td><td>.T.</td><td>Automatically show scroll bars</td></tr>
+  <tr><td><code>nHorzPos</code></td><td>Numeric</td><td>0</td><td>Horizontal scroll position</td></tr>
+  <tr><td><code>nVertPos</code></td><td>Numeric</td><td>0</td><td>Vertical scroll position</td></tr>
+  <tr><td><code>nWidth, nHeight</code></td><td>Numeric</td><td>200, 200</td><td>Visible area size</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnScroll</code></td><td>Action</td><td>Scroll position changed</td></tr>
+  <tr><td><code>OnResize</code></td><td>Layout</td><td>Container resized</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>Window (WS_HSCROLL | WS_VSCROLL)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSScrollView + NSView</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkScrolledWindow + GtkViewport</td></tr>
+</table>
+
+<!-- TStaticText -->
+<h2 id="statictext">TStaticText <span class="badge new">CT_STATICTEXT = 31</span></h2>
+<p>Label with a visible border frame. Similar to TLabel but with a sunken, raised, or simple border style.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cText</code></td><td>String</td><td>""</td><td>Display text</td></tr>
+  <tr><td><code>nBorderStyle</code></td><td>Numeric</td><td>0</td><td>0=None, 1=Single, 2=Sunken</td></tr>
+  <tr><td><code>nAlignment</code></td><td>Numeric</td><td>0</td><td>0=Left, 1=Center, 2=Right</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>STATIC (SS_SUNKEN | SS_LEFT)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSTextField (bordered, non-editable)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkLabel + GtkFrame</td></tr>
+</table>
+
+<!-- TLabeledEdit -->
+<h2 id="labelededit">TLabeledEdit <span class="badge new">CT_LABELEDEDIT = 32</span></h2>
+<p>Composite control that combines a TLabel and a TEdit into a single component. Simplifies form layout.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cText</code></td><td>String</td><td>""</td><td>Edit text content</td></tr>
+  <tr><td><code>cLabelText</code></td><td>String</td><td>"Label"</td><td>Caption for the label part</td></tr>
+  <tr><td><code>nLabelPosition</code></td><td>Numeric</td><td>0</td><td>0=Left, 1=Top, 2=Right, 3=Bottom</td></tr>
+  <tr><td><code>nLabelSpacing</code></td><td>Numeric</td><td>3</td><td>Gap between label and edit (pixels)</td></tr>
+  <tr><td><code>lReadOnly</code></td><td>Logical</td><td>.F.</td><td>Prevent editing</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnChange</code></td><td>Action</td><td>Edit text changed</td></tr>
+  <tr><td><code>OnEnter</code></td><td>Focus</td><td>Edit received focus</td></tr>
+  <tr><td><code>OnExit</code></td><td>Focus</td><td>Edit lost focus</td></tr>
+</table>
+
+<pre><span class="cm">// Labeled edits for a quick data entry form</span>
+@ <span class="nb">20</span>, <span class="nb">20</span> <span class="cmd">LABELEDEDIT</span> oName <span class="cmd">LABEL</span> <span class="st">"Full Name:"</span> <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">200</span>, <span class="nb">24</span>
+@ <span class="nb">50</span>, <span class="nb">20</span> <span class="cmd">LABELEDEDIT</span> oEmail <span class="cmd">LABEL</span> <span class="st">"Email:"</span> <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">200</span>, <span class="nb">24</span></pre>
+
+<div class="info-box info">
+  <strong>10 Additional Controls</strong>
+  <p>These enhanced controls provide graphical elements, masked input, grid editing, and composite
+  widgets. Available on all platforms using native or owner-drawn rendering.</p>
+</div>
+
+</div>
+
+<script src="../assets/js/docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Controls - HarbourBuilder Docs</title>
+  <link rel="stylesheet" href="../assets/css/docs.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head>
+<body>
+
+<div class="header">
+  <a class="logo" href="index.html"><span>HB</span> HarbourBuilder Docs</a>
+  <nav>
+    <input class="search-box" type="text" placeholder="Search docs..." oninput="doSearch(this.value)">
+    <button class="lang-btn active">EN</button>
+    <a class="lang-btn" href="../es/index.html">ES</a>
+    <a class="lang-btn" href="../pt/index.html">PT</a>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9788;</button>
+  </nav>
+</div>
+
+<div class="sidebar">
+  <div class="nav-section">
+    <h3>Getting Started</h3>
+    <a href="index.html">Overview</a>
+    <a href="quickstart.html">Quick Start</a>
+    <a href="architecture.html">Architecture</a>
+  </div>
+  <div class="nav-section">
+    <h3>Component Palette</h3>
+    <a href="controls-standard.html">Standard (11)</a>
+    <a href="controls-additional.html">Additional (10)</a>
+    <a href="controls-native.html">Win32 / Cocoa / GTK3 (9)</a>
+    <a href="controls-system.html">System (2)</a>
+    <a href="controls-dialogs.html">Dialogs (6)</a>
+    <a href="controls-database.html">Data Access (9)</a>
+    <a href="controls-datacontrols.html">Data Controls (8)</a>
+    <a href="controls-internet.html">Internet (9)</a>
+    <a href="controls-threading.html">Threading (8)</a>
+    <a href="controls-ai.html" class="active">AI (7)</a>
+    <a href="controls-erp.html">ERP / Business (12)</a>
+  </div>
+</div>
+
+<div class="content">
+
+<div class="breadcrumbs">
+  <a href="index.html">Docs</a> <span>/</span>
+  <a href="controls-ai.html">Component Palette</a> <span>/</span> AI
+</div>
+
+<h1>AI Controls <span class="badge new">NEW</span></h1>
+<p>HarbourBuilder is the <strong>first xBase IDE with built-in AI components</strong>.
+Drop AI components on your form, set an API key, and interact with the world's most powerful language models.</p>
+
+<div class="info-box tip">
+  <strong>Local AI with Ollama</strong>
+  <p>The TOllama component connects to a local Ollama instance — no API key needed, fully private,
+  works offline. Perfect for development and enterprise environments.</p>
+</div>
+
+<h2>Common Properties (all AI controls)</h2>
+<table>
+  <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>cApiKey</code></td><td>String</td><td>API authentication key</td></tr>
+  <tr><td><code>cModel</code></td><td>String</td><td>Model name (e.g. "gpt-4o", "claude-sonnet-4-20250514")</td></tr>
+  <tr><td><code>nTemperature</code></td><td>Numeric</td><td>Creativity (0.0 = deterministic, 2.0 = creative)</td></tr>
+  <tr><td><code>nMaxTokens</code></td><td>Numeric</td><td>Maximum response length</td></tr>
+  <tr><td><code>cSystemPrompt</code></td><td>String</td><td>System instructions for the AI</td></tr>
+  <tr><td><code>lStream</code></td><td>Logical</td><td>Enable streaming responses (token by token)</td></tr>
+</table>
+
+<h2>Common Events</h2>
+<table>
+  <tr><th>Event</th><th>Parameters</th><th>Description</th></tr>
+  <tr><td><code>OnResponse</code></td><td><code>cResponse</code></td><td>Full response received</td></tr>
+  <tr><td><code>OnStream</code></td><td><code>cToken</code></td><td>Each token during streaming</td></tr>
+  <tr><td><code>OnError</code></td><td><code>cError, nCode</code></td><td>API error occurred</td></tr>
+  <tr><td><code>OnTokenCount</code></td><td><code>nPrompt, nCompletion</code></td><td>Token usage report</td></tr>
+</table>
+
+<h2>Common Methods</h2>
+<table>
+  <tr><th>Method</th><th>Parameters</th><th>Description</th></tr>
+  <tr><td><code>:Chat( cMessage )</code></td><td>String</td><td>Send a chat message, fires OnResponse</td></tr>
+  <tr><td><code>:Complete( cPrompt )</code></td><td>String</td><td>Text completion</td></tr>
+  <tr><td><code>:Embed( cText )</code></td><td>String</td><td>Get embedding vector</td></tr>
+</table>
+
+<!-- Individual controls -->
+<h2 id="openai">TOpenAI <span class="badge new">CT = 46</span></h2>
+<p>Connect to OpenAI API (GPT-4o, GPT-4, GPT-3.5).</p>
+<pre>oAI := TOpenAI():New()
+oAI:cApiKey := <span class="st">"sk-..."</span>
+oAI:cModel  := <span class="st">"gpt-4o"</span>
+oAI:OnResponse := { |cResp| oMemo:Text := cResp }
+oAI:Chat( <span class="st">"Explain Harbour classes"</span> )</pre>
+
+<h2 id="gemini">TGemini <span class="badge new">CT = 47</span></h2>
+<p>Connect to Google Gemini API.</p>
+<p>Default model: <code>gemini-2.5-flash</code></p>
+
+<h2 id="claude">TClaude <span class="badge new">CT = 48</span></h2>
+<p>Connect to Anthropic Claude API.</p>
+<p>Default model: <code>claude-sonnet-4-20250514</code></p>
+
+<h2 id="deepseek">TDeepSeek <span class="badge new">CT = 49</span></h2>
+<p>Connect to DeepSeek API. Excellent for code generation.</p>
+<p>Default model: <code>deepseek-chat</code></p>
+
+<h2 id="grok">TGrok <span class="badge new">CT = 50</span></h2>
+<p>Connect to xAI Grok API.</p>
+<p>Default model: <code>grok-3</code></p>
+
+<h2 id="ollama">TOllama <span class="badge new">CT = 51</span></h2>
+<p>Connect to local Ollama instance. <strong>No API key required.</strong></p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cHost</code></td><td>String</td><td>"localhost"</td><td>Ollama server host</td></tr>
+  <tr><td><code>nPort</code></td><td>Numeric</td><td>11434</td><td>Ollama server port</td></tr>
+  <tr><td><code>cModel</code></td><td>String</td><td>"llama3"</td><td>Local model name</td></tr>
+</table>
+
+<pre>oAI := TOllama():New()
+oAI:cModel := <span class="st">"codellama"</span>
+oAI:OnStream := { |cToken| oOutput:Text += cToken }
+oAI:Chat( <span class="st">"Write a Harbour function to sort an array"</span> )</pre>
+
+<h2 id="transformer">TTransformer <span class="badge new">CT = 52</span></h2>
+<p>Full transformer architecture component. Train, fine-tune, and run inference locally.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nLayers</code></td><td>Numeric</td><td>6</td><td>Number of encoder/decoder layers</td></tr>
+  <tr><td><code>nHeads</code></td><td>Numeric</td><td>8</td><td>Number of attention heads</td></tr>
+  <tr><td><code>nEmbedDim</code></td><td>Numeric</td><td>512</td><td>Embedding dimension (d_model)</td></tr>
+  <tr><td><code>nFFDim</code></td><td>Numeric</td><td>2048</td><td>Feed-forward dimension</td></tr>
+  <tr><td><code>nVocabSize</code></td><td>Numeric</td><td>50257</td><td>Vocabulary size</td></tr>
+  <tr><td><code>nMaxSeqLen</code></td><td>Numeric</td><td>512</td><td>Maximum sequence length</td></tr>
+  <tr><td><code>nDropout</code></td><td>Numeric</td><td>0.1</td><td>Dropout rate</td></tr>
+  <tr><td><code>cWeightsFile</code></td><td>String</td><td>""</td><td>Pre-trained weights path</td></tr>
+  <tr><td><code>lCausal</code></td><td>Logical</td><td>.T.</td><td>Use causal mask (decoder mode)</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Description</th></tr>
+  <tr><td><code>OnAttention</code></td><td>Access attention weights for visualization</td></tr>
+  <tr><td><code>OnGenerate</code></td><td>Token generated during inference</td></tr>
+  <tr><td><code>OnTrainStep</code></td><td>Training step completed (with loss)</td></tr>
+  <tr><td><code>OnLoss</code></td><td>Loss value computed</td></tr>
+</table>
+
+<div class="mermaid">
+graph LR
+    A[Input Text] --> B[Tokenizer]
+    B --> C[Embedding + PE]
+    C --> D["N x (MHA + FFN)"]
+    D --> E[Linear + Softmax]
+    E --> F[Output Tokens]
+    style D fill:#58a6ff,stroke:#388bfd,color:#0d1117
+</div>
+
+<div class="info-box info">
+  <strong>Didactic Examples</strong>
+  <p>See the <code>samples/projects/transformer/</code> folder for 7 complete examples:
+  attention visualizer, text generator, training from scratch, tokenizer explorer,
+  sentiment analyzer, translator, and a full "Attention Is All You Need" walkthrough.</p>
+</div>
+
+</div>
+
+<script src="../assets/js/docs.js"></script>
+</body>
+</html>

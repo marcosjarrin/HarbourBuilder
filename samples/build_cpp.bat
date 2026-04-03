@@ -4,10 +4,10 @@ setlocal
 set HDIR=c:\harbour
 set CDIR=c:\bcc77c
 set HARBOUR=%HDIR%\bin\win\bcc\harbour.exe
-set CC=%CDIR%\bin\bcc32c.exe
+set CC=%CDIR%\bin\bcc32.exe
 set ILINK=%CDIR%\bin\ilink32.exe
 set PROG=%1
-set CPPDIR=c:\ide\cpp
+set CPPDIR=c:\HarbourBuilder\cpp
 
 if "%PROG%"=="" (
    echo Usage: build_cpp.bat progname
@@ -50,7 +50,7 @@ echo [4/5] Linking %PROG%.exe...
    hbhsx.lib hbsix.lib hbusrrdd.lib rddntx.lib rddnsx.lib rddcdx.lib rddfpt.lib ^
    hbdebug.lib gtwin.lib gtwvt.lib gtgui.lib ^
    cw32.lib import32.lib ws2_32.lib ^
-   user32.lib gdi32.lib comctl32.lib comdlg32.lib shell32.lib ole32.lib uuid.lib ^
+   user32.lib gdi32.lib comctl32.lib comdlg32.lib shell32.lib ole32.lib uuid.lib gdiplus.lib ^
    , , > link.log 2>&1
 
 if errorlevel 1 (

@@ -137,6 +137,8 @@ typedef struct {
    WNDPROC oldEditProc;
    int    nActiveTab;   /* 0=Properties, 1=Events */
    PHB_ITEM pOnComboSel; /* callback when combo selection changes: {|nIndex| ... } */
+   PHB_ITEM pOnEventDblClick; /* callback when event double-clicked: {|hCtrl, cEvent| ... } */
+   PHB_ITEM pOnPropChanged;   /* callback when property value changes: {|| ... } */
 } INSDATA;
 
 /* Forward */
@@ -485,6 +487,14 @@ static void InsApplyValue( INSDATA * d, int nReal, const char * szVal )
    else
       hb_vmPushNil();
    hb_vmDo( 3 );
+
+   /* Notify IDE that a property changed */
+   if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) )
+   {
+      hb_vmPush( d->pOnPropChanged );
+      hb_vmPushNil();
+      hb_vmDo( 0 );
+   }
 }
 
 static void InsPopulate( INSDATA * d )
@@ -653,6 +663,8 @@ HB_FUNC( INS_CREATE )
    d->nActiveTab = 0;
    d->hFormCtrl = 0;
    d->pOnComboSel = NULL;
+   d->pOnEventDblClick = NULL;
+   d->pOnPropChanged = NULL;
 
    { LOGFONTA lf = {0}; lf.lfHeight = -12; lf.lfCharSet = DEFAULT_CHARSET;
      lstrcpyA(lf.lfFaceName, "Segoe UI");
@@ -839,6 +851,30 @@ HB_FUNC( INS_SETONCOMBOSEL )
    }
 }
 
+/* INS_SetOnEventDblClick( hInsData, bBlock ) */
+HB_FUNC( INS_SETONEVENTDBLCLICK )
+{
+   INSDATA * d = (INSDATA *) (HB_PTRUINT) hb_parnint(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( d )
+   {
+      if( d->pOnEventDblClick ) hb_itemRelease( d->pOnEventDblClick );
+      d->pOnEventDblClick = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
+}
+
+/* INS_SetOnPropChanged( hInsData, bBlock ) */
+HB_FUNC( INS_SETONPROPCHANGED )
+{
+   INSDATA * d = (INSDATA *) (HB_PTRUINT) hb_parnint(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( d )
+   {
+      if( d->pOnPropChanged ) hb_itemRelease( d->pOnPropChanged );
+      d->pOnPropChanged = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
+}
+
 /* INS_BringToFront( hInsData ) */
 /* Populate the Events tab with available events for the current control */
 static void InsPopulateEvents( INSDATA * d )
@@ -953,6 +989,8 @@ HB_FUNC( INS_DESTROY )
    INSDATA * d = (INSDATA *) (HB_PTRUINT) hb_parnint(1);
    if( !d ) return;
    if( d->pOnComboSel ) hb_itemRelease( d->pOnComboSel );
+   if( d->pOnEventDblClick ) hb_itemRelease( d->pOnEventDblClick );
+   if( d->pOnPropChanged ) hb_itemRelease( d->pOnPropChanged );
    if( d->hWnd ) DestroyWindow( d->hWnd );
    DeleteObject( d->hFont );
    DeleteObject( d->hBold );

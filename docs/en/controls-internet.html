@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Internet Controls - HarbourBuilder Docs</title>
+  <link rel="stylesheet" href="../assets/css/docs.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head>
+<body>
+
+<div class="header">
+  <a class="logo" href="index.html"><span>HB</span> HarbourBuilder Docs</a>
+  <nav>
+    <input class="search-box" type="text" placeholder="Search docs..." oninput="doSearch(this.value)">
+    <button class="lang-btn active">EN</button>
+    <a class="lang-btn" href="../es/index.html">ES</a>
+    <a class="lang-btn" href="../pt/index.html">PT</a>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9788;</button>
+  </nav>
+</div>
+
+<div class="sidebar">
+  <div class="nav-section">
+    <h3>Getting Started</h3>
+    <a href="index.html">Overview</a>
+    <a href="quickstart.html">Quick Start</a>
+    <a href="installation.html">Installation</a>
+    <a href="architecture.html">Architecture</a>
+  </div>
+  <div class="nav-section">
+    <h3>Component Palette</h3>
+    <a href="controls-standard.html">Standard (11)</a>
+    <a href="controls-additional.html">Additional (10)</a>
+    <a href="controls-native.html">Win32 / Cocoa / GTK3 (9)</a>
+    <a href="controls-system.html">System (2)</a>
+    <a href="controls-dialogs.html">Dialogs (6)</a>
+    <a href="controls-database.html">Data Access (9)</a>
+    <a href="controls-datacontrols.html">Data Controls (8)</a>
+    <a href="controls-internet.html" class="active">Internet (9)</a>
+    <a href="controls-threading.html">Threading (8)</a>
+    <a href="controls-ai.html">AI (7)</a>
+    <a href="controls-erp.html">ERP / Business (12)</a>
+  </div>
+  <div class="nav-section">
+    <h3>IDE Features</h3>
+    <a href="form-designer.html">Form Designer</a>
+    <a href="code-editor.html">Code Editor</a>
+    <a href="debugger.html">Debugger</a>
+    <a href="ai-assistant.html">AI Assistant</a>
+  </div>
+  <div class="nav-section">
+    <h3>Platforms</h3>
+    <a href="platform-windows.html">Windows</a>
+    <a href="platform-macos.html">macOS</a>
+    <a href="platform-linux.html">Linux</a>
+  </div>
+</div>
+
+<div class="content">
+
+<div class="breadcrumbs">
+  <a href="index.html">Docs</a> <span>/</span>
+  <a href="controls-standard.html">Component Palette</a> <span>/</span> Internet
+</div>
+
+<h1>Internet Controls</h1>
+<p>The Internet tab provides 9 controls for web browsing, HTTP/FTP networking, email, WebSocket communication, and TCP/UDP socket programming. All controls are cross-platform and use non-blocking I/O internally.</p>
+
+<!-- TWebView -->
+<h2 id="webview">TWebView <span class="badge new">CT_WEBVIEW = 62</span></h2>
+<p>Embeds a full web browser inside a form. Renders HTML content or navigates to URLs using the platform's native web engine.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cURL</code></td><td>String</td><td>""</td><td>URL to navigate to</td></tr>
+  <tr><td><code>cHTML</code></td><td>String</td><td>""</td><td>Raw HTML content to render</td></tr>
+  <tr><td><code>lCanGoBack</code></td><td>Logical</td><td>.F.</td><td>Whether navigation history allows going back (read-only)</td></tr>
+  <tr><td><code>lCanGoForward</code></td><td>Logical</td><td>.F.</td><td>Whether navigation history allows going forward (read-only)</td></tr>
+  <tr><td><code>cTitle</code></td><td>String</td><td>""</td><td>Page title (read-only)</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnNavigate</code></td><td>Navigation</td><td>Fired before navigating to a new URL. Return .F. to cancel</td></tr>
+  <tr><td><code>OnLoad</code></td><td>Navigation</td><td>Page finished loading</td></tr>
+  <tr><td><code>OnError</code></td><td>Error</td><td>Navigation or rendering error occurred</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>WebView2 (Chromium-based Edge)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>WKWebView (WebKit)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>WebKitGTK (WebKit2)</td></tr>
+</table>
+
+<!-- TWebServer -->
+<h2 id="webserver">TWebServer <span class="badge new">CT_WEBSERVER = 71</span></h2>
+<p>Embedded HTTP/HTTPS server. Allows your application to serve web pages, REST APIs, or act as a local service endpoint.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nPort</code></td><td>Numeric</td><td>8080</td><td>Listening port number</td></tr>
+  <tr><td><code>cHost</code></td><td>String</td><td>"0.0.0.0"</td><td>Bind address</td></tr>
+  <tr><td><code>cDocumentRoot</code></td><td>String</td><td>""</td><td>Root directory for static files</td></tr>
+  <tr><td><code>lSSL</code></td><td>Logical</td><td>.F.</td><td>Enable HTTPS</td></tr>
+  <tr><td><code>cCertFile</code></td><td>String</td><td>""</td><td>Path to SSL certificate file</td></tr>
+  <tr><td><code>cKeyFile</code></td><td>String</td><td>""</td><td>Path to SSL private key file</td></tr>
+  <tr><td><code>nMaxConnections</code></td><td>Numeric</td><td>256</td><td>Maximum simultaneous connections</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnRequest</code></td><td>Action</td><td>HTTP request received. Params: oRequest, oResponse</td></tr>
+  <tr><td><code>OnConnect</code></td><td>Connection</td><td>New client connected</td></tr>
+  <tr><td><code>OnDisconnect</code></td><td>Connection</td><td>Client disconnected</td></tr>
+  <tr><td><code>OnStart</code></td><td>Lifecycle</td><td>Server started listening</td></tr>
+  <tr><td><code>OnStop</code></td><td>Lifecycle</td><td>Server stopped</td></tr>
+  <tr><td><code>OnError</code></td><td>Error</td><td>Server error occurred</td></tr>
+</table>
+
+<!-- TWebSocket -->
+<h2 id="websocket">TWebSocket <span class="badge new">CT_WEBSOCKET = 72</span></h2>
+<p>WebSocket client for real-time bidirectional communication with a server.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cURL</code></td><td>String</td><td>""</td><td>WebSocket server URL (ws:// or wss://)</td></tr>
+  <tr><td><code>cProtocol</code></td><td>String</td><td>""</td><td>Sub-protocol to negotiate</td></tr>
+  <tr><td><code>lAutoReconnect</code></td><td>Logical</td><td>.F.</td><td>Automatically reconnect on disconnection</td></tr>
+  <tr><td><code>nReconnectDelay</code></td><td>Numeric</td><td>3000</td><td>Delay in ms before reconnect attempt</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnOpen</code></td><td>Connection</td><td>Connection established</td></tr>
+  <tr><td><code>OnMessage</code></td><td>Data</td><td>Message received from server</td></tr>
+  <tr><td><code>OnClose</code></td><td>Connection</td><td>Connection closed</td></tr>
+  <tr><td><code>OnError</code></td><td>Error</td><td>Connection or protocol error</td></tr>
+</table>
+
+<!-- THttpClient -->
+<h2 id="httpclient">THttpClient <span class="badge new">CT_HTTPCLIENT = 73</span></h2>
+<p>HTTP client for making REST API calls, downloading files, and general HTTP communication.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cURL</code></td><td>String</td><td>""</td><td>Request URL</td></tr>
+  <tr><td><code>cMethod</code></td><td>String</td><td>"GET"</td><td>HTTP method (GET, POST, PUT, DELETE, PATCH)</td></tr>
+  <tr><td><code>aHeaders</code></td><td>Array</td><td>{}</td><td>Request headers as key-value pairs</td></tr>
+  <tr><td><code>cBody</code></td><td>String</td><td>""</td><td>Request body content</td></tr>
+  <tr><td><code>nTimeout</code></td><td>Numeric</td><td>30000</td><td>Request timeout in milliseconds</td></tr>
+  <tr><td><code>nStatusCode</code></td><td>Numeric</td><td>0</td><td>Response status code (read-only)</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnResponse</code></td><td>Data</td><td>Response received. Params: nStatus, cBody, aHeaders</td></tr>
+  <tr><td><code>OnProgress</code></td><td>Data</td><td>Download/upload progress. Params: nCurrent, nTotal</td></tr>
+  <tr><td><code>OnError</code></td><td>Error</td><td>Request failed</td></tr>
+</table>
+
+<!-- TFtpClient -->
+<h2 id="ftpclient">TFtpClient <span class="badge new">CT_FTPCLIENT = 74</span></h2>
+<p>FTP/FTPS client for file transfer operations.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cHost</code></td><td>String</td><td>""</td><td>FTP server hostname</td></tr>
+  <tr><td><code>nPort</code></td><td>Numeric</td><td>21</td><td>Server port</td></tr>
+  <tr><td><code>cUser</code></td><td>String</td><td>""</td><td>Login username</td></tr>
+  <tr><td><code>cPassword</code></td><td>String</td><td>""</td><td>Login password</td></tr>
+  <tr><td><code>lPassiveMode</code></td><td>Logical</td><td>.T.</td><td>Use passive mode for data transfers</td></tr>
+  <tr><td><code>lSSL</code></td><td>Logical</td><td>.F.</td><td>Use FTPS (FTP over TLS)</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnConnect</code></td><td>Connection</td><td>Successfully connected to server</td></tr>
+  <tr><td><code>OnTransfer</code></td><td>Data</td><td>File transfer progress. Params: cFile, nBytes, nTotal</td></tr>
+  <tr><td><code>OnError</code></td><td>Error</td><td>Connection or transfer error</td></tr>
+</table>
+
+<!-- TSmtpClient -->
+<h2 id="smtpclient">TSmtpClient <span class="badge new">CT_SMTPCLIENT = 75</span></h2>
+<p>SMTP client for sending email messages with attachments.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cHost</code></td><td>String</td><td>""</td><td>SMTP server hostname</td></tr>
+  <tr><td><code>nPort</code></td><td>Numeric</td><td>587</td><td>Server port (25, 465, or 587)</td></tr>
+  <tr><td><code>lSSL</code></td><td>Logical</td><td>.T.</td><td>Use TLS/SSL encryption</td></tr>
+  <tr><td><code>cUser</code></td><td>String</td><td>""</td><td>Authentication username</td></tr>
+  <tr><td><code>cPassword</code></td><td>String</td><td>""</td><td>Authentication password</td></tr>
+  <tr><td><code>cFrom</code></td><td>String</td><td>""</td><td>Sender email address</td></tr>
+  <tr><td><code>cTo</code></td><td>String</td><td>""</td><td>Recipient email address(es), comma-separated</td></tr>
+  <tr><td><code>cSubject</code></td><td>String</td><td>""</td><td>Email subject line</td></tr>
+  <tr><td><code>cBody</code></td><td>String</td><td>""</td><td>Email body content</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnSend</code></td><td>Action</td><td>Email sent successfully</td></tr>
+  <tr><td><code>OnError</code></td><td>Error</td><td>Send or connection error</td></tr>
+</table>
+
+<!-- TTcpServer -->
+<h2 id="tcpserver">TTcpServer <span class="badge new">CT_TCPSERVER = 76</span></h2>
+<p>TCP socket server. Listens for incoming connections and manages multiple clients.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nPort</code></td><td>Numeric</td><td>0</td><td>Listening port</td></tr>
+  <tr><td><code>cHost</code></td><td>String</td><td>"0.0.0.0"</td><td>Bind address</td></tr>
+  <tr><td><code>nMaxConnections</code></td><td>Numeric</td><td>128</td><td>Maximum simultaneous connections</td></tr>
+  <tr><td><code>lActive</code></td><td>Logical</td><td>.F.</td><td>Server is currently listening (read-only)</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnAccept</code></td><td>Connection</td><td>New client connection accepted. Params: oClient</td></tr>
+  <tr><td><code>OnReceive</code></td><td>Data</td><td>Data received from client. Params: oClient, cData</td></tr>
+  <tr><td><code>OnDisconnect</code></td><td>Connection</td><td>Client disconnected. Params: oClient</td></tr>
+</table>
+
+<!-- TTcpClient -->
+<h2 id="tcpclient">TTcpClient <span class="badge new">CT_TCPCLIENT = 77</span></h2>
+<p>TCP socket client. Connects to a remote server for stream-based communication.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cHost</code></td><td>String</td><td>""</td><td>Remote server hostname or IP</td></tr>
+  <tr><td><code>nPort</code></td><td>Numeric</td><td>0</td><td>Remote server port</td></tr>
+  <tr><td><code>nTimeout</code></td><td>Numeric</td><td>10000</td><td>Connection timeout in milliseconds</td></tr>
+  <tr><td><code>lConnected</code></td><td>Logical</td><td>.F.</td><td>Connection status (read-only)</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnConnect</code></td><td>Connection</td><td>Successfully connected to server</td></tr>
+  <tr><td><code>OnReceive</code></td><td>Data</td><td>Data received from server. Params: cData</td></tr>
+  <tr><td><code>OnDisconnect</code></td><td>Connection</td><td>Disconnected from server</td></tr>
+</table>
+
+<!-- TUdpSocket -->
+<h2 id="udpsocket">TUdpSocket <span class="badge new">CT_UDPSOCKET = 78</span></h2>
+<p>UDP datagram socket for connectionless, low-latency communication.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nPort</code></td><td>Numeric</td><td>0</td><td>Local port to bind to</td></tr>
+  <tr><td><code>lBroadcast</code></td><td>Logical</td><td>.F.</td><td>Enable broadcast mode</td></tr>
+  <tr><td><code>cHost</code></td><td>String</td><td>"0.0.0.0"</td><td>Bind address</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnReceive</code></td><td>Data</td><td>Datagram received. Params: cData, cSenderIP, nSenderPort</td></tr>
+</table>
+
+<!-- Code Example -->
+<h2 id="example">Code Example: Simple Web Server</h2>
+<pre><span class="cm">// A simple web server that responds to HTTP requests</span>
+
+<span class="cmd">FUNCTION</span> Main()
+
+   <span class="cmd">LOCAL</span> oServer
+
+   oServer := TWebServer():New()
+   oServer:<span class="fn">nPort</span> := <span class="nb">8080</span>
+   oServer:<span class="fn">cDocumentRoot</span> := <span class="st">"./public"</span>
+
+   oServer:<span class="fn">OnRequest</span> := { |oReq, oRes| HandleRequest( oReq, oRes ) }
+   oServer:<span class="fn">OnStart</span>   := { || QOut( <span class="st">"Server running on port 8080"</span> ) }
+   oServer:<span class="fn">OnError</span>   := { |e| QOut( <span class="st">"Error: "</span> + e:Description ) }
+
+   oServer:<span class="fn">Start</span>()
+
+   <span class="cm">// Keep the application running</span>
+   <span class="cmd">WAIT</span> <span class="st">"Press any key to stop..."</span>
+
+   oServer:<span class="fn">Stop</span>()
+
+<span class="cmd">RETURN</span> <span class="cmd">NIL</span>
+
+<span class="cmd">FUNCTION</span> HandleRequest( oReq, oRes )
+
+   <span class="cmd">DO CASE</span>
+      <span class="cmd">CASE</span> oReq:<span class="fn">cPath</span> == <span class="st">"/api/hello"</span>
+         oRes:<span class="fn">cContentType</span> := <span class="st">"application/json"</span>
+         oRes:<span class="fn">cBody</span> := <span class="st">'{"message": "Hello from HarbourBuilder!"}'</span>
+
+      <span class="cmd">CASE</span> oReq:<span class="fn">cPath</span> == <span class="st">"/api/time"</span>
+         oRes:<span class="fn">cContentType</span> := <span class="st">"application/json"</span>
+         oRes:<span class="fn">cBody</span> := <span class="st">'{"time": "'</span> + Time() + <span class="st">'"}'</span>
+
+      <span class="cmd">OTHERWISE</span>
+         oRes:<span class="fn">nStatus</span> := <span class="nb">404</span>
+         oRes:<span class="fn">cBody</span> := <span class="st">"Not Found"</span>
+   <span class="cmd">ENDCASE</span>
+
+<span class="cmd">RETURN</span> <span class="cmd">NIL</span></pre>
+
+<div class="info-box info">
+  <strong>9 Internet Controls</strong>
+  <p>All Internet controls use asynchronous, event-driven I/O. Network operations never block the UI thread.
+  TLS/SSL is supported on all platforms using the system's native certificate store.</p>
+</div>
+
+</div>
+
+<script src="../assets/js/docs.js"></script>
+</body>
+</html>

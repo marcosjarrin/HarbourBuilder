@@ -31,6 +31,20 @@ TForm::TForm()
    FGridDC = NULL;
    FGridW = FGridH = 0;
    FOverlay = NULL;
+   FBorderStyle = 0;
+   FBorderIcons = 7;  /* biSystemMenu | biMinimize | biMaximize */
+   FBorderWidth = 0;
+   FPosition = 0;
+   FWindowState = 0;
+   FFormStyle = 0;
+   FCursor = 0;
+   FKeyPreview = FALSE;
+   FAlphaBlend = FALSE;
+   FAlphaBlendValue = 255;
+   FShowHint = FALSE;
+   FHint[0] = 0;
+   FAutoScroll = FALSE;
+   FDoubleBuffered = FALSE;
    FDesignMode = FALSE;
    FSelCount = 0;
    FDragging = FALSE;
@@ -38,7 +52,26 @@ TForm::TForm()
    FRubberBand = FALSE;
    FRubberX1 = FRubberY1 = FRubberX2 = FRubberY2 = 0;
    FResizeHandle = -1;
+   FOnDblClick = NULL;
+   FOnCreate = NULL;
+   FOnDestroy = NULL;
+   FOnShow = NULL;
+   FOnHide = NULL;
+   FOnCloseQuery = NULL;
+   FOnActivate = NULL;
+   FOnDeactivate = NULL;
+   FOnResize = NULL;
+   FOnPaint = NULL;
+   FOnKeyDown = NULL;
+   FOnKeyUp = NULL;
+   FOnKeyPress = NULL;
+   FOnMouseDown = NULL;
+   FOnMouseUp = NULL;
+   FOnMouseMove = NULL;
+   FOnMouseWheel = NULL;
    FOnSelChange = NULL;
+   FOnComponentDrop = NULL;
+   FPendingControlType = -1;
    FDragStartX = FDragStartY = 0;
    FDragOffsetX = FDragOffsetY = 0;
    memset( FSelected, 0, sizeof(FSelected) );
@@ -66,8 +99,11 @@ TForm::~TForm()
    if( FGridBmp ) { SelectObject( FGridDC, NULL ); DeleteObject( FGridBmp ); }
    if( FGridDC )  DeleteDC( FGridDC );
    if( FFormFont ) DeleteObject( FFormFont );
+   ReleaseFormEvents();
    if( FOnSelChange ) hb_itemRelease( FOnSelChange );
    FOnSelChange = NULL;
+   if( FOnComponentDrop ) hb_itemRelease( FOnComponentDrop );
+   FOnComponentDrop = NULL;
    /* Release menu action blocks */
    for( i = 0; i < FMenuItemCount; i++ )
       if( FMenuActions[i] ) hb_itemRelease( FMenuActions[i] );
@@ -310,6 +346,40 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
          break;
       }
 
+      case WM_ACTIVATE:
+         if( !FDesignMode )
+         {
+            if( LOWORD(wParam) != WA_INACTIVE )
+               FireEvent( FOnActivate );
+            else
+               FireEvent( FOnDeactivate );
+         }
+         break;
+
+      case WM_SHOWWINDOW:
+         if( !FDesignMode )
+         {
+            if( wParam )
+               FireEvent( FOnShow );
+            else
+               FireEvent( FOnHide );
+         }
+         break;
+
+      case WM_LBUTTONDBLCLK:
+         if( !FDesignMode )
+            FireEvent( FOnDblClick );
+         break;
+
+      case WM_RBUTTONDOWN:
+      case WM_RBUTTONUP:
+         break;
+
+      case WM_MOUSEWHEEL:
+         if( !FDesignMode )
+            FireEvent( FOnMouseWheel );
+         break;
+
       case WM_MOVE:
       case WM_SIZE:
       {
@@ -335,6 +405,8 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
             SendMessage( FStatusBar, WM_SIZE, 0, 0 );
          if( FDesignMode )
             UpdateOverlay();
+         if( !FDesignMode )
+            FireEvent( FOnResize );
          break;
       }
 
@@ -693,10 +765,24 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
                return 0;
             }
          }
+         if( !FDesignMode )
+            FireEvent( FOnKeyDown );
          break;
       }
 
+      case WM_KEYUP:
+         if( !FDesignMode )
+            FireEvent( FOnKeyUp );
+         break;
+
+      case WM_CHAR:
+         if( !FDesignMode )
+            FireEvent( FOnKeyPress );
+         break;
+
       case WM_CLOSE:
+         /* Fire OnCloseQuery - could be used to cancel closing */
+         FireEvent( FOnCloseQuery );
          /* Fire OnClose event before closing */
          FireEvent( FOnClose );
 
@@ -710,6 +796,7 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
          return 0;
 
       case WM_DESTROY:
+         FireEvent( FOnDestroy );
          if( FMainWindow )
             PostQuitMessage(0);
          return 0;
@@ -735,6 +822,8 @@ void TForm::Run()
 
    ShowWindow( FHandle, SW_SHOW );
    UpdateWindow( FHandle );
+
+   FireEvent( FOnCreate );
 
    FRunning = TRUE;
 
@@ -1195,6 +1284,47 @@ void TForm::AddMenuSeparator( HMENU hPopup )
 {
    if( hPopup )
       AppendMenuA( hPopup, MF_SEPARATOR, 0, NULL );
+}
+
+void TForm::SetFormEvent( const char * szEvent, PHB_ITEM pBlock )
+{
+   PHB_ITEM * ppTarget = NULL;
+
+   if( lstrcmpi( szEvent, "OnDblClick" ) == 0 )        ppTarget = &FOnDblClick;
+   else if( lstrcmpi( szEvent, "OnCreate" ) == 0 )      ppTarget = &FOnCreate;
+   else if( lstrcmpi( szEvent, "OnDestroy" ) == 0 )     ppTarget = &FOnDestroy;
+   else if( lstrcmpi( szEvent, "OnShow" ) == 0 )        ppTarget = &FOnShow;
+   else if( lstrcmpi( szEvent, "OnHide" ) == 0 )        ppTarget = &FOnHide;
+   else if( lstrcmpi( szEvent, "OnCloseQuery" ) == 0 )  ppTarget = &FOnCloseQuery;
+   else if( lstrcmpi( szEvent, "OnActivate" ) == 0 )    ppTarget = &FOnActivate;
+   else if( lstrcmpi( szEvent, "OnDeactivate" ) == 0 )  ppTarget = &FOnDeactivate;
+   else if( lstrcmpi( szEvent, "OnResize" ) == 0 )      ppTarget = &FOnResize;
+   else if( lstrcmpi( szEvent, "OnPaint" ) == 0 )       ppTarget = &FOnPaint;
+   else if( lstrcmpi( szEvent, "OnKeyDown" ) == 0 )     ppTarget = &FOnKeyDown;
+   else if( lstrcmpi( szEvent, "OnKeyUp" ) == 0 )       ppTarget = &FOnKeyUp;
+   else if( lstrcmpi( szEvent, "OnKeyPress" ) == 0 )    ppTarget = &FOnKeyPress;
+   else if( lstrcmpi( szEvent, "OnMouseDown" ) == 0 )   ppTarget = &FOnMouseDown;
+   else if( lstrcmpi( szEvent, "OnMouseUp" ) == 0 )     ppTarget = &FOnMouseUp;
+   else if( lstrcmpi( szEvent, "OnMouseMove" ) == 0 )   ppTarget = &FOnMouseMove;
+   else if( lstrcmpi( szEvent, "OnMouseWheel" ) == 0 )  ppTarget = &FOnMouseWheel;
+
+   if( ppTarget )
+   {
+      if( *ppTarget ) hb_itemRelease( *ppTarget );
+      *ppTarget = hb_itemNew( pBlock );
+   }
+}
+
+void TForm::ReleaseFormEvents()
+{
+   #define REL(e) if( e ) { hb_itemRelease( e ); e = NULL; }
+   REL(FOnDblClick);    REL(FOnCreate);      REL(FOnDestroy);
+   REL(FOnShow);        REL(FOnHide);        REL(FOnCloseQuery);
+   REL(FOnActivate);    REL(FOnDeactivate);   REL(FOnResize);
+   REL(FOnPaint);       REL(FOnKeyDown);      REL(FOnKeyUp);
+   REL(FOnKeyPress);    REL(FOnMouseDown);    REL(FOnMouseUp);
+   REL(FOnMouseMove);   REL(FOnMouseWheel);
+   #undef REL
 }
 
 const PROPDESC * TForm::GetPropDescs( int * pnCount )

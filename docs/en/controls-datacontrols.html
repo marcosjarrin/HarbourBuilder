@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Controls - HarbourBuilder Docs</title>
+  <link rel="stylesheet" href="../assets/css/docs.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head>
+<body>
+
+<div class="header">
+  <a class="logo" href="index.html"><span>HB</span> HarbourBuilder Docs</a>
+  <nav>
+    <input class="search-box" type="text" placeholder="Search docs..." oninput="doSearch(this.value)">
+    <button class="lang-btn active">EN</button>
+    <a class="lang-btn" href="../es/index.html">ES</a>
+    <a class="lang-btn" href="../pt/index.html">PT</a>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9788;</button>
+  </nav>
+</div>
+
+<div class="sidebar">
+  <div class="nav-section">
+    <h3>Getting Started</h3>
+    <a href="index.html">Overview</a>
+    <a href="quickstart.html">Quick Start</a>
+    <a href="installation.html">Installation</a>
+    <a href="architecture.html">Architecture</a>
+  </div>
+  <div class="nav-section">
+    <h3>Component Palette</h3>
+    <a href="controls-standard.html">Standard (11)</a>
+    <a href="controls-additional.html">Additional (10)</a>
+    <a href="controls-native.html">Win32 / Cocoa / GTK3 (9)</a>
+    <a href="controls-system.html">System (2)</a>
+    <a href="controls-dialogs.html">Dialogs (6)</a>
+    <a href="controls-database.html">Data Access (9)</a>
+    <a href="controls-datacontrols.html" class="active">Data Controls (8)</a>
+    <a href="controls-internet.html">Internet (9)</a>
+    <a href="controls-threading.html">Threading (8)</a>
+    <a href="controls-ai.html">AI (7)</a>
+    <a href="controls-erp.html">ERP / Business (12)</a>
+  </div>
+  <div class="nav-section">
+    <h3>IDE Features</h3>
+    <a href="form-designer.html">Form Designer</a>
+    <a href="code-editor.html">Code Editor</a>
+    <a href="debugger.html">Debugger</a>
+    <a href="ai-assistant.html">AI Assistant</a>
+  </div>
+  <div class="nav-section">
+    <h3>Platforms</h3>
+    <a href="platform-windows.html">Windows</a>
+    <a href="platform-macos.html">macOS</a>
+    <a href="platform-linux.html">Linux</a>
+  </div>
+</div>
+
+<div class="content">
+
+<div class="breadcrumbs">
+  <a href="index.html">Docs</a> <span>/</span>
+  <a href="controls-standard.html">Component Palette</a> <span>/</span> Data Controls
+</div>
+
+<h1>Data Controls</h1>
+<p>The Data Controls tab provides 8 data-aware controls that bind directly to database fields and result sets. These controls automatically display, navigate, and edit database data without manual synchronization code.</p>
+
+<!-- TBrowse -->
+<h2 id="browse">TBrowse <span class="badge new">CT_BROWSE = 79</span></h2>
+<p>High-performance data grid for browsing and editing tabular data. Supports both database-bound and virtual (code block) modes. The most powerful data display control in HarbourBuilder.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>oDataSource</code></td><td>Object</td><td>NIL</td><td>Data Access component (TDBFTable, TSQLite, etc.)</td></tr>
+  <tr><td><code>aCols</code></td><td>Array</td><td>{}</td><td>Array of TBrowseColumn objects</td></tr>
+  <tr><td><code>nRowCount</code></td><td>Numeric</td><td>0</td><td>Number of visible rows (read-only)</td></tr>
+  <tr><td><code>nColCount</code></td><td>Numeric</td><td>0</td><td>Number of columns (read-only)</td></tr>
+  <tr><td><code>nRowPos</code></td><td>Numeric</td><td>1</td><td>Current row position in the visible area</td></tr>
+  <tr><td><code>nColPos</code></td><td>Numeric</td><td>1</td><td>Current column position</td></tr>
+  <tr><td><code>lEditable</code></td><td>Logical</td><td>.F.</td><td>Allow in-place cell editing</td></tr>
+  <tr><td><code>lVirtual</code></td><td>Logical</td><td>.F.</td><td>Use virtual mode (data supplied via code blocks)</td></tr>
+  <tr><td><code>nVirtualRows</code></td><td>Numeric</td><td>0</td><td>Total row count in virtual mode</td></tr>
+  <tr><td><code>lShowHeaders</code></td><td>Logical</td><td>.T.</td><td>Show column header row</td></tr>
+  <tr><td><code>lShowGrid</code></td><td>Logical</td><td>.T.</td><td>Show grid lines</td></tr>
+  <tr><td><code>lAlternateColors</code></td><td>Logical</td><td>.F.</td><td>Alternate row background colors</td></tr>
+  <tr><td><code>nClrRowOdd</code></td><td>Color</td><td>inherited</td><td>Odd row background color</td></tr>
+  <tr><td><code>nClrRowEven</code></td><td>Color</td><td>inherited</td><td>Even row background color</td></tr>
+  <tr><td><code>nClrSelected</code></td><td>Color</td><td>system</td><td>Selected row highlight color</td></tr>
+</table>
+
+<h3>TBrowseColumn Properties</h3>
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cHeading</code></td><td>String</td><td>""</td><td>Column header text</td></tr>
+  <tr><td><code>cField</code></td><td>String</td><td>""</td><td>Database field name to bind</td></tr>
+  <tr><td><code>bBlock</code></td><td>Block</td><td>NIL</td><td>Code block that returns cell value (virtual mode)</td></tr>
+  <tr><td><code>nWidth</code></td><td>Numeric</td><td>100</td><td>Column width in pixels</td></tr>
+  <tr><td><code>nAlign</code></td><td>Numeric</td><td>0</td><td>Alignment (0=left, 1=center, 2=right)</td></tr>
+  <tr><td><code>cPicture</code></td><td>String</td><td>""</td><td>Display format picture clause</td></tr>
+  <tr><td><code>lEditable</code></td><td>Logical</td><td>.T.</td><td>Allow editing this column</td></tr>
+</table>
+
+<h3>TBrowse Events</h3>
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnClick</code></td><td>Action</td><td>User clicked a cell. Params: nRow, nCol</td></tr>
+  <tr><td><code>OnDblClick</code></td><td>Action</td><td>User double-clicked a cell. Params: nRow, nCol</td></tr>
+  <tr><td><code>OnRowChange</code></td><td>Navigation</td><td>Current row changed. Params: nOldRow, nNewRow</td></tr>
+  <tr><td><code>OnColChange</code></td><td>Navigation</td><td>Current column changed. Params: nOldCol, nNewCol</td></tr>
+  <tr><td><code>OnHeaderClick</code></td><td>Action</td><td>Column header clicked (for sorting). Params: nCol</td></tr>
+  <tr><td><code>OnBeforeEdit</code></td><td>Edit</td><td>Before cell editing begins. Return .F. to cancel. Params: nRow, nCol</td></tr>
+  <tr><td><code>OnAfterEdit</code></td><td>Edit</td><td>After cell edit committed. Params: nRow, nCol, xOldValue, xNewValue</td></tr>
+  <tr><td><code>OnKeyDown</code></td><td>Keyboard</td><td>Key pressed while browse has focus. Params: nKey</td></tr>
+  <tr><td><code>OnPaint</code></td><td>Display</td><td>Custom cell painting. Params: nRow, nCol, oCanvas</td></tr>
+  <tr><td><code>OnVirtualData</code></td><td>Data</td><td>Request data for a virtual row. Params: nRow, nCol. Must return cell value</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>Custom owner-drawn ListView (WC_LISTVIEW)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSScrollView + NSTableView</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkScrolledWindow + GtkTreeView</td></tr>
+</table>
+
+<!-- TDBGrid -->
+<h2 id="dbgrid">TDBGrid <span class="badge new">CT_DBGRID = 80</span></h2>
+<p>Simplified data grid that auto-generates columns from the data source fields. Easier to use than TBrowse when full customization is not needed.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>oDataSource</code></td><td>Object</td><td>NIL</td><td>Data Access component to bind</td></tr>
+  <tr><td><code>lAutoColumns</code></td><td>Logical</td><td>.T.</td><td>Automatically create columns from fields</td></tr>
+  <tr><td><code>lEditable</code></td><td>Logical</td><td>.F.</td><td>Allow in-place editing</td></tr>
+  <tr><td><code>lSortable</code></td><td>Logical</td><td>.T.</td><td>Allow sorting by clicking headers</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnClick</code></td><td>Action</td><td>Cell clicked</td></tr>
+  <tr><td><code>OnDblClick</code></td><td>Action</td><td>Cell double-clicked</td></tr>
+  <tr><td><code>OnRowChange</code></td><td>Navigation</td><td>Current row changed</td></tr>
+  <tr><td><code>OnAfterEdit</code></td><td>Edit</td><td>Cell edit committed</td></tr>
+</table>
+
+<!-- TDBNavigator -->
+<h2 id="dbnavigator">TDBNavigator <span class="badge new">CT_DBNAVIGATOR = 81</span></h2>
+<p>Navigation bar with buttons for first, previous, next, last, insert, delete, edit, save, and cancel operations on a data source.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>oDataSource</code></td><td>Object</td><td>NIL</td><td>Data Access component to navigate</td></tr>
+  <tr><td><code>lShowInsert</code></td><td>Logical</td><td>.T.</td><td>Show Insert button</td></tr>
+  <tr><td><code>lShowDelete</code></td><td>Logical</td><td>.T.</td><td>Show Delete button</td></tr>
+  <tr><td><code>lShowEdit</code></td><td>Logical</td><td>.T.</td><td>Show Edit button</td></tr>
+  <tr><td><code>lConfirmDelete</code></td><td>Logical</td><td>.T.</td><td>Prompt before deleting a record</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnBeforeAction</code></td><td>Action</td><td>Before a navigator action. Return .F. to cancel. Params: nAction</td></tr>
+  <tr><td><code>OnAfterAction</code></td><td>Action</td><td>After a navigator action completes. Params: nAction</td></tr>
+</table>
+
+<!-- TDBText -->
+<h2 id="dbtext">TDBText <span class="badge new">CT_DBTEXT = 82</span></h2>
+<p>Data-aware label. Automatically displays the value of a bound database field as read-only text.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>oDataSource</code></td><td>Object</td><td>NIL</td><td>Data Access component</td></tr>
+  <tr><td><code>cField</code></td><td>String</td><td>""</td><td>Field name to display</td></tr>
+  <tr><td><code>cPicture</code></td><td>String</td><td>""</td><td>Display format picture clause</td></tr>
+</table>
+
+<!-- TDBEdit -->
+<h2 id="dbedit">TDBEdit <span class="badge new">CT_DBEDIT = 83</span></h2>
+<p>Data-aware text input. Binds a TEdit control to a database field for viewing and editing.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>oDataSource</code></td><td>Object</td><td>NIL</td><td>Data Access component</td></tr>
+  <tr><td><code>cField</code></td><td>String</td><td>""</td><td>Field name to bind</td></tr>
+  <tr><td><code>cPicture</code></td><td>String</td><td>""</td><td>Input/display format picture clause</td></tr>
+  <tr><td><code>lReadOnly</code></td><td>Logical</td><td>.F.</td><td>Prevent editing</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnChange</code></td><td>Action</td><td>Field value changed by user</td></tr>
+  <tr><td><code>OnValidate</code></td><td>Validation</td><td>Validate before saving. Return .F. to reject. Params: xValue</td></tr>
+</table>
+
+<!-- TDBComboBox -->
+<h2 id="dbcombobox">TDBComboBox <span class="badge new">CT_DBCOMBOBOX = 84</span></h2>
+<p>Data-aware combo box. Displays a drop-down list bound to a database field. Useful for lookup fields.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>oDataSource</code></td><td>Object</td><td>NIL</td><td>Data Access component</td></tr>
+  <tr><td><code>cField</code></td><td>String</td><td>""</td><td>Field name to bind</td></tr>
+  <tr><td><code>aItems</code></td><td>Array</td><td>{}</td><td>List of selectable items</td></tr>
+  <tr><td><code>oLookupSource</code></td><td>Object</td><td>NIL</td><td>Optional lookup data source for items</td></tr>
+  <tr><td><code>cLookupField</code></td><td>String</td><td>""</td><td>Field from lookup source to display</td></tr>
+  <tr><td><code>cLookupKey</code></td><td>String</td><td>""</td><td>Key field from lookup source</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnChange</code></td><td>Action</td><td>Selection changed</td></tr>
+</table>
+
+<!-- TDBCheckBox -->
+<h2 id="dbcheckbox">TDBCheckBox <span class="badge new">CT_DBCHECKBOX = 85</span></h2>
+<p>Data-aware check box. Binds a logical (boolean) database field to a check box control.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>oDataSource</code></td><td>Object</td><td>NIL</td><td>Data Access component</td></tr>
+  <tr><td><code>cField</code></td><td>String</td><td>""</td><td>Logical field name to bind</td></tr>
+  <tr><td><code>cText</code></td><td>String</td><td>""</td><td>Label text beside the check box</td></tr>
+  <tr><td><code>xValueOn</code></td><td>Any</td><td>.T.</td><td>Value representing checked state</td></tr>
+  <tr><td><code>xValueOff</code></td><td>Any</td><td>.F.</td><td>Value representing unchecked state</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnChange</code></td><td>Action</td><td>Check state changed</td></tr>
+</table>
+
+<!-- TDBImage -->
+<h2 id="dbimage">TDBImage <span class="badge new">CT_DBIMAGE = 86</span></h2>
+<p>Data-aware image display. Shows an image stored in a database BLOB field or referenced by a file path field.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>oDataSource</code></td><td>Object</td><td>NIL</td><td>Data Access component</td></tr>
+  <tr><td><code>cField</code></td><td>String</td><td>""</td><td>BLOB or file path field name</td></tr>
+  <tr><td><code>lStretch</code></td><td>Logical</td><td>.F.</td><td>Stretch image to fill the control</td></tr>
+  <tr><td><code>lProportional</code></td><td>Logical</td><td>.T.</td><td>Maintain aspect ratio when stretching</td></tr>
+  <tr><td><code>lIsPath</code></td><td>Logical</td><td>.F.</td><td>Field contains a file path (not binary data)</td></tr>
+</table>
+
+<!-- Code Example -->
+<h2 id="example">Code Example: TBrowse with Database</h2>
+<pre><span class="cm">// A data browsing form with TBrowse, navigator, and data-aware controls</span>
+
+<span class="cmd">FUNCTION</span> Main()
+
+   <span class="cmd">LOCAL</span> oForm, oDB, oBrw, oNav
+
+   <span class="cm">// Create form</span>
+   oForm := TForm():New()
+   oForm:<span class="fn">cTitle</span> := <span class="st">"Customer Browser"</span>
+   oForm:<span class="fn">nWidth</span> := <span class="nb">800</span>
+   oForm:<span class="fn">nHeight</span> := <span class="nb">500</span>
+
+   <span class="cm">// Connect to database</span>
+   oDB := TSQLite():New()
+   oDB:<span class="fn">cFile</span> := <span class="st">"customers.db"</span>
+   oDB:<span class="fn">lAutoConnect</span> := .T.
+
+   <span class="cm">// Create the browse control</span>
+   oBrw := TBrowse():New( oForm )
+   oBrw:<span class="fn">nLeft</span>   := <span class="nb">10</span>
+   oBrw:<span class="fn">nTop</span>    := <span class="nb">10</span>
+   oBrw:<span class="fn">nWidth</span>  := <span class="nb">780</span>
+   oBrw:<span class="fn">nHeight</span> := <span class="nb">350</span>
+   oBrw:<span class="fn">oDataSource</span> := oDB
+   oBrw:<span class="fn">lAlternateColors</span> := .T.
+
+   <span class="cm">// Define columns</span>
+   oBrw:<span class="fn">AddColumn</span>( <span class="st">"Id"</span>,    <span class="st">"id"</span>,    <span class="nb">60</span>,  <span class="nb">2</span> )  <span class="cm">// right-aligned</span>
+   oBrw:<span class="fn">AddColumn</span>( <span class="st">"Name"</span>,  <span class="st">"name"</span>,  <span class="nb">200</span>, <span class="nb">0</span> )  <span class="cm">// left-aligned</span>
+   oBrw:<span class="fn">AddColumn</span>( <span class="st">"Email"</span>, <span class="st">"email"</span>, <span class="nb">250</span>, <span class="nb">0</span> )
+   oBrw:<span class="fn">AddColumn</span>( <span class="st">"City"</span>,  <span class="st">"city"</span>,  <span class="nb">150</span>, <span class="nb">0</span> )
+
+   <span class="cm">// Events</span>
+   oBrw:<span class="fn">OnDblClick</span>    := { |r,c| EditRecord( oDB, r ) }
+   oBrw:<span class="fn">OnHeaderClick</span> := { |c| SortByColumn( oDB, oBrw, c ) }
+   oBrw:<span class="fn">OnRowChange</span>   := { |o,n| UpdateStatus( n ) }
+
+   <span class="cm">// Add navigator bar</span>
+   oNav := TDBNavigator():New( oForm )
+   oNav:<span class="fn">nLeft</span> := <span class="nb">10</span>
+   oNav:<span class="fn">nTop</span>  := <span class="nb">370</span>
+   oNav:<span class="fn">oDataSource</span> := oDB
+   oNav:<span class="fn">lConfirmDelete</span> := .T.
+
+   <span class="cm">// Load data and activate</span>
+   oDB:<span class="fn">Query</span>( <span class="st">"SELECT * FROM customers ORDER BY name"</span> )
+   oForm:<span class="fn">Activate</span>()
+
+<span class="cmd">RETURN</span> <span class="cmd">NIL</span></pre>
+
+<div class="info-box info">
+  <strong>8 Data Controls</strong>
+  <p>Data controls automatically synchronize with their data source. When the user navigates to a different
+  record, all bound controls update instantly. Changes are written back to the database when saved.</p>
+</div>
+
+</div>
+
+<script src="../assets/js/docs.js"></script>
+</body>
+</html>

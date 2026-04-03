@@ -1,5 +1,189 @@
-hbcpp - C++ powered GUI for Harbour
-=====================================
+HarbourBuilder - Cross-platform visual IDE for Harbour
+=======================================================
+
+2026-04-03 (Session 2: Debugger, AI Assistant, ERP, Printing, Search, Dark Mode, Docs)
+--------------------------------------------------------------------------------------
+
+IDE FEATURES:
+- Dark mode: Windows 10/11 dark title bars via DwmSetWindowAttribute (DWMWA_USE_IMMERSIVE_DARK_MODE=20)
+- Project Options dialog: 4 tabs (Harbour/C Compiler/Linker/Directories) with all build settings
+- Editor Colors dialog: 9 syntax colors, font name/size, presets (Dark/Light/Monokai/Solarized), preview
+- Project Inspector: dockable TreeView showing project structure (View > Project Inspector)
+- Debugger panel: 5 tabs (Watch/Locals/Call Stack/Breakpoints/Output) with ListView (Name/Value/Type)
+- Debug menu: Toggle Breakpoint, Clear Breakpoints
+- AI Assistant panel: Ollama integration, model selector (codellama/llama3/deepseek-coder/mistral/phi3/gemma2),
+  chat output, input field, send button, status bar. Supports Ollama (localhost:11434) + LM Studio (localhost:1234)
+- Code Editor Find bar: Ctrl+F (find), Ctrl+H (replace), F3/Shift+F3 (next/prev), Esc (close),
+  match count display, Next/Prev/Close buttons, Replace/Replace All
+
+COMPONENT PALETTE - expanded from 86 to 109 controls:
+- Data Controls tab (8): TBrowse, TDBGrid, TDBNavigator, TDBText, TDBEdit, TDBComboBox, TDBCheckBox, TDBImage
+  * TBrowse: full C++ class with BROWSECOLUMN struct (Title/FieldName/Width/Align/Editable/Visible/Sortable/
+    HeaderClr/FooterClr/FooterText/Format), 10 events (OnCellClick/OnCellDblClick/OnHeaderClick/OnSort/
+    OnScroll/OnCellEdit/OnCellPaint/OnRowSelect/OnKeyDown/OnColumnResize), DataSource for virtual mode,
+    ShowHeaders/ShowFooters/ShowGridLines/AltRowColors. Native Win32 ListView in Report mode.
+  * HB_FUNC bridge: UI_BrowseNew, UI_BrowseAddCol, UI_BrowseSetCell, UI_BrowseGetCell,
+    UI_BrowseSetFooter, UI_BrowseRefresh, UI_BrowseOnEvent
+
+- Internet tab expanded (9): +TWebServer(71), TWebSocket(72), THttpClient(73), TFtpClient(74),
+  TSmtpClient(75), TTcpServer(76), TTcpClient(77), TUdpSocket(78)
+  * TWebServer: enables building professional web apps — set Port, handle OnRequest, serve static files
+  * Full networking stack for desktop + server applications
+
+- Printing tab (8 new): TPrinter(102), TReport(103), TLabels(104), TPrintPreview(105),
+  TPageSetup(106), TPrintDialog(107), TReportViewer(108), TBarcodePrinter(109)
+  * TReport: visual band-based designer (FastReport/R&R quality) with Title/Header/Detail/Group/Footer bands
+
+- ERP tab (12 new): TPreprocessor(90), TScriptEngine(91), TReportDesigner(92), TBarcode(93),
+  TPDFGenerator(94), TExcelExport(95), TAuditLog(96), TPermissions(97), TCurrency(98),
+  TTaxEngine(99), TDashboard(100), TScheduler(101)
+  * Enterprise components for building business applications, accounting, CRM, ERP systems
+
+- Threading tab (8): TThread(63), TMutex(64), TSemaphore(65), TCriticalSection(66),
+  TThreadPool(67), TAtomicInt(68), TCondVar(69), TChannel(70)
+
+MENU SYNC (all 3 platforms):
+- Run menu: +Toggle Breakpoint, +Clear Breakpoints
+- Tools menu: +Editor Colors, +AI Assistant
+- View menu: +Project Inspector, +Debugger
+- Help menu: +Documentation, +Quick Start, +Controls Reference (opens HTML docs in browser)
+
+DOCUMENTATION (DeepWiki style):
+- docs/ folder with professional HTML documentation system
+- docs/assets/css/docs.css: 400+ lines CSS (dark/light theme, sidebar, tables, code blocks,
+  info boxes, badges, collapsible sections, responsive, Mermaid diagrams)
+- docs/assets/js/docs.js: theme toggle, search, copy code, active navigation
+- 14 documentation pages created:
+  * index.html: overview with architecture Mermaid diagram, 109 controls table
+  * quickstart.html: 5-step getting started guide with workflow diagram
+  * architecture.html: 5-layer arch, platform backends, CT_ types, file structure,
+    event system sequence diagram, two-way tools flowchart, build pipeline diagram
+  * controls-standard.html: 11 controls with properties/events/platform widgets/code examples
+  * controls-additional.html: 10 controls documented
+  * controls-native.html: 9 platform-specific controls
+  * controls-system.html: Timer, PaintBox
+  * controls-dialogs.html: 6 dialog controls
+  * controls-database.html: 9 database components with common properties/events
+  * controls-datacontrols.html: 8 data-aware controls with full TBrowse documentation
+  * controls-internet.html: 9 networking controls with web server example
+  * controls-threading.html: 8 threading controls with producer-consumer example
+  * controls-ai.html: 7 AI controls with Transformer diagram, Ollama example
+  * controls-erp.html: 12 ERP components documented
+- docs/en/, docs/es/, docs/pt/ structure (EN complete, ES/PT templates)
+
+BACKENDS (GTK3 + Cocoa):
+- All new CT_ defines (53-109) added to gtk3_core.c and cocoa_core.m
+- All new controls registered in backend creation tables with default sizes
+- Drop handlers (aNames arrays) updated for all new control types
+
+TOTAL: 14 palette tabs, 109 control types, 3 platforms, all compiling
+
+2026-04-03 (Session 1: Windows rewrite, full C++Builder palette, AI tab, 3-platform sync)
+------------------------------------------------------------------------------------------
+WINDOWS IDE REWRITE (hbbuilder_win.prg):
+- Complete rewrite to match macOS/Linux feature parity
+- Multi-form project management (aForms array, nActiveForm)
+- Tabbed code editor (Tab Control + RichEdit, per-tab text buffers)
+- Two-way code sync: designer <-> code editor (SyncDesignerToCode)
+- Project operations: New Application, Open (.hbp), Save, Build & Run (BCC32)
+- Event handler generation (double-click in inspector Events tab)
+- Component palette drop handling with auto-naming
+- About dialog with PNG logo via GDI+ (W32_AboutDialog)
+- File dialogs: W32_OpenFileDialog, W32_SaveFileDialog (GetOpenFileName/GetSaveFileName)
+- W32_SelectFromList (modal dialog with ListBox for View > Forms)
+- W32_ShellExec (CreateProcess with pipe capture for build output)
+- Code editor functions: SetTabText, GetTabText, AddTab, SelectTab, ClearTabs,
+  OnTabChange, AppendText, GotoFunction, BringToFront
+- Title changed from "hbcpp" to "HbBuilder"
+- Resource paths changed from hardcoded c:\ide\ to relative ../resources/
+
+TFORM PROPERTIES (16 new, matching macOS/Linux):
+- nBorderStyle, nBorderIcons, nBorderWidth, nPosition, nWindowState
+- nFormStyle (SetWindowPos HWND_TOPMOST for fsStayOnTop)
+- nCursor, lKeyPreview, lShowHint, cHint, lAutoScroll, lDoubleBuffered
+- lAlphaBlend + nAlphaBlendValue (WS_EX_LAYERED + SetLayeredWindowAttributes)
+- nClientWidth, nClientHeight (GetClientRect, read-only)
+- cFontName, nFontSize (LOGFONT extraction)
+- All in UI_SETPROP, UI_GETPROP, UI_GETALLPROPS
+
+TFORM EVENTS (17 new):
+- OnDblClick (WM_LBUTTONDBLCLK), OnCreate (after Show), OnDestroy (WM_DESTROY)
+- OnShow/OnHide (WM_SHOWWINDOW), OnCloseQuery (WM_CLOSE before OnClose)
+- OnActivate/OnDeactivate (WM_ACTIVATE), OnResize (WM_SIZE)
+- OnKeyDown (WM_KEYDOWN), OnKeyUp (WM_KEYUP), OnKeyPress (WM_CHAR)
+- OnMouseDown, OnMouseUp, OnMouseMove, OnMouseWheel (WM_MOUSEWHEEL)
+- OnPaint (available via SetFormEvent)
+- UI_GETALLEVENTS: full event introspection per control type (Form, Button, Edit, etc.)
+- TForm::SetFormEvent(), TForm::ReleaseFormEvents() methods
+
+INSPECTOR ENHANCEMENTS:
+- INS_SetOnEventDblClick, INS_SetOnPropChanged callbacks
+- pOnPropChanged fires after every InsApplyValue (two-way sync)
+
+C++ CORE - NEW CONTROL CLASSES (all with native Win32 CreateParams):
+Standard: TMemo (EDIT+ES_MULTILINE), TPanel (STATIC+SS_SUNKEN),
+  TListBox (LISTBOX), TRadioButton (BS_AUTORADIOBUTTON), TScrollBar (SCROLLBAR)
+Additional: TBitBtn, TSpeedButton (BS_FLAT), TImage (SS_BITMAP),
+  TShape (SS_OWNERDRAW), TBevel (SS_ETCHEDFRAME), TMaskEdit, TStringGrid (ListView),
+  TScrollBox, TStaticText (SS_SIMPLE+SS_SUNKEN), TLabeledEdit
+Win32: TTabControl2 (WC_TABCONTROL), TTreeView (WC_TREEVIEW+TVS_HASLINES),
+  TListView (WC_LISTVIEW+LVS_REPORT), TProgressBar (PROGRESS_CLASS),
+  TRichEdit (RichEdit20A), TTrackBar (TRACKBAR_CLASS), TUpDown (UPDOWN_CLASS),
+  TDateTimePicker (DATETIMEPICK_CLASS), TMonthCalendar (MONTHCAL_CLASS)
+System: TPaintBox (SS_OWNERDRAW)
+- CreateControlByType factory updated for all new types
+- HB_FUNC bridge: UI_ListBoxNew, UI_RadioButtonNew, UI_BitBtnNew, UI_ImageNew,
+  UI_ShapeNew, UI_BevelNew, UI_TreeViewNew, UI_ListViewNew, UI_ProgressBarNew,
+  UI_RichEditNew (+ all new types)
+
+HBBRIDGE.CPP:
+- UI_SETDESIGNFORM (static s_designForm)
+- UI_FORMBRINGTOFRONT (SetWindowPos HWND_TOP)
+- UI_FORMONCOMPONENTDROP (PHB_ITEM callback storage)
+
+COMPONENT PALETTE - 9 TABS, 62 CONTROLS (all 3 platforms):
+Standard (11): Label, Edit, Memo, Button, CheckBox, RadioButton, ListBox,
+  ComboBox, GroupBox, Panel, ScrollBar
+Additional (10): BitBtn, SpeedButton, Image, Shape, Bevel, MaskEdit,
+  StringGrid, ScrollBox, StaticText, LabeledEdit
+Win32/Cocoa/GTK3 (9): TabControl, TreeView, ListView, ProgressBar, RichEdit,
+  TrackBar, UpDown, DateTimePicker, MonthCalendar
+System (2): Timer, PaintBox
+Dialogs (6): OpenDialog, SaveDialog, FontDialog, ColorDialog, FindDialog, ReplaceDialog
+Data Access (9): DBFTable, MySQL, MariaDB, PostgreSQL, SQLite, Firebird,
+  SQLServer, Oracle, MongoDB
+Internet (1): WebView
+AI (7): OpenAI, Gemini, Claude, DeepSeek, Grok, Ollama, Transformer
+
+GTK3 BACKEND (gtk3_core.c):
+- 40+ CT_ defines matching all platforms
+- 20+ HBXxx_CreateWidget functions using native GTK3 widgets:
+  GtkTextView (Memo/RichEdit), GtkFrame (Panel/Bevel), GtkTreeView (ListBox/TreeView/
+  ListView/StringGrid), GtkRadioButton, GtkScrollbar, GtkProgressBar, GtkNotebook
+  (TabControl), GtkScale (TrackBar), GtkSpinButton (UpDown), GtkCalendar (MonthCalendar),
+  GtkDrawingArea (Shape/PaintBox), GtkImage
+- Generic HBForm_CreateControlOfType with table-driven default sizes for all types
+
+COCOA BACKEND (cocoa_core.m):
+- 40+ CT_ defines matching all platforms
+- Generic createViewInParent with 25+ native Cocoa views:
+  NSTextView (Memo/RichEdit), NSBox (Panel/Bevel), NSTableView (ListBox/ListView/
+  StringGrid), NSOutlineView (TreeView), NSRadioButton, NSScroller, NSProgressIndicator,
+  NSTabView (TabControl), NSSlider (TrackBar), NSStepper (UpDown), NSDatePicker
+  (DateTimePicker/MonthCalendar), NSImageView, NSButton (BitBtn/SpeedButton)
+- Generic HBForm_CreateControlOfType with table-driven defaults
+
+TRANSFORMER EXAMPLES (samples/projects/transformer/):
+- attention_visualizer.prg: Attention weight heatmap visualization
+- text_generator.prg: Autoregressive generation with temperature control
+- train_from_scratch.prg: Training loop with loss curve visualization
+- tokenizer_explorer.prg: Interactive BPE tokenization
+- attention_is_all_you_need.prg: Complete paper walkthrough step by step
+- sentiment_analyzer.prg: BERT-style encoder classification
+- translator_demo.prg: Encoder-decoder with cross-attention
+
+BUILD SYSTEM:
+- build_cpp.bat: bcc32c -> bcc32, CPPDIR -> c:\HarbourBuilder\cpp, +gdiplus.lib
 
 2026-04-02 (HbBuilder: save/load projects, inspector fixes, no-terminal Run)
 -----------------------------------------------------------------------------

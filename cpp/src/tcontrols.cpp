@@ -680,6 +680,508 @@ static void EnsureSplitterClass( void )
 }
 
 /* ======================================================================
+ * TMemo (Standard)
+ * ====================================================================== */
+TMemo::TMemo() { lstrcpy(FClassName,"TMemo"); FControlType=CT_MEMO; FWidth=180; FHeight=80; FReadOnly=FALSE; FWordWrap=TRUE; FScrollBars=1; }
+void TMemo::CreateParams(DWORD*s,DWORD*e,const char**c) { *c="EDIT"; *s=WS_CHILD|WS_VISIBLE|WS_BORDER|ES_MULTILINE|ES_AUTOVSCROLL|WS_VSCROLL|ES_WANTRETURN; *e=WS_EX_CLIENTEDGE; }
+const PROPDESC* TMemo::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TPanel (Standard)
+ * ====================================================================== */
+TPanel::TPanel() { lstrcpy(FClassName,"TPanel"); FControlType=CT_PANEL; lstrcpy(FText,"Panel"); FWidth=185; FHeight=41; FBevelOuter=2; FAlignment=1; }
+void TPanel::CreateParams(DWORD*s,DWORD*e,const char**c) { *c="STATIC"; *s=WS_CHILD|WS_VISIBLE|SS_CENTER|SS_CENTERIMAGE|SS_SUNKEN; *e=0; }
+const PROPDESC* TPanel::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TScrollBar (Standard)
+ * ====================================================================== */
+TScrollBar::TScrollBar() { lstrcpy(FClassName,"TScrollBar"); FControlType=CT_SCROLLBAR; FWidth=150; FHeight=17; FMin=0; FMax=100; FPosition=0; FHorizontal=TRUE; }
+void TScrollBar::CreateParams(DWORD*s,DWORD*e,const char**c) { *c="SCROLLBAR"; *s=WS_CHILD|WS_VISIBLE|SBS_HORZ; *e=0; }
+const PROPDESC* TScrollBar::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TSpeedButton (Additional)
+ * ====================================================================== */
+TSpeedButton::TSpeedButton() { lstrcpy(FClassName,"TSpeedButton"); FControlType=CT_SPEEDBTN; lstrcpy(FText,"Speed"); FWidth=23; FHeight=22; FFlat=TRUE; }
+void TSpeedButton::CreateParams(DWORD*s,DWORD*e,const char**c) { *c="BUTTON"; *s=WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON|BS_FLAT; *e=0; }
+const PROPDESC* TSpeedButton::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TMaskEdit (Additional)
+ * ====================================================================== */
+TMaskEdit::TMaskEdit() { lstrcpy(FClassName,"TMaskEdit"); FControlType=CT_MASKEDIT2; FEditMask[0]=0; }
+const PROPDESC* TMaskEdit::GetPropDescs(int*n) { return TEdit::GetPropDescs(n); }
+
+/* ======================================================================
+ * TStringGrid (Additional)
+ * ====================================================================== */
+TStringGrid::TStringGrid() { lstrcpy(FClassName,"TStringGrid"); FControlType=CT_STRINGGRID; FWidth=200; FHeight=120; FColCount=5; FRowCount=5; FFixedCols=1; FFixedRows=1; }
+void TStringGrid::CreateParams(DWORD*s,DWORD*e,const char**c) { *c=WC_LISTVIEWA; *s=WS_CHILD|WS_VISIBLE|WS_BORDER|LVS_REPORT|LVS_SHOWSELALWAYS; *e=WS_EX_CLIENTEDGE; }
+const PROPDESC* TStringGrid::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TScrollBox (Additional)
+ * ====================================================================== */
+TScrollBox::TScrollBox() { lstrcpy(FClassName,"TScrollBox"); FControlType=CT_SCROLLBOX; FWidth=185; FHeight=140; }
+void TScrollBox::CreateParams(DWORD*s,DWORD*e,const char**c) { *c="STATIC"; *s=WS_CHILD|WS_VISIBLE|WS_HSCROLL|WS_VSCROLL|SS_SUNKEN; *e=WS_EX_CLIENTEDGE; }
+const PROPDESC* TScrollBox::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TStaticText (Additional)
+ * ====================================================================== */
+TStaticText::TStaticText() { lstrcpy(FClassName,"TStaticText"); FControlType=CT_STATICTEXT; lstrcpy(FText,"StaticText"); FWidth=65; FHeight=17; }
+void TStaticText::CreateParams(DWORD*s,DWORD*e,const char**c) { *c="STATIC"; *s=WS_CHILD|WS_VISIBLE|SS_SIMPLE|SS_SUNKEN; *e=0; }
+const PROPDESC* TStaticText::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TLabeledEdit (Additional)
+ * ====================================================================== */
+TLabeledEdit::TLabeledEdit() { lstrcpy(FClassName,"TLabeledEdit"); FControlType=CT_LABELEDEDIT; FLabelText[0]=0; }
+const PROPDESC* TLabeledEdit::GetPropDescs(int*n) { return TEdit::GetPropDescs(n); }
+
+/* ======================================================================
+ * TTabControl2 (Win32)
+ * ====================================================================== */
+TTabControl2::TTabControl2() { lstrcpy(FClassName,"TTabControl"); FControlType=CT_TABCONTROL2; FWidth=200; FHeight=150; }
+void TTabControl2::CreateParams(DWORD*s,DWORD*e,const char**c) { *c=WC_TABCONTROLA; *s=WS_CHILD|WS_VISIBLE|WS_CLIPSIBLINGS|TCS_TABS; *e=0; }
+const PROPDESC* TTabControl2::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TTrackBar (Win32)
+ * ====================================================================== */
+TTrackBar::TTrackBar() { lstrcpy(FClassName,"TTrackBar"); FControlType=CT_TRACKBAR; FWidth=150; FHeight=25; FMin=0; FMax=10; FPosition=0; }
+void TTrackBar::CreateParams(DWORD*s,DWORD*e,const char**c) { *c=TRACKBAR_CLASSA; *s=WS_CHILD|WS_VISIBLE|TBS_AUTOTICKS|TBS_BOTTOM; *e=0; }
+const PROPDESC* TTrackBar::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TUpDown (Win32)
+ * ====================================================================== */
+TUpDown::TUpDown() { lstrcpy(FClassName,"TUpDown"); FControlType=CT_UPDOWN; FWidth=17; FHeight=22; FMin=0; FMax=100; FPosition=0; }
+void TUpDown::CreateParams(DWORD*s,DWORD*e,const char**c) { *c=UPDOWN_CLASSA; *s=WS_CHILD|WS_VISIBLE|UDS_ARROWKEYS|UDS_SETBUDDYINT|UDS_ALIGNRIGHT; *e=0; }
+const PROPDESC* TUpDown::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TDateTimePicker (Win32)
+ * ====================================================================== */
+TDateTimePicker::TDateTimePicker() { lstrcpy(FClassName,"TDateTimePicker"); FControlType=CT_DATETIMEPICKER; FWidth=186; FHeight=24; }
+void TDateTimePicker::CreateParams(DWORD*s,DWORD*e,const char**c) { *c=DATETIMEPICK_CLASSA; *s=WS_CHILD|WS_VISIBLE|DTS_SHORTDATEFORMAT; *e=0; }
+const PROPDESC* TDateTimePicker::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TMonthCalendar (Win32)
+ * ====================================================================== */
+TMonthCalendar::TMonthCalendar() { lstrcpy(FClassName,"TMonthCalendar"); FControlType=CT_MONTHCALENDAR; FWidth=227; FHeight=155; }
+void TMonthCalendar::CreateParams(DWORD*s,DWORD*e,const char**c) { *c=MONTHCAL_CLASSA; *s=WS_CHILD|WS_VISIBLE; *e=0; }
+const PROPDESC* TMonthCalendar::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TPaintBox (System)
+ * ====================================================================== */
+TPaintBox::TPaintBox() { lstrcpy(FClassName,"TPaintBox"); FControlType=CT_PAINTBOX; FWidth=105; FHeight=105; }
+void TPaintBox::CreateParams(DWORD*s,DWORD*e,const char**c) { *c="STATIC"; *s=WS_CHILD|WS_VISIBLE|SS_OWNERDRAW; *e=0; }
+const PROPDESC* TPaintBox::GetPropDescs(int*n) { return TControl::GetPropDescs(n); }
+
+/* ======================================================================
+ * TListBox
+ * ====================================================================== */
+
+TListBox::TListBox()
+{
+   lstrcpy( FClassName, "TListBox" );
+   FControlType = CT_LISTBOX;
+   FWidth = 120; FHeight = 80;
+}
+
+void TListBox::CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass )
+{
+   *pszClass = "LISTBOX";
+   *pdwStyle = WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY;
+   *pdwExStyle = WS_EX_CLIENTEDGE;
+}
+
+const PROPDESC * TListBox::GetPropDescs( int * pnCount )
+{
+   return TControl::GetPropDescs( pnCount );
+}
+
+/* ======================================================================
+ * TRadioButton
+ * ====================================================================== */
+
+TRadioButton::TRadioButton()
+{
+   lstrcpy( FClassName, "TRadioButton" );
+   FControlType = CT_RADIO;
+   lstrcpy( FText, "RadioButton" );
+   FWidth = 120; FHeight = 20;
+   FChecked = FALSE;
+}
+
+void TRadioButton::CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass )
+{
+   *pszClass = "BUTTON";
+   *pdwStyle = WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON;
+   *pdwExStyle = 0;
+}
+
+const PROPDESC * TRadioButton::GetPropDescs( int * pnCount )
+{
+   return TControl::GetPropDescs( pnCount );
+}
+
+/* ======================================================================
+ * TBitBtn (C++Builder Additional: button with glyph)
+ * ====================================================================== */
+
+TBitBtn::TBitBtn()
+{
+   lstrcpy( FClassName, "TBitBtn" );
+   FControlType = CT_BITBTN;
+   lstrcpy( FText, "BitBtn" );
+   FWidth = 88; FHeight = 26;
+}
+
+const PROPDESC * TBitBtn::GetPropDescs( int * pnCount )
+{
+   return TButton::GetPropDescs( pnCount );
+}
+
+/* ======================================================================
+ * TImage (C++Builder Additional: static image)
+ * ====================================================================== */
+
+TImage::TImage()
+{
+   lstrcpy( FClassName, "TImage" );
+   FControlType = CT_IMAGE;
+   FWidth = 100; FHeight = 100;
+   FStretch = FALSE;
+   FCenter = FALSE;
+   FProportional = FALSE;
+}
+
+void TImage::CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass )
+{
+   *pszClass = "STATIC";
+   *pdwStyle = WS_CHILD | WS_VISIBLE | SS_BITMAP | SS_CENTERIMAGE;
+   *pdwExStyle = 0;
+}
+
+const PROPDESC * TImage::GetPropDescs( int * pnCount )
+{
+   return TControl::GetPropDescs( pnCount );
+}
+
+/* ======================================================================
+ * TShape (C++Builder Additional: geometric shape)
+ * ====================================================================== */
+
+TShape::TShape()
+{
+   lstrcpy( FClassName, "TShape" );
+   FControlType = CT_SHAPE;
+   FShapeType = 0;  /* Rectangle */
+   FWidth = 65; FHeight = 65;
+}
+
+void TShape::CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass )
+{
+   *pszClass = "STATIC";
+   *pdwStyle = WS_CHILD | WS_VISIBLE | SS_OWNERDRAW;
+   *pdwExStyle = 0;
+}
+
+const PROPDESC * TShape::GetPropDescs( int * pnCount )
+{
+   return TControl::GetPropDescs( pnCount );
+}
+
+/* ======================================================================
+ * TBevel (C++Builder Additional: etched frame)
+ * ====================================================================== */
+
+TBevel::TBevel()
+{
+   lstrcpy( FClassName, "TBevel" );
+   FControlType = CT_BEVEL;
+   FBevelStyle = 0;  /* bsLowered */
+   FWidth = 150; FHeight = 50;
+}
+
+void TBevel::CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass )
+{
+   *pszClass = "STATIC";
+   *pdwStyle = WS_CHILD | WS_VISIBLE | SS_ETCHEDFRAME;
+   *pdwExStyle = 0;
+}
+
+const PROPDESC * TBevel::GetPropDescs( int * pnCount )
+{
+   return TControl::GetPropDescs( pnCount );
+}
+
+/* ======================================================================
+ * TTreeView (C++Builder Win32 tab)
+ * ====================================================================== */
+
+TTreeView::TTreeView()
+{
+   lstrcpy( FClassName, "TTreeView" );
+   FControlType = CT_TREEVIEW;
+   FWidth = 150; FHeight = 200;
+}
+
+void TTreeView::CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass )
+{
+   *pszClass = WC_TREEVIEWA;
+   *pdwStyle = WS_CHILD | WS_VISIBLE | WS_BORDER |
+               TVS_HASLINES | TVS_LINESATROOT | TVS_HASBUTTONS | TVS_SHOWSELALWAYS;
+   *pdwExStyle = WS_EX_CLIENTEDGE;
+}
+
+const PROPDESC * TTreeView::GetPropDescs( int * pnCount )
+{
+   return TControl::GetPropDescs( pnCount );
+}
+
+/* ======================================================================
+ * TListView (C++Builder Win32 tab)
+ * ====================================================================== */
+
+TListView::TListView()
+{
+   lstrcpy( FClassName, "TListView" );
+   FControlType = CT_LISTVIEW;
+   FViewStyle = 2;  /* vsReport */
+   FWidth = 200; FHeight = 150;
+}
+
+void TListView::CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass )
+{
+   *pszClass = WC_LISTVIEWA;
+   *pdwStyle = WS_CHILD | WS_VISIBLE | WS_BORDER | LVS_REPORT | LVS_SHOWSELALWAYS;
+   *pdwExStyle = WS_EX_CLIENTEDGE;
+}
+
+const PROPDESC * TListView::GetPropDescs( int * pnCount )
+{
+   return TControl::GetPropDescs( pnCount );
+}
+
+/* ======================================================================
+ * TProgressBar (C++Builder Win32 tab)
+ * ====================================================================== */
+
+TProgressBar::TProgressBar()
+{
+   lstrcpy( FClassName, "TProgressBar" );
+   FControlType = CT_PROGRESSBAR;
+   FMin = 0; FMax = 100; FPosition = 0;
+   FWidth = 150; FHeight = 20;
+}
+
+void TProgressBar::CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass )
+{
+   *pszClass = PROGRESS_CLASSA;
+   *pdwStyle = WS_CHILD | WS_VISIBLE;
+   *pdwExStyle = 0;
+}
+
+const PROPDESC * TProgressBar::GetPropDescs( int * pnCount )
+{
+   return TControl::GetPropDescs( pnCount );
+}
+
+/* ======================================================================
+ * TRichEdit (C++Builder Win32 tab)
+ * ====================================================================== */
+
+TRichEdit::TRichEdit()
+{
+   lstrcpy( FClassName, "TRichEdit" );
+   FControlType = CT_RICHEDIT;
+   FReadOnly = FALSE;
+   FWidth = 200; FHeight = 100;
+}
+
+void TRichEdit::CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass )
+{
+   *pszClass = "RichEdit20A";
+   *pdwStyle = WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL |
+               ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN;
+   *pdwExStyle = WS_EX_CLIENTEDGE;
+}
+
+const PROPDESC * TRichEdit::GetPropDescs( int * pnCount )
+{
+   return TControl::GetPropDescs( pnCount );
+}
+
+/* ======================================================================
+ * TBrowse - Powerful data grid
+ * ====================================================================== */
+
+TBrowse::TBrowse()
+{
+   lstrcpy( FClassName, "TBrowse" );
+   FControlType = CT_BROWSE;
+   FWidth = 400; FHeight = 200;
+   FColCount = 0;
+   FRowCount = 0;
+   FCurrentRow = -1;
+   FCurrentCol = -1;
+   FShowHeaders = TRUE;
+   FShowFooters = FALSE;
+   FShowGridLines = TRUE;
+   FShowRowNumbers = FALSE;
+   FCellEditing = FALSE;
+   FMultiSelect = FALSE;
+   FAltRowColors = TRUE;
+   FAltRowColor = RGB(245, 245, 250);
+   FRowHeight = 20;
+   FHeaderHeight = 24;
+   FFooterHeight = 22;
+   FSortColumn = -1;
+   FSortAscending = TRUE;
+   FOnCellClick = NULL;
+   FOnCellDblClick = NULL;
+   FOnHeaderClick = NULL;
+   FOnSort = NULL;
+   FOnScroll = NULL;
+   FOnCellEdit = NULL;
+   FOnCellPaint = NULL;
+   FOnRowSelect = NULL;
+   FOnKeyDown = NULL;
+   FOnColumnResize = NULL;
+   FDataSource = NULL;
+   memset( FCols, 0, sizeof(FCols) );
+}
+
+TBrowse::~TBrowse()
+{
+   #define RELB(e) if( e ) { hb_itemRelease( e ); e = NULL; }
+   RELB(FOnCellClick);   RELB(FOnCellDblClick); RELB(FOnHeaderClick);
+   RELB(FOnSort);        RELB(FOnScroll);        RELB(FOnCellEdit);
+   RELB(FOnCellPaint);   RELB(FOnRowSelect);     RELB(FOnKeyDown);
+   RELB(FOnColumnResize); RELB(FDataSource);
+   #undef RELB
+}
+
+void TBrowse::CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass )
+{
+   *pszClass = WC_LISTVIEWA;
+   *pdwStyle = WS_CHILD | WS_VISIBLE | WS_BORDER |
+               LVS_REPORT | LVS_SHOWSELALWAYS | LVS_SINGLESEL;
+   if( FShowGridLines )
+      *pdwStyle |= LVS_NOSORTHEADER;
+   *pdwExStyle = WS_EX_CLIENTEDGE;
+}
+
+void TBrowse::CreateHandle( HWND hParent )
+{
+   int i;
+   LVCOLUMNA lvc;
+
+   /* Create the ListView */
+   TControl::CreateHandle( hParent );
+   if( !FHandle ) return;
+
+   /* Extended styles: grid lines, full row select, alternating rows */
+   SendMessage( FHandle, LVM_SETEXTENDEDLISTVIEWSTYLE, 0,
+      LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_DOUBLEBUFFER |
+      LVS_EX_HEADERDRAGDROP );
+
+   /* Add columns */
+   for( i = 0; i < FColCount; i++ )
+   {
+      memset( &lvc, 0, sizeof(lvc) );
+      lvc.mask = LVCF_TEXT | LVCF_WIDTH | LVCF_FMT;
+      lvc.pszText = FCols[i].szTitle;
+      lvc.cx = FCols[i].nWidth;
+      switch( FCols[i].nAlign ) {
+         case 1: lvc.fmt = LVCFMT_CENTER; break;
+         case 2: lvc.fmt = LVCFMT_RIGHT; break;
+         default: lvc.fmt = LVCFMT_LEFT; break;
+      }
+      SendMessageA( FHandle, LVM_INSERTCOLUMNA, i, (LPARAM) &lvc );
+   }
+}
+
+int TBrowse::AddColumn( const char * szTitle, const char * szField, int nWidth, int nAlign )
+{
+   if( FColCount >= MAX_BROWSE_COLS ) return -1;
+   int idx = FColCount++;
+   lstrcpynA( FCols[idx].szTitle, szTitle, 64 );
+   lstrcpynA( FCols[idx].szFieldName, szField, 64 );
+   FCols[idx].nWidth = nWidth > 0 ? nWidth : 100;
+   FCols[idx].nAlign = nAlign;
+   FCols[idx].bEditable = FALSE;
+   FCols[idx].bVisible = TRUE;
+   FCols[idx].bSortable = TRUE;
+   FCols[idx].nHeaderClr = RGB(240, 240, 240);
+   FCols[idx].nFooterClr = RGB(240, 240, 240);
+   FCols[idx].szFooterText[0] = 0;
+   FCols[idx].szFormat[0] = 0;
+   return idx;
+}
+
+void TBrowse::SetFooterText( int nCol, const char * szText )
+{
+   if( nCol >= 0 && nCol < FColCount )
+      lstrcpynA( FCols[nCol].szFooterText, szText, 64 );
+}
+
+void TBrowse::SetCellText( int nRow, int nCol, const char * szText )
+{
+   LVITEMA lvi;
+   if( !FHandle || nCol < 0 || nCol >= FColCount ) return;
+
+   /* Ensure row exists */
+   while( FRowCount <= nRow )
+   {
+      memset( &lvi, 0, sizeof(lvi) );
+      lvi.mask = LVIF_TEXT;
+      lvi.iItem = FRowCount;
+      lvi.pszText = "";
+      SendMessageA( FHandle, LVM_INSERTITEMA, 0, (LPARAM) &lvi );
+      FRowCount++;
+   }
+
+   /* Set cell text */
+   lvi.mask = LVIF_TEXT;
+   lvi.iItem = nRow;
+   lvi.iSubItem = nCol;
+   lvi.pszText = (char *) szText;
+   SendMessageA( FHandle, LVM_SETITEMA, 0, (LPARAM) &lvi );
+}
+
+const char * TBrowse::GetCellText( int nRow, int nCol )
+{
+   static char buf[256];
+   LVITEMA lvi;
+   buf[0] = 0;
+   if( !FHandle ) return buf;
+   lvi.iItem = nRow;
+   lvi.iSubItem = nCol;
+   lvi.pszText = buf;
+   lvi.cchTextMax = sizeof(buf);
+   SendMessageA( FHandle, LVM_GETITEMTEXTA, nRow, (LPARAM) &lvi );
+   return buf;
+}
+
+void TBrowse::Refresh()
+{
+   if( FHandle )
+      InvalidateRect( FHandle, NULL, TRUE );
+}
+
+const PROPDESC * TBrowse::GetPropDescs( int * pnCount )
+{
+   return TControl::GetPropDescs( pnCount );
+}
+
+/* ======================================================================
  * TComponentPalette
  * ====================================================================== */
 
@@ -911,7 +1413,33 @@ TControl * CreateControlByType( BYTE bType )
       case CT_CHECKBOX: return new TCheckBox();
       case CT_COMBOBOX: return new TComboBox();
       case CT_GROUPBOX: return new TGroupBox();
+      case CT_LISTBOX:  return new TListBox();
+      case CT_RADIO:    return new TRadioButton();
       case CT_TOOLBAR:  return new TToolBar();
+      case CT_BITBTN:   return new TBitBtn();
+      case CT_IMAGE:    return new TImage();
+      case CT_SHAPE:    return new TShape();
+      case CT_BEVEL:    return new TBevel();
+      case CT_TREEVIEW: return new TTreeView();
+      case CT_LISTVIEW: return new TListView();
+      case CT_PROGRESSBAR: return new TProgressBar();
+      case CT_RICHEDIT: return new TRichEdit();
+      case CT_MEMO:     return new TMemo();
+      case CT_PANEL:    return new TPanel();
+      case CT_SCROLLBAR: return new TScrollBar();
+      case CT_SPEEDBTN: return new TSpeedButton();
+      case CT_MASKEDIT2: return new TMaskEdit();
+      case CT_STRINGGRID: return new TStringGrid();
+      case CT_SCROLLBOX: return new TScrollBox();
+      case CT_STATICTEXT: return new TStaticText();
+      case CT_LABELEDEDIT: return new TLabeledEdit();
+      case CT_TABCONTROL2: return new TTabControl2();
+      case CT_TRACKBAR: return new TTrackBar();
+      case CT_UPDOWN:   return new TUpDown();
+      case CT_DATETIMEPICKER: return new TDateTimePicker();
+      case CT_MONTHCALENDAR: return new TMonthCalendar();
+      case CT_PAINTBOX: return new TPaintBox();
+      case CT_BROWSE:  return new TBrowse();
    }
    return NULL;
 }

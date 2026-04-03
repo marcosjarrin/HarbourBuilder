@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Start - HarbourBuilder Documentation</title>
+  <link rel="stylesheet" href="../assets/css/docs.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <a class="logo" href="index.html">
+    <span>HB</span> HarbourBuilder Docs
+  </a>
+  <nav>
+    <input class="search-box" type="text" placeholder="Search docs..." oninput="doSearch(this.value)">
+    <button class="lang-btn active">EN</button>
+    <a class="lang-btn" href="../es/index.html">ES</a>
+    <a class="lang-btn" href="../pt/index.html">PT</a>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9788;</button>
+  </nav>
+</div>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="nav-section">
+    <h3>Getting Started</h3>
+    <a href="index.html">Overview</a>
+    <a href="quickstart.html" class="active">Quick Start</a>
+    <a href="installation.html">Installation</a>
+    <a href="architecture.html">Architecture</a>
+  </div>
+  <div class="nav-section">
+    <h3>Component Palette</h3>
+    <a href="controls-standard.html">Standard (11)</a>
+    <a href="controls-additional.html">Additional (10)</a>
+    <a href="controls-native.html">Win32 / Cocoa / GTK3 (9)</a>
+    <a href="controls-system.html">System (2)</a>
+    <a href="controls-dialogs.html">Dialogs (6)</a>
+    <a href="controls-database.html">Data Access (9)</a>
+    <a href="controls-internet.html">Internet (9)</a>
+    <a href="controls-threading.html">Threading (8)</a>
+    <a href="controls-ai.html">AI (7)</a>
+    <a href="controls-erp.html">ERP / Business (12)</a>
+  </div>
+  <div class="nav-section">
+    <h3>IDE Features</h3>
+    <a href="form-designer.html">Form Designer</a>
+    <a href="object-inspector.html">Object Inspector</a>
+    <a href="code-editor.html">Code Editor</a>
+    <a href="two-way-tools.html">Two-Way Tools</a>
+    <a href="debugger.html">Debugger</a>
+    <a href="ai-assistant.html">AI Assistant</a>
+    <a href="build-run.html">Build &amp; Run</a>
+  </div>
+  <div class="nav-section">
+    <h3>Tutorials</h3>
+    <a href="tutorial-hello.html">Hello World</a>
+    <a href="tutorial-forms.html">Working with Forms</a>
+    <a href="tutorial-events.html">Event Handling</a>
+    <a href="tutorial-database.html">Database CRUD</a>
+    <a href="tutorial-webserver.html">Web Server</a>
+    <a href="tutorial-ai.html">AI Integration</a>
+    <a href="tutorial-transformer.html">Transformer</a>
+  </div>
+  <div class="nav-section">
+    <h3>Reference</h3>
+    <a href="ref-properties.html">Properties A-Z</a>
+    <a href="ref-events.html">Events A-Z</a>
+    <a href="ref-methods.html">Methods A-Z</a>
+    <a href="ref-commands.html">xBase Commands</a>
+    <a href="ref-functions.html">HB_FUNC Bridge</a>
+  </div>
+  <div class="nav-section">
+    <h3>Platforms</h3>
+    <a href="platform-windows.html">Windows</a>
+    <a href="platform-macos.html">macOS</a>
+    <a href="platform-linux.html">Linux</a>
+    <a href="platform-android.html">Android <span class="badge planned">Planned</span></a>
+    <a href="platform-ios.html">iOS <span class="badge planned">Planned</span></a>
+  </div>
+</div>
+
+<!-- Content -->
+<div class="content">
+
+<div class="breadcrumbs">
+  <a href="index.html">Docs</a> <span>/</span> Getting Started <span>/</span> Quick Start
+</div>
+
+<h1>Quick Start Guide</h1>
+<p>Get up and running with HarbourBuilder in five minutes. This guide walks you through creating
+your first application, from an empty project to a running native program.</p>
+
+<h2>1. Create Your First Project</h2>
+<p>Launch HarbourBuilder and select <strong>File &rarr; New Project</strong>. Choose a folder and project name.
+The IDE creates a main <code>.prg</code> file with a starter form definition:</p>
+
+<pre><span class="pp">#include</span> <span class="st">"hbbuilder.ch"</span>
+
+<span class="kw">function</span> <span class="fn">Main</span>()
+
+   <span class="kw">local</span> oForm
+
+   <span class="cmd">DEFINE FORM</span> oForm <span class="cmd">TITLE</span> <span class="st">"My First App"</span> ;
+      <span class="cmd">SIZE</span> <span class="nb">640</span>, <span class="nb">480</span> <span class="cmd">FONT</span> <span class="st">"Segoe UI"</span>, <span class="nb">10</span>
+
+   <span class="cmd">ACTIVATE FORM</span> oForm <span class="cmd">CENTERED</span>
+
+<span class="kw">return</span> <span class="kw">nil</span></pre>
+
+<p>This gives you an empty window, sized 640&times;480, centered on screen. The <code>DEFINE FORM</code>
+command is an xBase preprocessor macro that creates a native <code>TForm</code> object behind the scenes.</p>
+
+<h2>2. Add Controls</h2>
+<p>Open the <strong>Form Designer</strong> (double-click the form in the Project Manager) and use the
+<strong>Component Palette</strong> at the top of the IDE to drop controls onto the form:</p>
+
+<ol>
+  <li>Click the <strong>Standard</strong> tab in the palette.</li>
+  <li>Click the <strong>Button</strong> icon, then click on the form surface where you want it.</li>
+  <li>The Object Inspector on the left shows the button's properties &mdash; set <code>cPrompt</code> to <code>"Say Hello"</code>.</li>
+  <li>Drag a <strong>Label</strong> from the palette and place it above the button.</li>
+</ol>
+
+<p>Each control you drop generates the corresponding xBase code automatically:</p>
+
+<pre><span class="kw">local</span> oForm, oBtn, oLabel
+
+<span class="cmd">DEFINE FORM</span> oForm <span class="cmd">TITLE</span> <span class="st">"My First App"</span> ;
+   <span class="cmd">SIZE</span> <span class="nb">640</span>, <span class="nb">480</span> <span class="cmd">FONT</span> <span class="st">"Segoe UI"</span>, <span class="nb">10</span>
+
+@ <span class="nb">30</span>, <span class="nb">50</span> <span class="cmd">LABEL</span> oLabel <span class="cmd">VALUE</span> <span class="st">"Welcome to HarbourBuilder"</span> ;
+   <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">250</span>, <span class="nb">24</span>
+
+@ <span class="nb">70</span>, <span class="nb">50</span> <span class="cmd">BUTTON</span> oBtn <span class="cmd">PROMPT</span> <span class="st">"Say Hello"</span> ;
+   <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">120</span>, <span class="nb">32</span></pre>
+
+<h2>3. Handle Events</h2>
+<p>Select the button in the designer, switch to the <strong>Events</strong> tab in the Object Inspector,
+and double-click <code>OnClick</code>. The IDE jumps to the code editor with a method stub ready for you.
+You can also assign events directly in code:</p>
+
+<pre>oBtn:<span class="fn">OnClick</span> := { || MsgInfo( <span class="st">"Hello from HarbourBuilder!"</span> ) }</pre>
+
+<p>For more complex logic, use a code block that calls a function:</p>
+
+<pre>oBtn:<span class="fn">OnClick</span> := { || <span class="fn">OnBtnClick</span>( oForm, oLabel ) }
+
+<span class="kw">static function</span> <span class="fn">OnBtnClick</span>( oForm, oLabel )
+
+   oLabel:<span class="fn">SetValue</span>( <span class="st">"Button clicked at "</span> + Time() )
+   oForm:<span class="fn">SetTitle</span>( <span class="st">"Clicked!"</span> )
+
+<span class="kw">return</span> <span class="kw">nil</span></pre>
+
+<h2>4. Build &amp; Run</h2>
+<p>Press <strong>F9</strong> (or select <strong>Run &rarr; Build &amp; Run</strong>) to compile and launch your application.
+HarbourBuilder performs these steps automatically:</p>
+
+<ol>
+  <li><strong>Preprocess</strong> &mdash; expands <code>#xcommand</code> macros (<code>DEFINE FORM</code>, <code>BUTTON</code>, etc.) into Harbour OOP calls.</li>
+  <li><strong>Compile</strong> &mdash; the Harbour compiler produces C code, then the platform C/C++ compiler builds the native binary.</li>
+  <li><strong>Link</strong> &mdash; links against the platform backend (Win32 API, Cocoa, or GTK3).</li>
+  <li><strong>Execute</strong> &mdash; launches the resulting native executable.</li>
+</ol>
+
+<p>Build output appears in the <strong>Messages</strong> panel at the bottom. Any errors are shown with
+clickable file/line references that jump directly to the source.</p>
+
+<h2>5. Save Your Project</h2>
+<p>Use <strong>File &rarr; Save Project</strong> (<strong>Ctrl+S</strong>) to save your work. HarbourBuilder stores
+project metadata in a <code>.hbp</code> file, which tracks:</p>
+
+<ul>
+  <li>All source files (<code>.prg</code>) in the project.</li>
+  <li>Form design data (control positions, properties, events).</li>
+  <li>Build configuration (compiler flags, target platform, output path).</li>
+  <li>Third-party library references.</li>
+</ul>
+
+<p>The <code>.hbp</code> file is a plain-text format that works well with version control systems like Git.</p>
+
+<div class="info-box tip">
+  <strong>Two-Way Tools keep everything in sync</strong>
+  <p>HarbourBuilder's two-way tools ensure that changes made in the Form Designer are instantly
+  reflected in the Code Editor, and vice versa. Edit a property in the inspector and see the code
+  update in real time. Modify a <code>DEFINE FORM</code> command in the editor and watch the designer
+  redraw. Your <code>METHOD</code> implementations are always preserved during code regeneration &mdash;
+  you never lose hand-written logic.</p>
+</div>
+
+<h2>Development Workflow</h2>
+<p>The typical HarbourBuilder development cycle follows four stages:</p>
+
+<div class="mermaid">
+graph LR
+    A["Design<br/>Form Designer +<br/>Object Inspector"] --> B["Code<br/>Code Editor +<br/>Two-Way Sync"]
+    B --> C["Build<br/>Harbour Compiler +<br/>C/C++ Backend"]
+    C --> D["Run<br/>Native Executable<br/>on Any Platform"]
+    D -->|"Iterate"| A
+    style A fill:#58a6ff,stroke:#388bfd,color:#0d1117
+    style B fill:#d2a8ff,stroke:#bc8cff,color:#0d1117
+    style C fill:#3fb950,stroke:#2ea043,color:#0d1117
+    style D fill:#f0883e,stroke:#d18616,color:#0d1117
+</div>
+
+<p>Press <strong>F9</strong> at any time to go from design to a running application in seconds. Happy building!</p>
+
+</div>
+
+<script src="../assets/js/docs.js"></script>
+</body>
+</html>

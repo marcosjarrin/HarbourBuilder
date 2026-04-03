@@ -223,6 +223,227 @@ HB_FUNC( UI_GROUPBOXNEW )
    RetCtrl( p );
 }
 
+/* UI_ListBoxNew( hParent, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_LISTBOXNEW )
+{
+   TForm * pForm = GetForm(1);
+   TListBox * p = new TListBox();
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);
+   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) pForm->AddChild( p );
+   RetCtrl( p );
+}
+
+/* UI_RadioButtonNew( hParent, cText, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_RADIOBUTTONNEW )
+{
+   TForm * pForm = GetForm(1);
+   TRadioButton * p = new TRadioButton();
+   if( HB_ISCHAR(2) ) p->SetText( hb_parc(2) );
+   if( HB_ISNUM(3) ) p->FLeft = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FTop = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FWidth = hb_parni(5);
+   if( HB_ISNUM(6) ) p->FHeight = hb_parni(6);
+   if( pForm ) pForm->AddChild( p );
+   RetCtrl( p );
+}
+
+/* UI_BitBtnNew( hParent, cText, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_BITBTNNEW )
+{
+   TForm * pForm = GetForm(1);
+   TBitBtn * p = new TBitBtn();
+   if( HB_ISCHAR(2) ) p->SetText( hb_parc(2) );
+   if( HB_ISNUM(3) ) p->FLeft = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FTop = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FWidth = hb_parni(5);
+   if( HB_ISNUM(6) ) p->FHeight = hb_parni(6);
+   if( pForm ) pForm->AddChild( p );
+   RetCtrl( p );
+}
+
+/* UI_ImageNew( hParent, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_IMAGENEW )
+{
+   TForm * pForm = GetForm(1);
+   TImage * p = new TImage();
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);
+   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) pForm->AddChild( p );
+   RetCtrl( p );
+}
+
+/* UI_ShapeNew( hParent, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_SHAPENEW )
+{
+   TForm * pForm = GetForm(1);
+   TShape * p = new TShape();
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);
+   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) pForm->AddChild( p );
+   RetCtrl( p );
+}
+
+/* UI_BevelNew( hParent, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_BEVELNEW )
+{
+   TForm * pForm = GetForm(1);
+   TBevel * p = new TBevel();
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);
+   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) pForm->AddChild( p );
+   RetCtrl( p );
+}
+
+/* UI_TreeViewNew( hParent, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_TREEVIEWNEW )
+{
+   TForm * pForm = GetForm(1);
+   TTreeView * p = new TTreeView();
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);
+   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) pForm->AddChild( p );
+   RetCtrl( p );
+}
+
+/* UI_ListViewNew( hParent, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_LISTVIEWNEW )
+{
+   TForm * pForm = GetForm(1);
+   TListView * p = new TListView();
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);
+   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) pForm->AddChild( p );
+   RetCtrl( p );
+}
+
+/* UI_ProgressBarNew( hParent, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_PROGRESSBARNEW )
+{
+   TForm * pForm = GetForm(1);
+   TProgressBar * p = new TProgressBar();
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);
+   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) pForm->AddChild( p );
+   RetCtrl( p );
+}
+
+/* UI_RichEditNew( hParent, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_RICHEDITNEW )
+{
+   TForm * pForm = GetForm(1);
+   TRichEdit * p = new TRichEdit();
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);
+   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) pForm->AddChild( p );
+   RetCtrl( p );
+}
+
+/* ======================================================================
+ * TBrowse - Data Grid
+ * ====================================================================== */
+
+/* UI_BrowseNew( hParent, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_BROWSENEW )
+{
+   TForm * pForm = GetForm(1);
+   TBrowse * p = new TBrowse();
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);
+   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) pForm->AddChild( p );
+   RetCtrl( p );
+}
+
+/* UI_BrowseAddCol( hBrowse, cTitle, cField, nWidth, nAlign ) --> nColIdx */
+HB_FUNC( UI_BROWSEADDCOL )
+{
+   TBrowse * p = (TBrowse *) GetCtrl(1);
+   if( p && p->FControlType == CT_BROWSE )
+      hb_retni( p->AddColumn( hb_parc(2), HB_ISCHAR(3) ? hb_parc(3) : "",
+         HB_ISNUM(4) ? hb_parni(4) : 100, HB_ISNUM(5) ? hb_parni(5) : 0 ) );
+   else
+      hb_retni( -1 );
+}
+
+/* UI_BrowseSetCell( hBrowse, nRow, nCol, cText ) */
+HB_FUNC( UI_BROWSESETCELL )
+{
+   TBrowse * p = (TBrowse *) GetCtrl(1);
+   if( p && p->FControlType == CT_BROWSE && HB_ISCHAR(4) )
+      p->SetCellText( hb_parni(2), hb_parni(3), hb_parc(4) );
+}
+
+/* UI_BrowseGetCell( hBrowse, nRow, nCol ) --> cText */
+HB_FUNC( UI_BROWSEGETCELL )
+{
+   TBrowse * p = (TBrowse *) GetCtrl(1);
+   if( p && p->FControlType == CT_BROWSE )
+      hb_retc( p->GetCellText( hb_parni(2), hb_parni(3) ) );
+   else
+      hb_retc( "" );
+}
+
+/* UI_BrowseSetFooter( hBrowse, nCol, cText ) */
+HB_FUNC( UI_BROWSESETFOOTER )
+{
+   TBrowse * p = (TBrowse *) GetCtrl(1);
+   if( p && p->FControlType == CT_BROWSE && HB_ISCHAR(3) )
+      p->SetFooterText( hb_parni(2), hb_parc(3) );
+}
+
+/* UI_BrowseRefresh( hBrowse ) */
+HB_FUNC( UI_BROWSEREFRESH )
+{
+   TBrowse * p = (TBrowse *) GetCtrl(1);
+   if( p && p->FControlType == CT_BROWSE )
+      p->Refresh();
+}
+
+/* UI_BrowseOnEvent( hBrowse, cEvent, bBlock ) */
+HB_FUNC( UI_BROWSEONEVENT )
+{
+   TBrowse * p = (TBrowse *) GetCtrl(1);
+   const char * ev = hb_parc(2);
+   PHB_ITEM blk = hb_param(3, HB_IT_BLOCK);
+   PHB_ITEM * ppTarget = NULL;
+
+   if( !p || p->FControlType != CT_BROWSE || !ev || !blk ) return;
+
+   if( lstrcmpi(ev,"OnCellClick")==0 )     ppTarget = &p->FOnCellClick;
+   else if( lstrcmpi(ev,"OnCellDblClick")==0 ) ppTarget = &p->FOnCellDblClick;
+   else if( lstrcmpi(ev,"OnHeaderClick")==0 )  ppTarget = &p->FOnHeaderClick;
+   else if( lstrcmpi(ev,"OnSort")==0 )         ppTarget = &p->FOnSort;
+   else if( lstrcmpi(ev,"OnScroll")==0 )       ppTarget = &p->FOnScroll;
+   else if( lstrcmpi(ev,"OnCellEdit")==0 )     ppTarget = &p->FOnCellEdit;
+   else if( lstrcmpi(ev,"OnCellPaint")==0 )    ppTarget = &p->FOnCellPaint;
+   else if( lstrcmpi(ev,"OnRowSelect")==0 )    ppTarget = &p->FOnRowSelect;
+   else if( lstrcmpi(ev,"OnKeyDown")==0 )      ppTarget = &p->FOnKeyDown;
+   else if( lstrcmpi(ev,"OnColumnResize")==0 ) ppTarget = &p->FOnColumnResize;
+
+   if( ppTarget ) {
+      if( *ppTarget ) hb_itemRelease( *ppTarget );
+      *ppTarget = hb_itemNew( blk );
+   }
+}
+
 /* ======================================================================
  * Property access
  * ====================================================================== */
@@ -269,6 +490,49 @@ HB_FUNC( UI_SETPROP )
       ((TForm*)p)->FAppBar = hb_parl(3);
    else if( lstrcmpi( szProp, "lToolWindow" ) == 0 && p->FControlType == CT_FORM )
       ((TForm*)p)->FToolWindow = hb_parl(3);
+   else if( lstrcmpi( szProp, "nBorderStyle" ) == 0 && p->FControlType == CT_FORM )
+      ((TForm*)p)->FBorderStyle = hb_parni(3);
+   else if( lstrcmpi( szProp, "nBorderIcons" ) == 0 && p->FControlType == CT_FORM )
+      ((TForm*)p)->FBorderIcons = hb_parni(3);
+   else if( lstrcmpi( szProp, "nBorderWidth" ) == 0 && p->FControlType == CT_FORM )
+      ((TForm*)p)->FBorderWidth = hb_parni(3);
+   else if( lstrcmpi( szProp, "nPosition" ) == 0 && p->FControlType == CT_FORM )
+      ((TForm*)p)->FPosition = hb_parni(3);
+   else if( lstrcmpi( szProp, "nWindowState" ) == 0 && p->FControlType == CT_FORM )
+      ((TForm*)p)->FWindowState = hb_parni(3);
+   else if( lstrcmpi( szProp, "nFormStyle" ) == 0 && p->FControlType == CT_FORM )
+   {  ((TForm*)p)->FFormStyle = hb_parni(3);
+      if( ((TForm*)p)->FHandle )
+         SetWindowPos( ((TForm*)p)->FHandle, hb_parni(3)==1 ? HWND_TOPMOST : HWND_NOTOPMOST,
+            0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE ); }
+   else if( lstrcmpi( szProp, "nCursor" ) == 0 && p->FControlType == CT_FORM )
+      ((TForm*)p)->FCursor = hb_parni(3);
+   else if( lstrcmpi( szProp, "lKeyPreview" ) == 0 && p->FControlType == CT_FORM )
+      ((TForm*)p)->FKeyPreview = hb_parl(3);
+   else if( lstrcmpi( szProp, "lAlphaBlend" ) == 0 && p->FControlType == CT_FORM )
+   {  ((TForm*)p)->FAlphaBlend = hb_parl(3);
+      if( ((TForm*)p)->FHandle ) {
+         LONG_PTR exStyle = GetWindowLongPtr( ((TForm*)p)->FHandle, GWL_EXSTYLE );
+         if( hb_parl(3) ) {
+            SetWindowLongPtr( ((TForm*)p)->FHandle, GWL_EXSTYLE, exStyle | WS_EX_LAYERED );
+            SetLayeredWindowAttributes( ((TForm*)p)->FHandle, 0, (BYTE)((TForm*)p)->FAlphaBlendValue, LWA_ALPHA );
+         } else {
+            SetWindowLongPtr( ((TForm*)p)->FHandle, GWL_EXSTYLE, exStyle & ~WS_EX_LAYERED );
+            RedrawWindow( ((TForm*)p)->FHandle, NULL, NULL, RDW_ERASE | RDW_INVALIDATE | RDW_FRAME | RDW_ALLCHILDREN );
+         }
+      } }
+   else if( lstrcmpi( szProp, "nAlphaBlendValue" ) == 0 && p->FControlType == CT_FORM )
+   {  ((TForm*)p)->FAlphaBlendValue = hb_parni(3);
+      if( ((TForm*)p)->FAlphaBlend && ((TForm*)p)->FHandle )
+         SetLayeredWindowAttributes( ((TForm*)p)->FHandle, 0, (BYTE)hb_parni(3), LWA_ALPHA ); }
+   else if( lstrcmpi( szProp, "lShowHint" ) == 0 && p->FControlType == CT_FORM )
+      ((TForm*)p)->FShowHint = hb_parl(3);
+   else if( lstrcmpi( szProp, "cHint" ) == 0 && p->FControlType == CT_FORM && HB_ISCHAR(3) )
+      lstrcpynA( ((TForm*)p)->FHint, hb_parc(3), 255 );
+   else if( lstrcmpi( szProp, "lAutoScroll" ) == 0 && p->FControlType == CT_FORM )
+      ((TForm*)p)->FAutoScroll = hb_parl(3);
+   else if( lstrcmpi( szProp, "lDoubleBuffered" ) == 0 && p->FControlType == CT_FORM )
+      ((TForm*)p)->FDoubleBuffered = hb_parl(3);
    else if( lstrcmpi( szProp, "nClrPane" ) == 0 )
    {
       p->FClrPane = (COLORREF) hb_parnint(3);
@@ -390,6 +654,55 @@ HB_FUNC( UI_GETPROP )
       hb_retc( p->FClassName );
    else if( lstrcmpi( szProp, "lSizable" ) == 0 && p->FControlType == CT_FORM )
       hb_retl( ((TForm*)p)->FSizable );
+   else if( lstrcmpi( szProp, "lAppBar" ) == 0 && p->FControlType == CT_FORM )
+      hb_retl( ((TForm*)p)->FAppBar );
+   else if( lstrcmpi( szProp, "nBorderStyle" ) == 0 && p->FControlType == CT_FORM )
+      hb_retni( ((TForm*)p)->FBorderStyle );
+   else if( lstrcmpi( szProp, "nBorderIcons" ) == 0 && p->FControlType == CT_FORM )
+      hb_retni( ((TForm*)p)->FBorderIcons );
+   else if( lstrcmpi( szProp, "nBorderWidth" ) == 0 && p->FControlType == CT_FORM )
+      hb_retni( ((TForm*)p)->FBorderWidth );
+   else if( lstrcmpi( szProp, "nPosition" ) == 0 && p->FControlType == CT_FORM )
+      hb_retni( ((TForm*)p)->FPosition );
+   else if( lstrcmpi( szProp, "nWindowState" ) == 0 && p->FControlType == CT_FORM )
+      hb_retni( ((TForm*)p)->FWindowState );
+   else if( lstrcmpi( szProp, "nFormStyle" ) == 0 && p->FControlType == CT_FORM )
+      hb_retni( ((TForm*)p)->FFormStyle );
+   else if( lstrcmpi( szProp, "nCursor" ) == 0 && p->FControlType == CT_FORM )
+      hb_retni( ((TForm*)p)->FCursor );
+   else if( lstrcmpi( szProp, "lKeyPreview" ) == 0 && p->FControlType == CT_FORM )
+      hb_retl( ((TForm*)p)->FKeyPreview );
+   else if( lstrcmpi( szProp, "lAlphaBlend" ) == 0 && p->FControlType == CT_FORM )
+      hb_retl( ((TForm*)p)->FAlphaBlend );
+   else if( lstrcmpi( szProp, "nAlphaBlendValue" ) == 0 && p->FControlType == CT_FORM )
+      hb_retni( ((TForm*)p)->FAlphaBlendValue );
+   else if( lstrcmpi( szProp, "lShowHint" ) == 0 && p->FControlType == CT_FORM )
+      hb_retl( ((TForm*)p)->FShowHint );
+   else if( lstrcmpi( szProp, "cHint" ) == 0 && p->FControlType == CT_FORM )
+      hb_retc( ((TForm*)p)->FHint );
+   else if( lstrcmpi( szProp, "lAutoScroll" ) == 0 && p->FControlType == CT_FORM )
+      hb_retl( ((TForm*)p)->FAutoScroll );
+   else if( lstrcmpi( szProp, "lDoubleBuffered" ) == 0 && p->FControlType == CT_FORM )
+      hb_retl( ((TForm*)p)->FDoubleBuffered );
+   else if( lstrcmpi( szProp, "nClientWidth" ) == 0 && p->FControlType == CT_FORM )
+   {  TForm * f = (TForm*)p; RECT rc;
+      if( f->FHandle && GetClientRect(f->FHandle, &rc) ) hb_retni( rc.right );
+      else hb_retni( f->FWidth ); }
+   else if( lstrcmpi( szProp, "nClientHeight" ) == 0 && p->FControlType == CT_FORM )
+   {  TForm * f = (TForm*)p; RECT rc;
+      if( f->FHandle && GetClientRect(f->FHandle, &rc) ) hb_retni( rc.bottom );
+      else hb_retni( f->FHeight ); }
+   else if( lstrcmpi( szProp, "cFontName" ) == 0 )
+   {  LOGFONTA lf = {0};
+      if( p->FFont && GetObjectA( p->FFont, sizeof(lf), &lf ) ) hb_retc( lf.lfFaceName );
+      else hb_retc( "Segoe UI" ); }
+   else if( lstrcmpi( szProp, "nFontSize" ) == 0 )
+   {  LOGFONTA lf = {0}; HDC hDC;
+      if( p->FFont && GetObjectA( p->FFont, sizeof(lf), &lf ) ) {
+         hDC = GetDC(NULL);
+         hb_retni( MulDiv( lf.lfHeight < 0 ? -lf.lfHeight : lf.lfHeight, 72, GetDeviceCaps(hDC, LOGPIXELSY) ) );
+         ReleaseDC(NULL, hDC);
+      } else hb_retni( 12 ); }
    else if( lstrcmpi( szProp, "nItemIndex" ) == 0 && p->FControlType == CT_COMBOBOX )
       hb_retni( ((TComboBox*)p)->FItemIndex );
    else if( lstrcmpi( szProp, "nClrPane" ) == 0 )
@@ -418,7 +731,106 @@ HB_FUNC( UI_ONEVENT )
    PHB_ITEM pBlock = hb_param(3, HB_IT_BLOCK);
 
    if( p && szEvent && pBlock )
+   {
+      /* Try base events first */
       p->SetEvent( szEvent, pBlock );
+
+      /* If it's a form, also try form-specific events */
+      if( p->FControlType == CT_FORM )
+         ((TForm*)p)->SetFormEvent( szEvent, pBlock );
+   }
+}
+
+/* UI_GetAllEvents( hCtrl ) --> aEvents
+ * Each event: { cName, lAssigned, cCategory } */
+HB_FUNC( UI_GETALLEVENTS )
+{
+   TControl * p = GetCtrl(1);
+   PHB_ITEM pArray, pRow;
+   if( !p ) { hb_reta(0); return; }
+   pArray = hb_itemArrayNew(0);
+
+   #define ADD_E(n,assigned,c) \
+      pRow=hb_itemArrayNew(3); hb_arraySetC(pRow,1,n); \
+      hb_arraySetL(pRow,2,assigned); hb_arraySetC(pRow,3,c); \
+      hb_arrayAdd(pArray,pRow); hb_itemRelease(pRow);
+
+   switch( p->FControlType ) {
+      case CT_FORM: {
+         TForm * f = (TForm *) p;
+         ADD_E("OnClick",       f->FOnClick != NULL,      "Action");
+         ADD_E("OnDblClick",    f->FOnDblClick != NULL,    "Action");
+         ADD_E("OnCreate",      f->FOnCreate != NULL,      "Lifecycle");
+         ADD_E("OnDestroy",     f->FOnDestroy != NULL,     "Lifecycle");
+         ADD_E("OnShow",        f->FOnShow != NULL,        "Lifecycle");
+         ADD_E("OnHide",        f->FOnHide != NULL,        "Lifecycle");
+         ADD_E("OnClose",       f->FOnClose != NULL,       "Lifecycle");
+         ADD_E("OnCloseQuery",  f->FOnCloseQuery != NULL,  "Lifecycle");
+         ADD_E("OnActivate",    f->FOnActivate != NULL,    "Lifecycle");
+         ADD_E("OnDeactivate",  f->FOnDeactivate != NULL,  "Lifecycle");
+         ADD_E("OnResize",      f->FOnResize != NULL,      "Layout");
+         ADD_E("OnPaint",       f->FOnPaint != NULL,       "Layout");
+         ADD_E("OnKeyDown",     f->FOnKeyDown != NULL,     "Keyboard");
+         ADD_E("OnKeyUp",       f->FOnKeyUp != NULL,       "Keyboard");
+         ADD_E("OnKeyPress",    f->FOnKeyPress != NULL,    "Keyboard");
+         ADD_E("OnMouseDown",   f->FOnMouseDown != NULL,   "Mouse");
+         ADD_E("OnMouseUp",     f->FOnMouseUp != NULL,     "Mouse");
+         ADD_E("OnMouseMove",   f->FOnMouseMove != NULL,   "Mouse");
+         ADD_E("OnMouseWheel",  f->FOnMouseWheel != NULL,  "Mouse");
+         break;
+      }
+      case CT_BUTTON:
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnEnter",    0,                    "Focus");
+         ADD_E("OnExit",     0,                    "Focus");
+         ADD_E("OnKeyDown",  0,                    "Keyboard");
+         ADD_E("OnKeyUp",    0,                    "Keyboard");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         ADD_E("OnMouseUp",  0,                    "Mouse");
+         break;
+      case CT_EDIT:
+         ADD_E("OnChange",   p->FOnChange != NULL, "Action");
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnEnter",    0,                    "Focus");
+         ADD_E("OnExit",     0,                    "Focus");
+         ADD_E("OnKeyDown",  0,                    "Keyboard");
+         ADD_E("OnKeyUp",    0,                    "Keyboard");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         ADD_E("OnMouseUp",  0,                    "Mouse");
+         break;
+      case CT_CHECKBOX:
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnEnter",    0,                    "Focus");
+         ADD_E("OnExit",     0,                    "Focus");
+         ADD_E("OnKeyDown",  0,                    "Keyboard");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         break;
+      case CT_COMBOBOX:
+         ADD_E("OnChange",   p->FOnChange != NULL, "Action");
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnEnter",    0,                    "Focus");
+         ADD_E("OnExit",     0,                    "Focus");
+         ADD_E("OnKeyDown",  0,                    "Keyboard");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         break;
+      case CT_LABEL:
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnDblClick", 0,                    "Action");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         break;
+      case CT_GROUPBOX:
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         break;
+      default:
+         ADD_E("OnClick",    p->FOnClick != NULL,  "Action");
+         ADD_E("OnChange",   p->FOnChange != NULL, "Action");
+         ADD_E("OnKeyDown",  0,                    "Keyboard");
+         ADD_E("OnMouseDown",0,                    "Mouse");
+         break;
+   }
+   #undef ADD_E
+   hb_itemReturnRelease(pArray);
 }
 
 /* ======================================================================
@@ -577,6 +989,33 @@ HB_FUNC( UI_GETALLPROPS )
    /* Type-specific properties */
    switch( p->FControlType )
    {
+      case CT_FORM:
+      {
+         TForm * f = (TForm *) p;
+         RECT rc;
+         int cw, ch;
+         ADD_PROP_N( "nBorderStyle", f->FBorderStyle, "Appearance" );
+         ADD_PROP_N( "nBorderIcons", f->FBorderIcons, "Appearance" );
+         ADD_PROP_N( "nBorderWidth", f->FBorderWidth, "Appearance" );
+         ADD_PROP_N( "nPosition", f->FPosition, "Position" );
+         ADD_PROP_N( "nWindowState", f->FWindowState, "Appearance" );
+         ADD_PROP_N( "nFormStyle", f->FFormStyle, "Appearance" );
+         ADD_PROP_L( "lKeyPreview", f->FKeyPreview, "Behavior" );
+         ADD_PROP_L( "lAlphaBlend", f->FAlphaBlend, "Appearance" );
+         ADD_PROP_N( "nAlphaBlendValue", f->FAlphaBlendValue, "Appearance" );
+         ADD_PROP_N( "nCursor", f->FCursor, "Appearance" );
+         ADD_PROP_L( "lShowHint", f->FShowHint, "Behavior" );
+         ADD_PROP_S( "cHint", f->FHint, "Behavior" );
+         ADD_PROP_L( "lAutoScroll", f->FAutoScroll, "Behavior" );
+         ADD_PROP_L( "lDoubleBuffered", f->FDoubleBuffered, "Behavior" );
+         /* Read-only: client area */
+         cw = f->FWidth; ch = f->FHeight;
+         if( f->FHandle && GetClientRect( f->FHandle, &rc ) )
+         {  cw = rc.right; ch = rc.bottom; }
+         ADD_PROP_N( "nClientWidth", cw, "Position" );
+         ADD_PROP_N( "nClientHeight", ch, "Position" );
+         break;
+      }
       case CT_BUTTON:
          ADD_PROP_L( "lDefault", ((TButton*)p)->FDefault, "Behavior" );
          ADD_PROP_L( "lCancel", ((TButton*)p)->FCancel, "Behavior" );
@@ -942,4 +1381,34 @@ HB_FUNC( UI_FORMGETHWND )
 {
    TForm * p = GetForm(1);
    hb_retnint( p && p->FHandle ? (HB_PTRUINT) p->FHandle : 0 );
+}
+
+/* UI_SetDesignForm( hForm ) - set active design form (used by palette drop) */
+static TForm * s_designForm = NULL;
+
+HB_FUNC( UI_SETDESIGNFORM )
+{
+   TForm * p = GetForm(1);
+   s_designForm = p;
+}
+
+/* UI_FormBringToFront( hForm ) */
+HB_FUNC( UI_FORMBRINGTOFRONT )
+{
+   TForm * p = GetForm(1);
+   if( p && p->FHandle )
+      SetWindowPos( p->FHandle, HWND_TOP, 0, 0, 0, 0,
+         SWP_NOMOVE | SWP_NOSIZE );
+}
+
+/* UI_FormOnComponentDrop( hForm, bBlock ) - set callback for component palette drop */
+HB_FUNC( UI_FORMONCOMPONENTDROP )
+{
+   TForm * p = GetForm(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( p )
+   {
+      if( p->FOnComponentDrop ) hb_itemRelease( p->FOnComponentDrop );
+      p->FOnComponentDrop = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
 }

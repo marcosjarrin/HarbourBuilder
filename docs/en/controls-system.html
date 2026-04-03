@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System Controls - HarbourBuilder Docs</title>
+  <link rel="stylesheet" href="../assets/css/docs.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head>
+<body>
+
+<div class="header">
+  <a class="logo" href="index.html"><span>HB</span> HarbourBuilder Docs</a>
+  <nav>
+    <input class="search-box" type="text" placeholder="Search docs..." oninput="doSearch(this.value)">
+    <button class="lang-btn active">EN</button>
+    <a class="lang-btn" href="../es/index.html">ES</a>
+    <a class="lang-btn" href="../pt/index.html">PT</a>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9788;</button>
+  </nav>
+</div>
+
+<div class="sidebar">
+  <div class="nav-section">
+    <h3>Getting Started</h3>
+    <a href="index.html">Overview</a>
+    <a href="quickstart.html">Quick Start</a>
+    <a href="installation.html">Installation</a>
+    <a href="architecture.html">Architecture</a>
+  </div>
+  <div class="nav-section">
+    <h3>Component Palette</h3>
+    <a href="controls-standard.html">Standard (11)</a>
+    <a href="controls-additional.html">Additional (10)</a>
+    <a href="controls-native.html">Win32 / Cocoa / GTK3 (9)</a>
+    <a href="controls-system.html" class="active">System (2)</a>
+    <a href="controls-dialogs.html">Dialogs (6)</a>
+    <a href="controls-database.html">Data Access (9)</a>
+    <a href="controls-datacontrols.html">Data Controls (8)</a>
+    <a href="controls-internet.html">Internet (9)</a>
+    <a href="controls-threading.html">Threading (8)</a>
+    <a href="controls-ai.html">AI (7)</a>
+    <a href="controls-erp.html">ERP / Business (12)</a>
+  </div>
+  <div class="nav-section">
+    <h3>IDE Features</h3>
+    <a href="form-designer.html">Form Designer</a>
+    <a href="code-editor.html">Code Editor</a>
+    <a href="debugger.html">Debugger</a>
+    <a href="ai-assistant.html">AI Assistant</a>
+  </div>
+  <div class="nav-section">
+    <h3>Platforms</h3>
+    <a href="platform-windows.html">Windows</a>
+    <a href="platform-macos.html">macOS</a>
+    <a href="platform-linux.html">Linux</a>
+  </div>
+</div>
+
+<div class="content">
+
+<div class="breadcrumbs">
+  <a href="index.html">Docs</a> <span>/</span>
+  <a href="controls-standard.html">Component Palette</a> <span>/</span> System
+</div>
+
+<h1>System Controls</h1>
+<p>The System tab contains non-visual and low-level controls that provide timer functionality and custom drawing surfaces.</p>
+
+<!-- TTimer -->
+<h2 id="timer">TTimer <span class="badge new">CT_TIMER = 38</span></h2>
+<p>Non-visual component that fires an event at regular intervals. Used for periodic tasks such as polling, animations, auto-save, and status updates. Does not appear on the form at runtime.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nInterval</code></td><td>Numeric</td><td>1000</td><td>Timer interval in milliseconds</td></tr>
+  <tr><td><code>lEnabled</code></td><td>Logical</td><td>.T.</td><td>Whether the timer is active</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnTimer</code></td><td>Action</td><td>Fired each time the interval elapses</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Implementation</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>SetTimer() / WM_TIMER</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSTimer (scheduledTimerWithTimeInterval:)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>g_timeout_add()</td></tr>
+</table>
+
+<pre><span class="cm">// Auto-save every 30 seconds</span>
+<span class="cmd">TIMER</span> oTimer <span class="cmd">OF</span> oForm <span class="cmd">INTERVAL</span> <span class="nb">30000</span>
+oTimer:<span class="fn">OnTimer</span> := { || AutoSave() }
+
+<span class="cm">// Temporarily disable timer</span>
+oTimer:<span class="fn">lEnabled</span> := <span class="nb">.F.</span>
+
+<span class="cm">// Re-enable with faster interval</span>
+oTimer:<span class="fn">nInterval</span> := <span class="nb">5000</span>
+oTimer:<span class="fn">lEnabled</span> := <span class="nb">.T.</span></pre>
+
+<!-- TPaintBox -->
+<h2 id="paintbox">TPaintBox <span class="badge new">CT_PAINTBOX = 39</span></h2>
+<p>Custom drawing surface. Provides a Canvas object for free-form painting using lines, rectangles, ellipses, text, and images. The OnPaint event is called whenever the control needs to be redrawn.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>oCanvas</code></td><td>Canvas</td><td>(auto)</td><td>Drawing surface object with pen, brush, and font</td></tr>
+  <tr><td><code>nWidth, nHeight</code></td><td>Numeric</td><td>200, 200</td><td>Size of the drawing area</td></tr>
+  <tr><td><code>nClrPane</code></td><td>Color</td><td>CLR_WHITE</td><td>Background color</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnPaint</code></td><td>Draw</td><td>Control needs repainting (receives oCanvas)</td></tr>
+  <tr><td><code>OnClick</code></td><td>Action</td><td>Surface clicked</td></tr>
+  <tr><td><code>OnMouseDown</code></td><td>Mouse</td><td>Mouse button pressed (nRow, nCol, nFlags)</td></tr>
+  <tr><td><code>OnMouseMove</code></td><td>Mouse</td><td>Mouse moved over surface</td></tr>
+  <tr><td><code>OnMouseUp</code></td><td>Mouse</td><td>Mouse button released</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Implementation</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>Owner-drawn STATIC (WM_PAINT + GDI/GDI+)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSView (drawRect: + Core Graphics)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkDrawingArea (draw signal + Cairo)</td></tr>
+</table>
+
+<pre><span class="cm">// Custom drawing on a PaintBox</span>
+@ <span class="nb">10</span>, <span class="nb">10</span> <span class="cmd">PAINTBOX</span> oPaint <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">300</span>, <span class="nb">200</span>
+oPaint:<span class="fn">OnPaint</span> := { |oCanvas|
+   oCanvas:<span class="fn">FillRect</span>( <span class="nb">0</span>, <span class="nb">0</span>, <span class="nb">300</span>, <span class="nb">200</span>, <span class="nb">CLR_WHITE</span> )
+   oCanvas:<span class="fn">SetPen</span>( <span class="nb">CLR_BLUE</span>, <span class="nb">2</span> )
+   oCanvas:<span class="fn">DrawRect</span>( <span class="nb">20</span>, <span class="nb">20</span>, <span class="nb">280</span>, <span class="nb">180</span> )
+   oCanvas:<span class="fn">DrawEllipse</span>( <span class="nb">50</span>, <span class="nb">50</span>, <span class="nb">250</span>, <span class="nb">150</span> )
+   oCanvas:<span class="fn">DrawText</span>( <span class="nb">110</span>, <span class="nb">90</span>, <span class="st">"Hello Canvas!"</span> )
+}</pre>
+
+<div class="info-box info">
+  <strong>2 System Controls</strong>
+  <p>Timer provides periodic event firing for background tasks, while PaintBox offers a free-form
+  drawing canvas. Both are essential for building interactive and dynamic applications.</p>
+</div>
+
+</div>
+
+<script src="../assets/js/docs.js"></script>
+</body>
+</html>

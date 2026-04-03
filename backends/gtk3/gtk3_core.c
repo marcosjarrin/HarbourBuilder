@@ -17,7 +17,7 @@
 #include <strings.h>
 #include <ctype.h>
 
-/* Control types - must match original */
+/* Control types - must match all platforms */
 #define CT_FORM       0
 #define CT_LABEL      1
 #define CT_EDIT       2
@@ -25,7 +25,102 @@
 #define CT_CHECKBOX   4
 #define CT_COMBOBOX   5
 #define CT_GROUPBOX   6
+#define CT_LISTBOX    7
+#define CT_RADIO      8
 #define CT_TOOLBAR    9
+#define CT_TABCONTROL 10
+#define CT_STATUSBAR  11
+#define CT_BITBTN     12
+#define CT_SPEEDBTN   13
+#define CT_IMAGE      14
+#define CT_SHAPE      15
+#define CT_BEVEL      16
+#define CT_TREEVIEW   20
+#define CT_LISTVIEW   21
+#define CT_PROGRESSBAR 22
+#define CT_RICHEDIT   23
+#define CT_MEMO       24
+#define CT_PANEL      25
+#define CT_SCROLLBAR  26
+#define CT_MASKEDIT2  28
+#define CT_STRINGGRID 29
+#define CT_SCROLLBOX  30
+#define CT_STATICTEXT 31
+#define CT_LABELEDEDIT 32
+#define CT_TABCONTROL2 33
+#define CT_TRACKBAR   34
+#define CT_UPDOWN     35
+#define CT_DATETIMEPICKER 36
+#define CT_MONTHCALENDAR  37
+#define CT_TIMER      38
+#define CT_PAINTBOX   39
+#define CT_OPENDIALOG  40
+#define CT_SAVEDIALOG  41
+#define CT_FONTDIALOG  42
+#define CT_COLORDIALOG 43
+#define CT_FINDDIALOG  44
+#define CT_REPLACEDIALOG 45
+#define CT_OPENAI     46
+#define CT_GEMINI     47
+#define CT_CLAUDE     48
+#define CT_DEEPSEEK   49
+#define CT_GROK       50
+#define CT_OLLAMA     51
+#define CT_TRANSFORMER 52
+#define CT_DBFTABLE   53
+#define CT_MYSQL      54
+#define CT_MARIADB    55
+#define CT_POSTGRESQL 56
+#define CT_SQLITE     57
+#define CT_FIREBIRD   58
+#define CT_SQLSERVER  59
+#define CT_ORACLE     60
+#define CT_MONGODB    61
+#define CT_WEBVIEW    62
+#define CT_WEBSERVER  71
+#define CT_WEBSOCKET  72
+#define CT_HTTPCLIENT 73
+#define CT_FTPCLIENT  74
+#define CT_SMTPCLIENT 75
+#define CT_TCPSERVER  76
+#define CT_TCPCLIENT  77
+#define CT_UDPSOCKET  78
+#define CT_BROWSE     79
+#define CT_DBGRID     80
+#define CT_DBNAVIGATOR 81
+#define CT_DBTEXT     82
+#define CT_DBEDIT     83
+#define CT_DBCOMBOBOX 84
+#define CT_DBCHECKBOX 85
+#define CT_DBIMAGE    86
+#define CT_PREPROCESSOR 90
+#define CT_SCRIPTENGINE 91
+#define CT_REPORTDESIGNER 92
+#define CT_BARCODE    93
+#define CT_PDFGENERATOR 94
+#define CT_EXCELEXPORT 95
+#define CT_AUDITLOG   96
+#define CT_PERMISSIONS 97
+#define CT_CURRENCY   98
+#define CT_TAXENGINE  99
+#define CT_DASHBOARD  100
+#define CT_SCHEDULER  101
+#define CT_PRINTER    102
+#define CT_REPORT     103
+#define CT_LABELS     104
+#define CT_PRINTPREVIEW 105
+#define CT_PAGESETUP  106
+#define CT_PRINTDIALOG 107
+#define CT_REPORTVIEWER 108
+#define CT_BARCODEPRINTER 109
+#define CT_THREAD     63
+#define CT_MUTEX      64
+#define CT_SEMAPHORE  65
+#define CT_CRITICALSECTION 66
+#define CT_THREADPOOL 67
+#define CT_ATOMICINT  68
+#define CT_CONDVAR    69
+#define CT_CHANNEL    70
 
 #define MAX_CHILDREN  256
 
@@ -721,17 +816,251 @@ static gboolean on_overlay_motion( GtkWidget * widget, GdkEventMotion * event, g
    return TRUE;
 }
 
+/* Generic widget creation for new control types */
+static void HBGeneric_CreateWidget( HBControl * p, GtkWidget * container, GtkWidget * w )
+{
+   gtk_fixed_put( GTK_FIXED(container), w, p->FLeft, p->FTop );
+   gtk_widget_set_size_request( w, p->FWidth, p->FHeight );
+   p->FWidget = w;
+   HBControl_ApplyFont( p );
+   gtk_widget_show( w );
+}
+
+static void HBMemo_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
+   GtkWidget * tv = gtk_text_view_new();
+   gtk_container_add( GTK_CONTAINER(sw), tv );
+   gtk_text_view_set_wrap_mode( GTK_TEXT_VIEW(tv), GTK_WRAP_WORD );
+   gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW(sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
+   gtk_scrolled_window_set_shadow_type( GTK_SCROLLED_WINDOW(sw), GTK_SHADOW_IN );
+   HBGeneric_CreateWidget( p, container, sw );
+}
+
+static void HBPanel_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * frame = gtk_frame_new( NULL );
+   GtkWidget * label = gtk_label_new( p->FText );
+   gtk_container_add( GTK_CONTAINER(frame), label );
+   gtk_frame_set_shadow_type( GTK_FRAME(frame), GTK_SHADOW_ETCHED_IN );
+   HBGeneric_CreateWidget( p, container, frame );
+}
+
+static void HBListBox_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
+   GtkListStore * store = gtk_list_store_new( 1, G_TYPE_STRING );
+   GtkWidget * tv = gtk_tree_view_new_with_model( GTK_TREE_MODEL(store) );
+   GtkCellRenderer * r = gtk_cell_renderer_text_new();
+   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Items", r, "text", 0, NULL );
+   gtk_tree_view_set_headers_visible( GTK_TREE_VIEW(tv), FALSE );
+   gtk_container_add( GTK_CONTAINER(sw), tv );
+   gtk_scrolled_window_set_shadow_type( GTK_SCROLLED_WINDOW(sw), GTK_SHADOW_IN );
+   g_object_unref( store );
+   HBGeneric_CreateWidget( p, container, sw );
+}
+
+static void HBRadioButton_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * rb = gtk_radio_button_new_with_label( NULL, p->FText );
+   HBGeneric_CreateWidget( p, container, rb );
+}
+
+static void HBScrollBar_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkAdjustment * adj = gtk_adjustment_new( 0, 0, 100, 1, 10, 10 );
+   GtkWidget * sb = gtk_scrollbar_new( GTK_ORIENTATION_HORIZONTAL, adj );
+   HBGeneric_CreateWidget( p, container, sb );
+}
+
+static void HBSpeedButton_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * btn = gtk_button_new_with_label( p->FText );
+   gtk_button_set_relief( GTK_BUTTON(btn), GTK_RELIEF_NONE );
+   HBGeneric_CreateWidget( p, container, btn );
+}
+
+static void HBImage_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * img = gtk_image_new();
+   GtkWidget * ev = gtk_event_box_new();
+   gtk_container_add( GTK_CONTAINER(ev), img );
+   HBGeneric_CreateWidget( p, container, ev );
+}
+
+static void HBShape_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * da = gtk_drawing_area_new();
+   HBGeneric_CreateWidget( p, container, da );
+}
+
+static void HBBevel_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * frame = gtk_frame_new( NULL );
+   gtk_frame_set_shadow_type( GTK_FRAME(frame), GTK_SHADOW_ETCHED_IN );
+   HBGeneric_CreateWidget( p, container, frame );
+}
+
+static void HBStaticText_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * label = gtk_label_new( p->FText );
+   GtkWidget * frame = gtk_frame_new( NULL );
+   gtk_frame_set_shadow_type( GTK_FRAME(frame), GTK_SHADOW_IN );
+   gtk_container_add( GTK_CONTAINER(frame), label );
+   HBGeneric_CreateWidget( p, container, frame );
+}
+
+static void HBStringGrid_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
+   GtkListStore * store = gtk_list_store_new( 3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING );
+   GtkWidget * tv = gtk_tree_view_new_with_model( GTK_TREE_MODEL(store) );
+   GtkCellRenderer * r = gtk_cell_renderer_text_new();
+   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Col1", r, "text", 0, NULL );
+   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Col2", r, "text", 1, NULL );
+   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Col3", r, "text", 2, NULL );
+   gtk_tree_view_set_grid_lines( GTK_TREE_VIEW(tv), GTK_TREE_VIEW_GRID_LINES_BOTH );
+   gtk_container_add( GTK_CONTAINER(sw), tv );
+   gtk_scrolled_window_set_shadow_type( GTK_SCROLLED_WINDOW(sw), GTK_SHADOW_IN );
+   g_object_unref( store );
+   HBGeneric_CreateWidget( p, container, sw );
+}
+
+static void HBScrollBox_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
+   gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW(sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
+   gtk_scrolled_window_set_shadow_type( GTK_SCROLLED_WINDOW(sw), GTK_SHADOW_IN );
+   HBGeneric_CreateWidget( p, container, sw );
+}
+
+static void HBTreeView_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
+   GtkTreeStore * store = gtk_tree_store_new( 1, G_TYPE_STRING );
+   GtkWidget * tv = gtk_tree_view_new_with_model( GTK_TREE_MODEL(store) );
+   GtkCellRenderer * r = gtk_cell_renderer_text_new();
+   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Items", r, "text", 0, NULL );
+   gtk_tree_view_set_headers_visible( GTK_TREE_VIEW(tv), FALSE );
+   gtk_container_add( GTK_CONTAINER(sw), tv );
+   gtk_scrolled_window_set_shadow_type( GTK_SCROLLED_WINDOW(sw), GTK_SHADOW_IN );
+   g_object_unref( store );
+   HBGeneric_CreateWidget( p, container, sw );
+}
+
+static void HBListView_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
+   GtkListStore * store = gtk_list_store_new( 2, G_TYPE_STRING, G_TYPE_STRING );
+   GtkWidget * tv = gtk_tree_view_new_with_model( GTK_TREE_MODEL(store) );
+   GtkCellRenderer * r = gtk_cell_renderer_text_new();
+   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Name", r, "text", 0, NULL );
+   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Value", r, "text", 1, NULL );
+   gtk_container_add( GTK_CONTAINER(sw), tv );
+   gtk_scrolled_window_set_shadow_type( GTK_SCROLLED_WINDOW(sw), GTK_SHADOW_IN );
+   g_object_unref( store );
+   HBGeneric_CreateWidget( p, container, sw );
+}
+
+static void HBProgressBar_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * pb = gtk_progress_bar_new();
+   gtk_progress_bar_set_fraction( GTK_PROGRESS_BAR(pb), 0.0 );
+   gtk_progress_bar_set_show_text( GTK_PROGRESS_BAR(pb), TRUE );
+   HBGeneric_CreateWidget( p, container, pb );
+}
+
+static void HBRichEdit_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
+   GtkWidget * tv = gtk_text_view_new();
+   gtk_text_view_set_wrap_mode( GTK_TEXT_VIEW(tv), GTK_WRAP_WORD );
+   gtk_container_add( GTK_CONTAINER(sw), tv );
+   gtk_scrolled_window_set_shadow_type( GTK_SCROLLED_WINDOW(sw), GTK_SHADOW_IN );
+   HBGeneric_CreateWidget( p, container, sw );
+}
+
+static void HBTabControl_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * nb = gtk_notebook_new();
+   GtkWidget * page1 = gtk_label_new( "Page 1" );
+   gtk_notebook_append_page( GTK_NOTEBOOK(nb), page1, gtk_label_new("Tab 1") );
+   HBGeneric_CreateWidget( p, container, nb );
+}
+
+static void HBTrackBar_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * scale = gtk_scale_new_with_range( GTK_ORIENTATION_HORIZONTAL, 0, 10, 1 );
+   HBGeneric_CreateWidget( p, container, scale );
+}
+
+static void HBUpDown_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * spin = gtk_spin_button_new_with_range( 0, 100, 1 );
+   HBGeneric_CreateWidget( p, container, spin );
+}
+
+static void HBDateTimePicker_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   /* GTK3 has no native DateTimePicker, use an entry as placeholder */
+   GtkWidget * entry = gtk_entry_new();
+   gtk_entry_set_text( GTK_ENTRY(entry), "2026-01-01" );
+   gtk_entry_set_icon_from_icon_name( GTK_ENTRY(entry), GTK_ENTRY_ICON_SECONDARY, "x-office-calendar" );
+   HBGeneric_CreateWidget( p, container, entry );
+}
+
+static void HBMonthCalendar_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * cal = gtk_calendar_new();
+   HBGeneric_CreateWidget( p, container, cal );
+}
+
+static void HBPaintBox_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   GtkWidget * da = gtk_drawing_area_new();
+   HBGeneric_CreateWidget( p, container, da );
+}
+
 static void HBControl_CreateWidget( HBControl * child, GtkWidget * fixed, const char * fontDesc )
 {
    strcpy( child->FFontDesc, fontDesc );
    switch( child->FControlType )
    {
+      /* Standard */
       case CT_LABEL:    HBLabel_CreateWidget( (HBLabel *)child, fixed ); break;
       case CT_EDIT:     HBEdit_CreateWidget( (HBEdit *)child, fixed ); break;
       case CT_BUTTON:   HBButton_CreateWidget( (HBButton *)child, fixed ); break;
       case CT_CHECKBOX: HBCheckBox_CreateWidget( (HBCheckBox *)child, fixed ); break;
       case CT_COMBOBOX: HBComboBox_CreateWidget( (HBComboBox *)child, fixed ); break;
       case CT_GROUPBOX: HBGroupBox_CreateWidget( (HBGroupBox *)child, fixed ); break;
+      case CT_MEMO:     HBMemo_CreateWidget( child, fixed ); break;
+      case CT_PANEL:    HBPanel_CreateWidget( child, fixed ); break;
+      case CT_LISTBOX:  HBListBox_CreateWidget( child, fixed ); break;
+      case CT_RADIO:    HBRadioButton_CreateWidget( child, fixed ); break;
+      case CT_SCROLLBAR: HBScrollBar_CreateWidget( child, fixed ); break;
+      /* Additional */
+      case CT_BITBTN:   HBButton_CreateWidget( (HBButton *)child, fixed ); break;
+      case CT_SPEEDBTN: HBSpeedButton_CreateWidget( child, fixed ); break;
+      case CT_IMAGE:    HBImage_CreateWidget( child, fixed ); break;
+      case CT_SHAPE:    HBShape_CreateWidget( child, fixed ); break;
+      case CT_BEVEL:    HBBevel_CreateWidget( child, fixed ); break;
+      case CT_MASKEDIT2: HBEdit_CreateWidget( (HBEdit *)child, fixed ); break;
+      case CT_STRINGGRID: HBStringGrid_CreateWidget( child, fixed ); break;
+      case CT_SCROLLBOX: HBScrollBox_CreateWidget( child, fixed ); break;
+      case CT_STATICTEXT: HBStaticText_CreateWidget( child, fixed ); break;
+      case CT_LABELEDEDIT: HBEdit_CreateWidget( (HBEdit *)child, fixed ); break;
+      /* Win32/GTK3 native */
+      case CT_TREEVIEW: HBTreeView_CreateWidget( child, fixed ); break;
+      case CT_LISTVIEW: HBListView_CreateWidget( child, fixed ); break;
+      case CT_PROGRESSBAR: HBProgressBar_CreateWidget( child, fixed ); break;
+      case CT_RICHEDIT: HBRichEdit_CreateWidget( child, fixed ); break;
+      case CT_TABCONTROL2: HBTabControl_CreateWidget( child, fixed ); break;
+      case CT_TRACKBAR: HBTrackBar_CreateWidget( child, fixed ); break;
+      case CT_UPDOWN:   HBUpDown_CreateWidget( child, fixed ); break;
+      case CT_DATETIMEPICKER: HBDateTimePicker_CreateWidget( child, fixed ); break;
+      case CT_MONTHCALENDAR: HBMonthCalendar_CreateWidget( child, fixed ); break;
+      /* System */
+      case CT_PAINTBOX: HBPaintBox_CreateWidget( child, fixed ); break;
    }
 }
 
@@ -781,6 +1110,121 @@ static HBControl * HBForm_CreateControlOfType( HBForm * form, int ctrlType,
          p->base.FControlType=CT_GROUPBOX; strcpy(p->base.FText,"GroupBox");
          p->base.FLeft=nL; p->base.FTop=nT; p->base.FWidth=nW; p->base.FHeight=nH;
          newCtrl=&p->base; break;
+      }
+      default: {
+         /* Generic: all other control types use base HBControl */
+         static const struct { int type; const char * cls; const char * text; int dw; int dh; } defs[] = {
+            { CT_MEMO,       "TMemo",           "",           180, 80  },
+            { CT_PANEL,      "TPanel",          "Panel",      185, 41  },
+            { CT_LISTBOX,    "TListBox",        "",           120, 80  },
+            { CT_RADIO,      "TRadioButton",    "RadioButton",120, 20  },
+            { CT_SCROLLBAR,  "TScrollBar",      "",           150, 17  },
+            { CT_BITBTN,     "TBitBtn",         "BitBtn",      88, 26  },
+            { CT_SPEEDBTN,   "TSpeedButton",    "Speed",       23, 22  },
+            { CT_IMAGE,      "TImage",          "",           100, 100 },
+            { CT_SHAPE,      "TShape",          "",            65,  65 },
+            { CT_BEVEL,      "TBevel",          "",           150,  50 },
+            { CT_MASKEDIT2,  "TMaskEdit",       "",           120,  24 },
+            { CT_STRINGGRID, "TStringGrid",     "",           200, 120 },
+            { CT_SCROLLBOX,  "TScrollBox",      "",           185, 140 },
+            { CT_STATICTEXT, "TStaticText",     "StaticText",  65,  17 },
+            { CT_LABELEDEDIT,"TLabeledEdit",    "",           120,  24 },
+            { CT_TABCONTROL2,"TTabControl",     "",           200, 150 },
+            { CT_TREEVIEW,   "TTreeView",       "",           150, 200 },
+            { CT_LISTVIEW,   "TListView",       "",           200, 150 },
+            { CT_PROGRESSBAR,"TProgressBar",    "",           150,  20 },
+            { CT_RICHEDIT,   "TRichEdit",       "",           200, 100 },
+            { CT_TRACKBAR,   "TTrackBar",       "",           150,  25 },
+            { CT_UPDOWN,     "TUpDown",         "",            17,  22 },
+            { CT_DATETIMEPICKER,"TDateTimePicker","",          186,  24 },
+            { CT_MONTHCALENDAR,"TMonthCalendar","",            227, 155 },
+            { CT_PAINTBOX,   "TPaintBox",       "",           105, 105 },
+            { CT_TIMER,      "TTimer",          "",            32,  32 },
+            { CT_OPENDIALOG, "TOpenDialog",     "",            32,  32 },
+            { CT_SAVEDIALOG, "TSaveDialog",     "",            32,  32 },
+            { CT_FONTDIALOG, "TFontDialog",     "",            32,  32 },
+            { CT_COLORDIALOG,"TColorDialog",    "",            32,  32 },
+            { CT_FINDDIALOG, "TFindDialog",     "",            32,  32 },
+            { CT_REPLACEDIALOG,"TReplaceDialog","",            32,  32 },
+            { CT_OPENAI,     "TOpenAI",         "",            32,  32 },
+            { CT_GEMINI,     "TGemini",         "",            32,  32 },
+            { CT_CLAUDE,     "TClaude",         "",            32,  32 },
+            { CT_DEEPSEEK,   "TDeepSeek",       "",            32,  32 },
+            { CT_GROK,       "TGrok",           "",            32,  32 },
+            { CT_OLLAMA,     "TOllama",         "",            32,  32 },
+            { CT_TRANSFORMER,"TTransformer",    "",            32,  32 },
+            { CT_DBFTABLE,   "TDBFTable",       "",            32,  32 },
+            { CT_MYSQL,      "TMySQL",          "",            32,  32 },
+            { CT_MARIADB,    "TMariaDB",        "",            32,  32 },
+            { CT_POSTGRESQL, "TPostgreSQL",     "",            32,  32 },
+            { CT_SQLITE,     "TSQLite",         "",            32,  32 },
+            { CT_FIREBIRD,   "TFirebird",       "",            32,  32 },
+            { CT_SQLSERVER,  "TSQLServer",      "",            32,  32 },
+            { CT_ORACLE,     "TOracle",         "",            32,  32 },
+            { CT_MONGODB,    "TMongoDB",        "",            32,  32 },
+            { CT_WEBVIEW,    "TWebView",        "",           320, 240 },
+            { CT_THREAD,     "TThread",         "",            32,  32 },
+            { CT_MUTEX,      "TMutex",          "",            32,  32 },
+            { CT_SEMAPHORE,  "TSemaphore",      "",            32,  32 },
+            { CT_CRITICALSECTION,"TCriticalSection","",        32,  32 },
+            { CT_THREADPOOL, "TThreadPool",     "",            32,  32 },
+            { CT_ATOMICINT,  "TAtomicInt",      "",            32,  32 },
+            { CT_CONDVAR,    "TCondVar",        "",            32,  32 },
+            { CT_CHANNEL,    "TChannel",        "",            32,  32 },
+            { CT_WEBSERVER,  "TWebServer",      "",            32,  32 },
+            { CT_WEBSOCKET,  "TWebSocket",      "",            32,  32 },
+            { CT_HTTPCLIENT, "THttpClient",     "",            32,  32 },
+            { CT_FTPCLIENT,  "TFtpClient",      "",            32,  32 },
+            { CT_SMTPCLIENT, "TSmtpClient",     "",            32,  32 },
+            { CT_TCPSERVER,  "TTcpServer",      "",            32,  32 },
+            { CT_TCPCLIENT,  "TTcpClient",      "",            32,  32 },
+            { CT_UDPSOCKET,  "TUdpSocket",      "",            32,  32 },
+            { CT_BROWSE,     "TBrowse",         "",           400, 200 },
+            { CT_DBGRID,     "TDBGrid",         "",           400, 200 },
+            { CT_DBNAVIGATOR,"TDBNavigator",    "",           240,  28 },
+            { CT_DBTEXT,     "TDBText",         "",            80,  20 },
+            { CT_DBEDIT,     "TDBEdit",         "",           120,  24 },
+            { CT_DBCOMBOBOX, "TDBComboBox",     "",           120,  24 },
+            { CT_DBCHECKBOX, "TDBCheckBox",     "",           120,  20 },
+            { CT_DBIMAGE,    "TDBImage",        "",           100, 100 },
+            { CT_PREPROCESSOR,"TPreprocessor", "",            32,  32 },
+            { CT_SCRIPTENGINE,"TScriptEngine", "",            32,  32 },
+            { CT_REPORTDESIGNER,"TReportDesigner","",         32,  32 },
+            { CT_BARCODE,    "TBarcode",        "",            32,  32 },
+            { CT_PDFGENERATOR,"TPDFGenerator",  "",            32,  32 },
+            { CT_EXCELEXPORT,"TExcelExport",    "",            32,  32 },
+            { CT_AUDITLOG,   "TAuditLog",       "",            32,  32 },
+            { CT_PERMISSIONS,"TPermissions",    "",            32,  32 },
+            { CT_CURRENCY,   "TCurrency",       "",            32,  32 },
+            { CT_TAXENGINE,  "TTaxEngine",      "",            32,  32 },
+            { CT_DASHBOARD,  "TDashboard",      "",           200, 150 },
+            { CT_SCHEDULER,  "TScheduler",      "",           300, 200 },
+            { CT_PRINTER,    "TPrinter",        "",            32,  32 },
+            { CT_REPORT,     "TReport",         "",            32,  32 },
+            { CT_LABELS,     "TLabels",         "",            32,  32 },
+            { CT_PRINTPREVIEW,"TPrintPreview",  "",           400, 300 },
+            { CT_PAGESETUP,  "TPageSetup",      "",            32,  32 },
+            { CT_PRINTDIALOG,"TPrintDialog",    "",            32,  32 },
+            { CT_REPORTVIEWER,"TReportViewer",  "",           400, 300 },
+            { CT_BARCODEPRINTER,"TBarcodePrinter","",          32,  32 },
+            { 0, NULL, NULL, 0, 0 }
+         };
+         int i;
+         for( i = 0; defs[i].cls; i++ ) {
+            if( defs[i].type == ctrlType ) {
+               HBControl * p = (HBControl*)calloc(1,sizeof(HBControl));
+               HBControl_Init(p);
+               strcpy(p->FClassName, defs[i].cls);
+               p->FControlType = ctrlType;
+               if( defs[i].text[0] ) strcpy(p->FText, defs[i].text);
+               p->FLeft=nL; p->FTop=nT;
+               p->FWidth = nW > 10 ? nW : defs[i].dw;
+               p->FHeight = nH > 10 ? nH : defs[i].dh;
+               newCtrl = p;
+               break;
+            }
+         }
+         break;
       }
    }
    if( newCtrl )

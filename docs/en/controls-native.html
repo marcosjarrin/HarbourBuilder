@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Native Platform Controls - HarbourBuilder Docs</title>
+  <link rel="stylesheet" href="../assets/css/docs.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head>
+<body>
+
+<div class="header">
+  <a class="logo" href="index.html"><span>HB</span> HarbourBuilder Docs</a>
+  <nav>
+    <input class="search-box" type="text" placeholder="Search docs..." oninput="doSearch(this.value)">
+    <button class="lang-btn active">EN</button>
+    <a class="lang-btn" href="../es/index.html">ES</a>
+    <a class="lang-btn" href="../pt/index.html">PT</a>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9788;</button>
+  </nav>
+</div>
+
+<div class="sidebar">
+  <div class="nav-section">
+    <h3>Getting Started</h3>
+    <a href="index.html">Overview</a>
+    <a href="quickstart.html">Quick Start</a>
+    <a href="installation.html">Installation</a>
+    <a href="architecture.html">Architecture</a>
+  </div>
+  <div class="nav-section">
+    <h3>Component Palette</h3>
+    <a href="controls-standard.html">Standard (11)</a>
+    <a href="controls-additional.html">Additional (10)</a>
+    <a href="controls-native.html" class="active">Win32 / Cocoa / GTK3 (9)</a>
+    <a href="controls-system.html">System (2)</a>
+    <a href="controls-dialogs.html">Dialogs (6)</a>
+    <a href="controls-database.html">Data Access (9)</a>
+    <a href="controls-datacontrols.html">Data Controls (8)</a>
+    <a href="controls-internet.html">Internet (9)</a>
+    <a href="controls-threading.html">Threading (8)</a>
+    <a href="controls-ai.html">AI (7)</a>
+    <a href="controls-erp.html">ERP / Business (12)</a>
+  </div>
+  <div class="nav-section">
+    <h3>IDE Features</h3>
+    <a href="form-designer.html">Form Designer</a>
+    <a href="code-editor.html">Code Editor</a>
+    <a href="debugger.html">Debugger</a>
+    <a href="ai-assistant.html">AI Assistant</a>
+  </div>
+  <div class="nav-section">
+    <h3>Platforms</h3>
+    <a href="platform-windows.html">Windows</a>
+    <a href="platform-macos.html">macOS</a>
+    <a href="platform-linux.html">Linux</a>
+  </div>
+</div>
+
+<div class="content">
+
+<div class="breadcrumbs">
+  <a href="index.html">Docs</a> <span>/</span>
+  <a href="controls-standard.html">Component Palette</a> <span>/</span> Win32 / Cocoa / GTK3
+</div>
+
+<h1>Native Platform Controls</h1>
+<p>The Win32 / Cocoa / GTK3 tab provides complex controls that map directly to each platform's advanced native widgets. These controls offer rich functionality with full OS integration.</p>
+
+<!-- TTabControl -->
+<h2 id="tabcontrol">TTabControl <span class="badge new">CT_TABCONTROL = 33</span></h2>
+<p>Tabbed page container. Each tab hosts a panel of controls, enabling multi-page interfaces.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nTabIndex</code></td><td>Numeric</td><td>0</td><td>Currently active tab (0-based)</td></tr>
+  <tr><td><code>nTabCount</code></td><td>Numeric</td><td>0</td><td>Number of tabs (read-only)</td></tr>
+  <tr><td><code>nTabPosition</code></td><td>Numeric</td><td>0</td><td>0=Top, 1=Bottom, 2=Left, 3=Right</td></tr>
+  <tr><td><code>lHotTrack</code></td><td>Logical</td><td>.F.</td><td>Highlight tabs on mouse hover</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnChange</code></td><td>Action</td><td>Active tab changed</td></tr>
+  <tr><td><code>OnChanging</code></td><td>Action</td><td>Tab is about to change (can cancel)</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>WC_TABCONTROL (SysTabControl32)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSTabView</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkNotebook</td></tr>
+</table>
+
+<pre><span class="cm">// Create a tabbed form</span>
+@ <span class="nb">10</span>, <span class="nb">10</span> <span class="cmd">TABCONTROL</span> oTab <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">400</span>, <span class="nb">300</span>
+oTab:<span class="fn">AddTab</span>( <span class="st">"General"</span> )
+oTab:<span class="fn">AddTab</span>( <span class="st">"Details"</span> )
+oTab:<span class="fn">AddTab</span>( <span class="st">"Notes"</span> )</pre>
+
+<!-- TTreeView -->
+<h2 id="treeview">TTreeView <span class="badge new">CT_TREEVIEW = 20</span></h2>
+<p>Hierarchical tree display with expandable/collapsible nodes. Ideal for file browsers, category trees, and organizational charts.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>lShowLines</code></td><td>Logical</td><td>.T.</td><td>Show connecting lines between nodes</td></tr>
+  <tr><td><code>lShowButtons</code></td><td>Logical</td><td>.T.</td><td>Show expand/collapse buttons</td></tr>
+  <tr><td><code>lCheckBoxes</code></td><td>Logical</td><td>.F.</td><td>Show checkboxes next to items</td></tr>
+  <tr><td><code>lSorted</code></td><td>Logical</td><td>.F.</td><td>Auto-sort nodes alphabetically</td></tr>
+  <tr><td><code>oSelected</code></td><td>TreeNode</td><td>NIL</td><td>Currently selected node</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnChange</code></td><td>Action</td><td>Selected node changed</td></tr>
+  <tr><td><code>OnExpanding</code></td><td>Action</td><td>Node about to expand</td></tr>
+  <tr><td><code>OnCollapsing</code></td><td>Action</td><td>Node about to collapse</td></tr>
+  <tr><td><code>OnDblClick</code></td><td>Action</td><td>Node double-clicked</td></tr>
+  <tr><td><code>OnEdited</code></td><td>Action</td><td>Node label edited</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>WC_TREEVIEW (SysTreeView32)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSOutlineView</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkTreeView (tree model)</td></tr>
+</table>
+
+<pre><span class="cm">// Build a category tree</span>
+@ <span class="nb">10</span>, <span class="nb">10</span> <span class="cmd">TREEVIEW</span> oTree <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">200</span>, <span class="nb">300</span>
+oRoot := oTree:<span class="fn">AddItem</span>( <span class="st">"Products"</span> )
+oRoot:<span class="fn">AddChild</span>( <span class="st">"Electronics"</span> )
+oRoot:<span class="fn">AddChild</span>( <span class="st">"Clothing"</span> )
+oRoot:<span class="fn">Expand</span>()</pre>
+
+<!-- TListView -->
+<h2 id="listview">TListView <span class="badge new">CT_LISTVIEW = 21</span></h2>
+<p>Multi-column list with icons. Supports icon, small icon, list, and detail/report view modes.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nViewStyle</code></td><td>Numeric</td><td>3</td><td>0=Icon, 1=SmallIcon, 2=List, 3=Report</td></tr>
+  <tr><td><code>lGridLines</code></td><td>Logical</td><td>.F.</td><td>Show grid lines in report view</td></tr>
+  <tr><td><code>lCheckBoxes</code></td><td>Logical</td><td>.F.</td><td>Show checkboxes</td></tr>
+  <tr><td><code>lMultiSelect</code></td><td>Logical</td><td>.F.</td><td>Allow multiple selection</td></tr>
+  <tr><td><code>nSortColumn</code></td><td>Numeric</td><td>-1</td><td>Column to sort by (-1 = none)</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnSelectItem</code></td><td>Action</td><td>Item selected</td></tr>
+  <tr><td><code>OnDblClick</code></td><td>Action</td><td>Item double-clicked</td></tr>
+  <tr><td><code>OnColumnClick</code></td><td>Action</td><td>Column header clicked (for sorting)</td></tr>
+  <tr><td><code>OnEdited</code></td><td>Action</td><td>Item label edited</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>WC_LISTVIEW (SysListView32)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSTableView (multi-column)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkTreeView + GtkListStore</td></tr>
+</table>
+
+<!-- TProgressBar -->
+<h2 id="progressbar">TProgressBar <span class="badge new">CT_PROGRESSBAR = 22</span></h2>
+<p>Visual indicator of operation progress. Supports determinate (percentage) and indeterminate (marquee) modes.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nMin</code></td><td>Numeric</td><td>0</td><td>Minimum value</td></tr>
+  <tr><td><code>nMax</code></td><td>Numeric</td><td>100</td><td>Maximum value</td></tr>
+  <tr><td><code>nPosition</code></td><td>Numeric</td><td>0</td><td>Current progress value</td></tr>
+  <tr><td><code>lMarquee</code></td><td>Logical</td><td>.F.</td><td>Indeterminate (animated) mode</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>PROGRESS_CLASS (msctls_progress32)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSProgressIndicator</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkProgressBar</td></tr>
+</table>
+
+<pre><span class="cm">// Progress bar for file processing</span>
+@ <span class="nb">200</span>, <span class="nb">20</span> <span class="cmd">PROGRESSBAR</span> oProgress <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">300</span>, <span class="nb">20</span> <span class="cmd">RANGE</span> <span class="nb">0</span>, <span class="nb">100</span>
+oProgress:<span class="fn">nPosition</span> := <span class="nb">45</span></pre>
+
+<!-- TRichEdit -->
+<h2 id="richedit">TRichEdit <span class="badge new">CT_RICHEDIT = 23</span></h2>
+<p>Rich text editor supporting bold, italic, underline, colors, fonts, and paragraph formatting (RTF).</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>cText</code></td><td>String</td><td>""</td><td>Plain text content</td></tr>
+  <tr><td><code>cRTFText</code></td><td>String</td><td>""</td><td>Rich text (RTF) content</td></tr>
+  <tr><td><code>lReadOnly</code></td><td>Logical</td><td>.F.</td><td>Prevent editing</td></tr>
+  <tr><td><code>lWordWrap</code></td><td>Logical</td><td>.T.</td><td>Wrap long lines</td></tr>
+  <tr><td><code>nSelStart</code></td><td>Numeric</td><td>0</td><td>Selection start position</td></tr>
+  <tr><td><code>nSelLength</code></td><td>Numeric</td><td>0</td><td>Selection length</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnChange</code></td><td>Action</td><td>Content changed</td></tr>
+  <tr><td><code>OnSelChange</code></td><td>Action</td><td>Selection changed</td></tr>
+  <tr><td><code>OnKeyDown</code></td><td>Keyboard</td><td>Key pressed</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>RICHEDIT_CLASS (RichEdit20W)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSTextView (RTF enabled)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkTextView (with Pango markup)</td></tr>
+</table>
+
+<!-- TTrackBar -->
+<h2 id="trackbar">TTrackBar <span class="badge new">CT_TRACKBAR = 34</span></h2>
+<p>Slider control for selecting a numeric value within a range. Used for volume, zoom, and similar adjustments.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nMin</code></td><td>Numeric</td><td>0</td><td>Minimum value</td></tr>
+  <tr><td><code>nMax</code></td><td>Numeric</td><td>100</td><td>Maximum value</td></tr>
+  <tr><td><code>nPosition</code></td><td>Numeric</td><td>0</td><td>Current slider position</td></tr>
+  <tr><td><code>nTickFreq</code></td><td>Numeric</td><td>1</td><td>Tick mark frequency</td></tr>
+  <tr><td><code>lHorizontal</code></td><td>Logical</td><td>.T.</td><td>Horizontal orientation</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnChange</code></td><td>Action</td><td>Slider position changed</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>TRACKBAR_CLASS (msctls_trackbar32)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSSlider</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkScale</td></tr>
+</table>
+
+<!-- TUpDown -->
+<h2 id="updown">TUpDown <span class="badge new">CT_UPDOWN = 35</span></h2>
+<p>Spin button (up/down arrows) typically paired with an edit control for numeric input.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nMin</code></td><td>Numeric</td><td>0</td><td>Minimum value</td></tr>
+  <tr><td><code>nMax</code></td><td>Numeric</td><td>100</td><td>Maximum value</td></tr>
+  <tr><td><code>nPosition</code></td><td>Numeric</td><td>0</td><td>Current value</td></tr>
+  <tr><td><code>nIncrement</code></td><td>Numeric</td><td>1</td><td>Step increment</td></tr>
+  <tr><td><code>oBuddy</code></td><td>Control</td><td>NIL</td><td>Associated edit control</td></tr>
+  <tr><td><code>lWrap</code></td><td>Logical</td><td>.F.</td><td>Wrap from max to min</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnChange</code></td><td>Action</td><td>Value changed (up/down clicked)</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>UPDOWN_CLASS (msctls_updown32)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSStepper</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkSpinButton</td></tr>
+</table>
+
+<!-- TDateTimePicker -->
+<h2 id="datetimepicker">TDateTimePicker <span class="badge new">CT_DATETIMEPICKER = 36</span></h2>
+<p>Date and/or time picker with a dropdown calendar. Provides locale-aware formatting.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>dValue</code></td><td>Date</td><td>Date()</td><td>Selected date/time</td></tr>
+  <tr><td><code>dMinDate</code></td><td>Date</td><td>NIL</td><td>Minimum selectable date</td></tr>
+  <tr><td><code>dMaxDate</code></td><td>Date</td><td>NIL</td><td>Maximum selectable date</td></tr>
+  <tr><td><code>cFormat</code></td><td>String</td><td>""</td><td>Custom display format (e.g. "yyyy-MM-dd")</td></tr>
+  <tr><td><code>nKind</code></td><td>Numeric</td><td>0</td><td>0=Date, 1=Time, 2=DateTime</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnChange</code></td><td>Action</td><td>Selected date/time changed</td></tr>
+  <tr><td><code>OnDropDown</code></td><td>Action</td><td>Calendar dropdown opened</td></tr>
+  <tr><td><code>OnCloseUp</code></td><td>Action</td><td>Calendar dropdown closed</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>DATETIMEPICK_CLASS (SysDateTimePick32)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSDatePicker</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkCalendar + GtkPopover</td></tr>
+</table>
+
+<pre><span class="cm">// Date picker for invoice date</span>
+@ <span class="nb">80</span>, <span class="nb">120</span> <span class="cmd">DATETIMEPICKER</span> oDtp <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">150</span>, <span class="nb">24</span>
+oDtp:<span class="fn">cFormat</span> := <span class="st">"dd/MM/yyyy"</span></pre>
+
+<!-- TMonthCalendar -->
+<h2 id="monthcalendar">TMonthCalendar <span class="badge new">CT_MONTHCALENDAR = 37</span></h2>
+<p>Inline monthly calendar control. Displays a full month grid for date selection.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>dValue</code></td><td>Date</td><td>Date()</td><td>Selected date</td></tr>
+  <tr><td><code>dMinDate</code></td><td>Date</td><td>NIL</td><td>Minimum selectable date</td></tr>
+  <tr><td><code>dMaxDate</code></td><td>Date</td><td>NIL</td><td>Maximum selectable date</td></tr>
+  <tr><td><code>lMultiSelect</code></td><td>Logical</td><td>.F.</td><td>Allow selecting a date range</td></tr>
+  <tr><td><code>lShowToday</code></td><td>Logical</td><td>.T.</td><td>Highlight today's date</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnSelect</code></td><td>Action</td><td>Date selected</td></tr>
+  <tr><td><code>OnSelChange</code></td><td>Action</td><td>Selection range changed</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Widget</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>MONTHCAL_CLASS (SysMonthCal32)</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>NSDatePicker (NSClockAndCalendarDatePickerStyle)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>GtkCalendar</td></tr>
+</table>
+
+<div class="info-box info">
+  <strong>9 Native Platform Controls</strong>
+  <p>These controls use advanced OS-specific widgets for maximum native look and feel.
+  HarbourBuilder automatically maps each control to the correct widget on Windows (Win32), macOS (Cocoa), and Linux (GTK3).</p>
+</div>
+
+</div>
+
+<script src="../assets/js/docs.js"></script>
+</body>
+</html>

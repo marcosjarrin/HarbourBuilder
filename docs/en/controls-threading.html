@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Threading Controls - HarbourBuilder Docs</title>
+  <link rel="stylesheet" href="../assets/css/docs.css">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>mermaid.initialize({startOnLoad:true, theme:'dark'});</script>
+</head>
+<body>
+
+<div class="header">
+  <a class="logo" href="index.html"><span>HB</span> HarbourBuilder Docs</a>
+  <nav>
+    <input class="search-box" type="text" placeholder="Search docs..." oninput="doSearch(this.value)">
+    <button class="lang-btn active">EN</button>
+    <a class="lang-btn" href="../es/index.html">ES</a>
+    <a class="lang-btn" href="../pt/index.html">PT</a>
+    <button class="theme-toggle" onclick="toggleTheme()">&#9788;</button>
+  </nav>
+</div>
+
+<div class="sidebar">
+  <div class="nav-section">
+    <h3>Getting Started</h3>
+    <a href="index.html">Overview</a>
+    <a href="quickstart.html">Quick Start</a>
+    <a href="installation.html">Installation</a>
+    <a href="architecture.html">Architecture</a>
+  </div>
+  <div class="nav-section">
+    <h3>Component Palette</h3>
+    <a href="controls-standard.html">Standard (11)</a>
+    <a href="controls-additional.html">Additional (10)</a>
+    <a href="controls-native.html">Win32 / Cocoa / GTK3 (9)</a>
+    <a href="controls-system.html">System (2)</a>
+    <a href="controls-dialogs.html">Dialogs (6)</a>
+    <a href="controls-database.html">Data Access (9)</a>
+    <a href="controls-datacontrols.html">Data Controls (8)</a>
+    <a href="controls-internet.html">Internet (9)</a>
+    <a href="controls-threading.html" class="active">Threading (8)</a>
+    <a href="controls-ai.html">AI (7)</a>
+    <a href="controls-erp.html">ERP / Business (12)</a>
+  </div>
+  <div class="nav-section">
+    <h3>IDE Features</h3>
+    <a href="form-designer.html">Form Designer</a>
+    <a href="code-editor.html">Code Editor</a>
+    <a href="debugger.html">Debugger</a>
+    <a href="ai-assistant.html">AI Assistant</a>
+  </div>
+  <div class="nav-section">
+    <h3>Platforms</h3>
+    <a href="platform-windows.html">Windows</a>
+    <a href="platform-macos.html">macOS</a>
+    <a href="platform-linux.html">Linux</a>
+  </div>
+</div>
+
+<div class="content">
+
+<div class="breadcrumbs">
+  <a href="index.html">Docs</a> <span>/</span>
+  <a href="controls-standard.html">Component Palette</a> <span>/</span> Threading
+</div>
+
+<h1>Threading Controls</h1>
+<p>The Threading tab provides 8 controls for concurrent programming: threads, synchronization primitives, thread pools, and inter-thread communication channels. All controls are cross-platform and use native OS threading facilities.</p>
+
+<!-- TThread -->
+<h2 id="thread">TThread <span class="badge new">CT_THREAD = 63</span></h2>
+<p>Executes code in a separate OS thread. The primary building block for concurrent operations.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nPriority</code></td><td>Numeric</td><td>0</td><td>Thread priority (-2 lowest to +2 highest)</td></tr>
+  <tr><td><code>lFreeOnTerminate</code></td><td>Logical</td><td>.F.</td><td>Automatically destroy object when thread ends</td></tr>
+  <tr><td><code>lRunning</code></td><td>Logical</td><td>.F.</td><td>Thread is currently executing (read-only)</td></tr>
+  <tr><td><code>lFinished</code></td><td>Logical</td><td>.F.</td><td>Thread has completed (read-only)</td></tr>
+  <tr><td><code>nThreadId</code></td><td>Numeric</td><td>0</td><td>OS thread identifier (read-only)</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnExecute</code></td><td>Lifecycle</td><td>Code to run in the thread (required)</td></tr>
+  <tr><td><code>OnTerminate</code></td><td>Lifecycle</td><td>Thread finished execution (called on main thread)</td></tr>
+</table>
+
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>Start()</code></td><td>Begin thread execution</td></tr>
+  <tr><td><code>Wait( nTimeout )</code></td><td>Wait for thread to finish. Optional timeout in ms</td></tr>
+  <tr><td><code>Cancel()</code></td><td>Request cooperative cancellation</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Implementation</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>CreateThread / _beginthreadex</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>pthread_create</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>pthread_create</td></tr>
+</table>
+
+<!-- TMutex -->
+<h2 id="mutex">TMutex <span class="badge new">CT_MUTEX = 64</span></h2>
+<p>Mutual exclusion lock. Ensures only one thread accesses a shared resource at a time.</p>
+
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>Lock()</code></td><td>Acquire the mutex. Blocks if already locked by another thread</td></tr>
+  <tr><td><code>Unlock()</code></td><td>Release the mutex</td></tr>
+  <tr><td><code>TryLock()</code></td><td>Attempt to acquire without blocking. Returns .T. if acquired</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Implementation</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>CRITICAL_SECTION</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>pthread_mutex_t</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>pthread_mutex_t</td></tr>
+</table>
+
+<!-- TSemaphore -->
+<h2 id="semaphore">TSemaphore <span class="badge new">CT_SEMAPHORE = 65</span></h2>
+<p>Counting semaphore. Controls access to a pool of shared resources with a limited count.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nInitialCount</code></td><td>Numeric</td><td>0</td><td>Initial semaphore count</td></tr>
+  <tr><td><code>nMaxCount</code></td><td>Numeric</td><td>1</td><td>Maximum semaphore count</td></tr>
+</table>
+
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>Wait( nTimeout )</code></td><td>Decrement count. Blocks if count is zero. Optional timeout in ms</td></tr>
+  <tr><td><code>Signal()</code></td><td>Increment count. Wakes one waiting thread</td></tr>
+</table>
+
+<!-- TCriticalSection -->
+<h2 id="criticalsection">TCriticalSection <span class="badge new">CT_CRITICALSECTION = 66</span></h2>
+<p>Lightweight synchronization primitive. Faster than TMutex for protecting short code sections within the same process.</p>
+
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>Enter()</code></td><td>Enter the critical section. Blocks if another thread is inside</td></tr>
+  <tr><td><code>Leave()</code></td><td>Leave the critical section</td></tr>
+  <tr><td><code>TryEnter()</code></td><td>Attempt to enter without blocking. Returns .T. if entered</td></tr>
+</table>
+
+<!-- TThreadPool -->
+<h2 id="threadpool">TThreadPool <span class="badge new">CT_THREADPOOL = 67</span></h2>
+<p>Manages a pool of reusable worker threads. Submit tasks to the pool instead of creating individual threads.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nMinThreads</code></td><td>Numeric</td><td>2</td><td>Minimum number of worker threads</td></tr>
+  <tr><td><code>nMaxThreads</code></td><td>Numeric</td><td>8</td><td>Maximum number of worker threads</td></tr>
+  <tr><td><code>nQueueSize</code></td><td>Numeric</td><td>256</td><td>Maximum pending task queue size</td></tr>
+  <tr><td><code>nActiveThreads</code></td><td>Numeric</td><td>0</td><td>Currently active worker threads (read-only)</td></tr>
+  <tr><td><code>nPendingTasks</code></td><td>Numeric</td><td>0</td><td>Tasks waiting in the queue (read-only)</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnTaskComplete</code></td><td>Lifecycle</td><td>A task finished execution. Params: xResult, nTaskId</td></tr>
+  <tr><td><code>OnError</code></td><td>Error</td><td>A task raised an error. Params: oError, nTaskId</td></tr>
+</table>
+
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>Submit( bTask )</code></td><td>Add a task (code block) to the queue. Returns nTaskId</td></tr>
+  <tr><td><code>WaitAll( nTimeout )</code></td><td>Wait for all pending tasks to complete</td></tr>
+  <tr><td><code>Shutdown()</code></td><td>Stop all threads after completing pending tasks</td></tr>
+</table>
+
+<!-- TAtomicInt -->
+<h2 id="atomicint">TAtomicInt <span class="badge new">CT_ATOMICINT = 68</span></h2>
+<p>Lock-free atomic integer. Provides thread-safe counter operations without explicit locking.</p>
+
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>Inc()</code></td><td>Atomically increment by 1. Returns new value</td></tr>
+  <tr><td><code>Dec()</code></td><td>Atomically decrement by 1. Returns new value</td></tr>
+  <tr><td><code>Get()</code></td><td>Read current value</td></tr>
+  <tr><td><code>Set( nValue )</code></td><td>Atomically set to nValue</td></tr>
+  <tr><td><code>CompareExchange( nExpected, nNew )</code></td><td>If current == nExpected, set to nNew. Returns .T. if swapped</td></tr>
+  <tr><td><code>Add( nValue )</code></td><td>Atomically add nValue. Returns new value</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Implementation</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>InterlockedIncrement / InterlockedCompareExchange</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>__atomic builtins (GCC/Clang)</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>__atomic builtins (GCC/Clang)</td></tr>
+</table>
+
+<!-- TCondVar -->
+<h2 id="condvar">TCondVar <span class="badge new">CT_CONDVAR = 69</span></h2>
+<p>Condition variable. Allows threads to wait until a particular condition is signaled by another thread.</p>
+
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>Wait( oMutex, nTimeout )</code></td><td>Release mutex and wait for signal. Re-acquires mutex on wake. Optional timeout in ms</td></tr>
+  <tr><td><code>Signal()</code></td><td>Wake one waiting thread</td></tr>
+  <tr><td><code>Broadcast()</code></td><td>Wake all waiting threads</td></tr>
+</table>
+
+<table>
+  <tr><th>Platform</th><th>Native Implementation</th></tr>
+  <tr><td><span class="badge win">Windows</span></td><td>CONDITION_VARIABLE</td></tr>
+  <tr><td><span class="badge mac">macOS</span></td><td>pthread_cond_t</td></tr>
+  <tr><td><span class="badge linux">Linux</span></td><td>pthread_cond_t</td></tr>
+</table>
+
+<!-- TChannel -->
+<h2 id="channel">TChannel <span class="badge new">CT_CHANNEL = 70</span></h2>
+<p>Thread-safe message channel for inter-thread communication. Inspired by Go channels and CSP concurrency.</p>
+
+<table>
+  <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>nBufferSize</code></td><td>Numeric</td><td>0</td><td>Buffer capacity (0 = unbuffered/synchronous)</td></tr>
+  <tr><td><code>lClosed</code></td><td>Logical</td><td>.F.</td><td>Channel has been closed (read-only)</td></tr>
+</table>
+
+<table>
+  <tr><th>Method</th><th>Description</th></tr>
+  <tr><td><code>Send( xValue )</code></td><td>Send a value to the channel. Blocks if buffer is full</td></tr>
+  <tr><td><code>Receive()</code></td><td>Receive a value from the channel. Blocks if empty</td></tr>
+  <tr><td><code>TryReceive( @xValue )</code></td><td>Non-blocking receive. Returns .T. if a value was available</td></tr>
+  <tr><td><code>Close()</code></td><td>Close the channel. No more values can be sent</td></tr>
+</table>
+
+<table>
+  <tr><th>Event</th><th>Category</th><th>Description</th></tr>
+  <tr><td><code>OnReceive</code></td><td>Data</td><td>Value received (alternative to polling). Params: xValue</td></tr>
+</table>
+
+<!-- Code Example -->
+<h2 id="example">Code Example: Producer-Consumer Pattern</h2>
+<pre><span class="cm">// Producer-Consumer pattern using TChannel and TThread</span>
+
+<span class="cmd">FUNCTION</span> Main()
+
+   <span class="cmd">LOCAL</span> oChannel, oProducer, oConsumer
+
+   <span class="cm">// Create a buffered channel with capacity 10</span>
+   oChannel := TChannel():New()
+   oChannel:<span class="fn">nBufferSize</span> := <span class="nb">10</span>
+
+   <span class="cm">// Producer thread: generates work items</span>
+   oProducer := TThread():New()
+   oProducer:<span class="fn">lFreeOnTerminate</span> := .T.
+   oProducer:<span class="fn">OnExecute</span> := { || ProduceItems( oChannel ) }
+
+   <span class="cm">// Consumer thread: processes work items</span>
+   oConsumer := TThread():New()
+   oConsumer:<span class="fn">lFreeOnTerminate</span> := .T.
+   oConsumer:<span class="fn">OnExecute</span> := { || ConsumeItems( oChannel ) }
+
+   <span class="cm">// Start both threads</span>
+   oProducer:<span class="fn">Start</span>()
+   oConsumer:<span class="fn">Start</span>()
+
+   <span class="cm">// Wait for producer to finish, then close channel</span>
+   oProducer:<span class="fn">Wait</span>()
+   oChannel:<span class="fn">Close</span>()
+
+   <span class="cm">// Wait for consumer to drain remaining items</span>
+   oConsumer:<span class="fn">Wait</span>()
+
+   QOut( <span class="st">"All done!"</span> )
+
+<span class="cmd">RETURN</span> <span class="cmd">NIL</span>
+
+<span class="cmd">FUNCTION</span> ProduceItems( oChannel )
+
+   <span class="cmd">LOCAL</span> n
+
+   <span class="cmd">FOR</span> n := <span class="nb">1</span> <span class="cmd">TO</span> <span class="nb">100</span>
+      oChannel:<span class="fn">Send</span>( <span class="st">"Task #"</span> + Str( n ) )
+      QOut( <span class="st">"Produced: Task #"</span> + Str( n ) )
+   <span class="cmd">NEXT</span>
+
+<span class="cmd">RETURN</span> <span class="cmd">NIL</span>
+
+<span class="cmd">FUNCTION</span> ConsumeItems( oChannel )
+
+   <span class="cmd">LOCAL</span> xItem
+
+   <span class="cmd">DO WHILE</span> ! oChannel:<span class="fn">lClosed</span> .OR. oChannel:<span class="fn">TryReceive</span>( @xItem )
+      xItem := oChannel:<span class="fn">Receive</span>()
+      <span class="cmd">IF</span> xItem != <span class="cmd">NIL</span>
+         QOut( <span class="st">"Consumed: "</span> + xItem )
+      <span class="cmd">ENDIF</span>
+   <span class="cmd">ENDDO</span>
+
+<span class="cmd">RETURN</span> <span class="cmd">NIL</span></pre>
+
+<div class="info-box info">
+  <strong>8 Threading Controls</strong>
+  <p>All threading primitives map directly to native OS facilities for maximum performance.
+  Use TChannel for safe inter-thread communication instead of shared variables with locks.</p>
+</div>
+
+</div>
+
+<script src="../assets/js/docs.js"></script>
+</body>
+</html>

@@ -15,7 +15,7 @@
 #include <string.h>
 #include <stdio.h>
 
-/* Control types - must match original */
+/* Control types - must match all platforms */
 #define CT_FORM       0
 #define CT_LABEL      1
 #define CT_EDIT       2
@@ -23,7 +23,101 @@
 #define CT_CHECKBOX   4
 #define CT_COMBOBOX   5
 #define CT_GROUPBOX   6
+#define CT_LISTBOX    7
+#define CT_RADIO      8
 #define CT_TOOLBAR    9
+#define CT_STATUSBAR  11
+#define CT_BITBTN     12
+#define CT_SPEEDBTN   13
+#define CT_IMAGE      14
+#define CT_SHAPE      15
+#define CT_BEVEL      16
+#define CT_TREEVIEW   20
+#define CT_LISTVIEW   21
+#define CT_PROGRESSBAR 22
+#define CT_RICHEDIT   23
+#define CT_MEMO       24
+#define CT_PANEL      25
+#define CT_SCROLLBAR  26
+#define CT_MASKEDIT2  28
+#define CT_STRINGGRID 29
+#define CT_SCROLLBOX  30
+#define CT_STATICTEXT 31
+#define CT_LABELEDEDIT 32
+#define CT_TABCONTROL2 33
+#define CT_TRACKBAR   34
+#define CT_UPDOWN     35
+#define CT_DATETIMEPICKER 36
+#define CT_MONTHCALENDAR  37
+#define CT_TIMER      38
+#define CT_PAINTBOX   39
+#define CT_OPENDIALOG  40
+#define CT_SAVEDIALOG  41
+#define CT_FONTDIALOG  42
+#define CT_COLORDIALOG 43
+#define CT_FINDDIALOG  44
+#define CT_REPLACEDIALOG 45
+#define CT_OPENAI     46
+#define CT_GEMINI     47
+#define CT_CLAUDE     48
+#define CT_DEEPSEEK   49
+#define CT_GROK       50
+#define CT_OLLAMA     51
+#define CT_TRANSFORMER 52
+#define CT_DBFTABLE   53
+#define CT_MYSQL      54
+#define CT_MARIADB    55
+#define CT_POSTGRESQL 56
+#define CT_SQLITE     57
+#define CT_FIREBIRD   58
+#define CT_SQLSERVER  59
+#define CT_ORACLE     60
+#define CT_MONGODB    61
+#define CT_WEBVIEW    62
+#define CT_WEBSERVER  71
+#define CT_WEBSOCKET  72
+#define CT_HTTPCLIENT 73
+#define CT_FTPCLIENT  74
+#define CT_SMTPCLIENT 75
+#define CT_TCPSERVER  76
+#define CT_TCPCLIENT  77
+#define CT_UDPSOCKET  78
+#define CT_BROWSE     79
+#define CT_DBGRID     80
+#define CT_DBNAVIGATOR 81
+#define CT_DBTEXT     82
+#define CT_DBEDIT     83
+#define CT_DBCOMBOBOX 84
+#define CT_DBCHECKBOX 85
+#define CT_DBIMAGE    86
+#define CT_PREPROCESSOR 90
+#define CT_SCRIPTENGINE 91
+#define CT_REPORTDESIGNER 92
+#define CT_BARCODE    93
+#define CT_PDFGENERATOR 94
+#define CT_EXCELEXPORT 95
+#define CT_AUDITLOG   96
+#define CT_PERMISSIONS 97
+#define CT_CURRENCY   98
+#define CT_TAXENGINE  99
+#define CT_DASHBOARD  100
+#define CT_SCHEDULER  101
+#define CT_PRINTER    102
+#define CT_REPORT     103
+#define CT_LABELS     104
+#define CT_PRINTPREVIEW 105
+#define CT_PAGESETUP  106
+#define CT_PRINTDIALOG 107
+#define CT_REPORTVIEWER 108
+#define CT_BARCODEPRINTER 109
+#define CT_THREAD     63
+#define CT_MUTEX      64
+#define CT_SEMAPHORE  65
+#define CT_CRITICALSECTION 66
+#define CT_THREADPOOL 67
+#define CT_ATOMICINT  68
+#define CT_CONDVAR    69
+#define CT_CHANNEL    70
 
 #define MAX_CHILDREN  256
 #define MAX_TOOLBTNS  64
@@ -413,7 +507,142 @@ static void EnsureNSApp( void )
    FText[sizeof(FText) - 1] = 0;
 }
 
-- (void)createViewInParent:(NSView *)parentView { /* override */ }
+- (void)createViewInParent:(NSView *)parentView {
+   /* Generic view creation for new control types */
+   if( FView ) return;  /* already created by subclass */
+   NSView * v = nil;
+   switch( FControlType ) {
+      case CT_MEMO: {
+         NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         NSTextView * tv = [[NSTextView alloc] initWithFrame:NSMakeRect(0,0,FWidth,FHeight)];
+         [tv setEditable:YES]; [tv setRichText:NO];
+         [sv setDocumentView:tv]; [sv setHasVerticalScroller:YES];
+         [sv setBorderType:NSBezelBorder]; v = sv; break;
+      }
+      case CT_PANEL: {
+         NSBox * box = [[NSBox alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [box setBoxType:NSBoxPrimary]; [box setTitlePosition:NSNoTitle];
+         v = box; break;
+      }
+      case CT_LISTBOX: {
+         NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         NSTableView * tv = [[NSTableView alloc] initWithFrame:NSMakeRect(0,0,FWidth,FHeight)];
+         NSTableColumn * col = [[NSTableColumn alloc] initWithIdentifier:@"col"];
+         [col setWidth:FWidth-20]; [tv addTableColumn:col]; [tv setHeaderView:nil];
+         [sv setDocumentView:tv]; [sv setHasVerticalScroller:YES]; [sv setBorderType:NSBezelBorder];
+         v = sv; break;
+      }
+      case CT_RADIO: {
+         NSButton * rb = [[NSButton alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [rb setButtonType:NSRadioButton]; [rb setTitle:[NSString stringWithUTF8String:FText]];
+         v = rb; break;
+      }
+      case CT_SCROLLBAR: {
+         NSScroller * sc = [[NSScroller alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         v = sc; break;
+      }
+      case CT_BITBTN: case CT_SPEEDBTN: {
+         NSButton * btn = [[NSButton alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [btn setTitle:[NSString stringWithUTF8String:FText]];
+         [btn setBezelStyle:NSRoundedBezelStyle];
+         if( FControlType == CT_SPEEDBTN ) [btn setBordered:NO];
+         v = btn; break;
+      }
+      case CT_IMAGE: {
+         NSImageView * iv = [[NSImageView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [iv setImageFrameStyle:NSImageFrameGrayBezel]; v = iv; break;
+      }
+      case CT_SHAPE: case CT_PAINTBOX: {
+         NSView * dv = [[NSView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [dv setWantsLayer:YES]; dv.layer.borderWidth = 1;
+         dv.layer.borderColor = [[NSColor grayColor] CGColor]; v = dv; break;
+      }
+      case CT_BEVEL: {
+         NSBox * box = [[NSBox alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [box setBoxType:NSBoxSeparator]; v = box; break;
+      }
+      case CT_MASKEDIT2: case CT_LABELEDEDIT: {
+         NSTextField * tf = [[NSTextField alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [tf setStringValue:@""]; [tf setBezeled:YES]; v = tf; break;
+      }
+      case CT_STRINGGRID: case CT_LISTVIEW: {
+         NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         NSTableView * tv = [[NSTableView alloc] initWithFrame:NSMakeRect(0,0,FWidth,FHeight)];
+         for( int i = 0; i < 3; i++ ) {
+            NSString * ident = [NSString stringWithFormat:@"col%d", i];
+            NSTableColumn * col = [[NSTableColumn alloc] initWithIdentifier:ident];
+            [col setWidth:60]; [[col headerCell] setStringValue:[NSString stringWithFormat:@"Col%d",i+1]];
+            [tv addTableColumn:col];
+         }
+         [sv setDocumentView:tv]; [sv setHasVerticalScroller:YES]; [sv setBorderType:NSBezelBorder];
+         v = sv; break;
+      }
+      case CT_SCROLLBOX: {
+         NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [sv setHasVerticalScroller:YES]; [sv setHasHorizontalScroller:YES];
+         [sv setBorderType:NSBezelBorder]; v = sv; break;
+      }
+      case CT_STATICTEXT: {
+         NSTextField * tf = [[NSTextField alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [tf setStringValue:[NSString stringWithUTF8String:FText]];
+         [tf setEditable:NO]; [tf setBezeled:YES]; v = tf; break;
+      }
+      case CT_TABCONTROL2: {
+         NSTabView * tv = [[NSTabView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         NSTabViewItem * tab1 = [[NSTabViewItem alloc] initWithIdentifier:@"tab1"];
+         [tab1 setLabel:@"Tab 1"]; [tv addTabViewItem:tab1]; v = tv; break;
+      }
+      case CT_TREEVIEW: {
+         NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         NSOutlineView * ov = [[NSOutlineView alloc] initWithFrame:NSMakeRect(0,0,FWidth,FHeight)];
+         NSTableColumn * col = [[NSTableColumn alloc] initWithIdentifier:@"tree"];
+         [col setWidth:FWidth-20]; [ov addTableColumn:col]; [ov setOutlineTableColumn:col];
+         [ov setHeaderView:nil]; [sv setDocumentView:ov]; [sv setHasVerticalScroller:YES];
+         [sv setBorderType:NSBezelBorder]; v = sv; break;
+      }
+      case CT_PROGRESSBAR: {
+         NSProgressIndicator * pi = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [pi setIndeterminate:NO]; [pi setDoubleValue:0]; v = pi; break;
+      }
+      case CT_RICHEDIT: {
+         NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         NSTextView * tv = [[NSTextView alloc] initWithFrame:NSMakeRect(0,0,FWidth,FHeight)];
+         [tv setRichText:YES]; [sv setDocumentView:tv]; [sv setHasVerticalScroller:YES];
+         [sv setBorderType:NSBezelBorder]; v = sv; break;
+      }
+      case CT_TRACKBAR: {
+         NSSlider * sl = [[NSSlider alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [sl setMinValue:0]; [sl setMaxValue:10]; v = sl; break;
+      }
+      case CT_UPDOWN: {
+         NSStepper * st = [[NSStepper alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [st setMinValue:0]; [st setMaxValue:100]; v = st; break;
+      }
+      case CT_DATETIMEPICKER: {
+         NSDatePicker * dp = [[NSDatePicker alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [dp setDatePickerStyle:NSTextFieldAndStepperDatePickerStyle];
+         [dp setDatePickerElements:NSYearMonthDayDatePickerElementFlag]; v = dp; break;
+      }
+      case CT_MONTHCALENDAR: {
+         NSDatePicker * dp = [[NSDatePicker alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         [dp setDatePickerStyle:NSClockAndCalendarDatePickerStyle];
+         [dp setDatePickerElements:NSYearMonthDayDatePickerElementFlag]; v = dp; break;
+      }
+      default: {
+         /* Non-visual (Timer, Dialogs) or unknown: create a small placeholder */
+         NSTextField * tf = [[NSTextField alloc] initWithFrame:NSMakeRect(FLeft,FTop,32,32)];
+         [tf setStringValue:[NSString stringWithUTF8String:FClassName]];
+         [tf setEditable:NO]; [tf setBezeled:YES]; [tf setAlignment:NSCenterTextAlignment];
+         NSFont * smallFont = [NSFont systemFontOfSize:7]; [tf setFont:smallFont];
+         v = tf; break;
+      }
+   }
+   if( v ) {
+      FView = v;
+      [parentView addSubview:v];
+      if( FFont && [v respondsToSelector:@selector(setFont:)] ) [(id)v setFont:FFont];
+   }
+}
 
 - (void)updateViewFrame
 {
@@ -1216,6 +1445,119 @@ static HBPaletteTarget * s_palTarget = nil;
                HBGroupBox * p = [[HBGroupBox alloc] init];
                [p setText:"GroupBox"]; p->FLeft=rx1; p->FTop=ry1; p->FWidth=rw; p->FHeight=rh;
                newCtrl = p; break;
+            }
+            default: {
+               /* Generic: all new control types use base HBControl */
+               static struct { int type; const char * cls; const char * text; int dw; int dh; } defs[] = {
+                  { CT_MEMO,       "TMemo",           "",           180, 80  },
+                  { CT_PANEL,      "TPanel",          "Panel",      185, 41  },
+                  { CT_LISTBOX,    "TListBox",        "",           120, 80  },
+                  { CT_RADIO,      "TRadioButton",    "RadioButton",120, 20  },
+                  { CT_SCROLLBAR,  "TScrollBar",      "",           150, 17  },
+                  { CT_BITBTN,     "TBitBtn",         "BitBtn",      88, 26  },
+                  { CT_SPEEDBTN,   "TSpeedButton",    "Speed",       23, 22  },
+                  { CT_IMAGE,      "TImage",          "",           100, 100 },
+                  { CT_SHAPE,      "TShape",          "",            65,  65 },
+                  { CT_BEVEL,      "TBevel",          "",           150,  50 },
+                  { CT_MASKEDIT2,  "TMaskEdit",       "",           120,  24 },
+                  { CT_STRINGGRID, "TStringGrid",     "",           200, 120 },
+                  { CT_SCROLLBOX,  "TScrollBox",      "",           185, 140 },
+                  { CT_STATICTEXT, "TStaticText",     "StaticText",  65,  17 },
+                  { CT_LABELEDEDIT,"TLabeledEdit",    "",           120,  24 },
+                  { CT_TABCONTROL2,"TTabControl",     "",           200, 150 },
+                  { CT_TREEVIEW,   "TTreeView",       "",           150, 200 },
+                  { CT_LISTVIEW,   "TListView",       "",           200, 150 },
+                  { CT_PROGRESSBAR,"TProgressBar",    "",           150,  20 },
+                  { CT_RICHEDIT,   "TRichEdit",       "",           200, 100 },
+                  { CT_TRACKBAR,   "TTrackBar",       "",           150,  25 },
+                  { CT_UPDOWN,     "TUpDown",         "",            50,  22 },
+                  { CT_DATETIMEPICKER,"TDateTimePicker","",          186,  24 },
+                  { CT_MONTHCALENDAR,"TMonthCalendar","",            227, 155 },
+                  { CT_PAINTBOX,   "TPaintBox",       "",           105, 105 },
+                  { CT_TIMER,      "TTimer",          "",            32,  32 },
+                  { CT_OPENDIALOG, "TOpenDialog",     "",            32,  32 },
+                  { CT_SAVEDIALOG, "TSaveDialog",     "",            32,  32 },
+                  { CT_FONTDIALOG, "TFontDialog",     "",            32,  32 },
+                  { CT_COLORDIALOG,"TColorDialog",    "",            32,  32 },
+                  { CT_FINDDIALOG, "TFindDialog",     "",            32,  32 },
+                  { CT_REPLACEDIALOG,"TReplaceDialog","",            32,  32 },
+                  { CT_OPENAI,     "TOpenAI",         "",            32,  32 },
+                  { CT_GEMINI,     "TGemini",         "",            32,  32 },
+                  { CT_CLAUDE,     "TClaude",         "",            32,  32 },
+                  { CT_DEEPSEEK,   "TDeepSeek",       "",            32,  32 },
+                  { CT_GROK,       "TGrok",           "",            32,  32 },
+                  { CT_OLLAMA,     "TOllama",         "",            32,  32 },
+                  { CT_TRANSFORMER,"TTransformer",    "",            32,  32 },
+                  { CT_DBFTABLE,   "TDBFTable",       "",            32,  32 },
+                  { CT_MYSQL,      "TMySQL",          "",            32,  32 },
+                  { CT_MARIADB,    "TMariaDB",        "",            32,  32 },
+                  { CT_POSTGRESQL, "TPostgreSQL",     "",            32,  32 },
+                  { CT_SQLITE,     "TSQLite",         "",            32,  32 },
+                  { CT_FIREBIRD,   "TFirebird",       "",            32,  32 },
+                  { CT_SQLSERVER,  "TSQLServer",      "",            32,  32 },
+                  { CT_ORACLE,     "TOracle",         "",            32,  32 },
+                  { CT_MONGODB,    "TMongoDB",        "",            32,  32 },
+                  { CT_WEBVIEW,    "TWebView",        "",           320, 240 },
+                  { CT_THREAD,     "TThread",         "",            32,  32 },
+                  { CT_MUTEX,      "TMutex",          "",            32,  32 },
+                  { CT_SEMAPHORE,  "TSemaphore",      "",            32,  32 },
+                  { CT_CRITICALSECTION,"TCriticalSection","",        32,  32 },
+                  { CT_THREADPOOL, "TThreadPool",     "",            32,  32 },
+                  { CT_ATOMICINT,  "TAtomicInt",      "",            32,  32 },
+                  { CT_CONDVAR,    "TCondVar",        "",            32,  32 },
+                  { CT_CHANNEL,    "TChannel",        "",            32,  32 },
+                  { CT_WEBSERVER,  "TWebServer",      "",            32,  32 },
+                  { CT_WEBSOCKET,  "TWebSocket",      "",            32,  32 },
+                  { CT_HTTPCLIENT, "THttpClient",     "",            32,  32 },
+                  { CT_FTPCLIENT,  "TFtpClient",      "",            32,  32 },
+                  { CT_SMTPCLIENT, "TSmtpClient",     "",            32,  32 },
+                  { CT_TCPSERVER,  "TTcpServer",      "",            32,  32 },
+                  { CT_TCPCLIENT,  "TTcpClient",      "",            32,  32 },
+                  { CT_UDPSOCKET,  "TUdpSocket",      "",            32,  32 },
+                  { CT_BROWSE,     "TBrowse",         "",           400, 200 },
+                  { CT_DBGRID,     "TDBGrid",         "",           400, 200 },
+                  { CT_DBNAVIGATOR,"TDBNavigator",    "",           240,  28 },
+                  { CT_DBTEXT,     "TDBText",         "",            80,  20 },
+                  { CT_DBEDIT,     "TDBEdit",         "",           120,  24 },
+                  { CT_DBCOMBOBOX, "TDBComboBox",     "",           120,  24 },
+                  { CT_DBCHECKBOX, "TDBCheckBox",     "",           120,  20 },
+                  { CT_DBIMAGE,    "TDBImage",        "",           100, 100 },
+                  { CT_PREPROCESSOR,"TPreprocessor", "",            32,  32 },
+                  { CT_SCRIPTENGINE,"TScriptEngine", "",            32,  32 },
+                  { CT_REPORTDESIGNER,"TReportDesigner","",         32,  32 },
+                  { CT_BARCODE,    "TBarcode",        "",            32,  32 },
+                  { CT_PDFGENERATOR,"TPDFGenerator",  "",            32,  32 },
+                  { CT_EXCELEXPORT,"TExcelExport",    "",            32,  32 },
+                  { CT_AUDITLOG,   "TAuditLog",       "",            32,  32 },
+                  { CT_PERMISSIONS,"TPermissions",    "",            32,  32 },
+                  { CT_CURRENCY,   "TCurrency",       "",            32,  32 },
+                  { CT_TAXENGINE,  "TTaxEngine",      "",            32,  32 },
+                  { CT_DASHBOARD,  "TDashboard",      "",           200, 150 },
+                  { CT_SCHEDULER,  "TScheduler",      "",           300, 200 },
+                  { CT_PRINTER,    "TPrinter",        "",            32,  32 },
+                  { CT_REPORT,     "TReport",         "",            32,  32 },
+                  { CT_LABELS,     "TLabels",         "",            32,  32 },
+                  { CT_PRINTPREVIEW,"TPrintPreview",  "",           400, 300 },
+                  { CT_PAGESETUP,  "TPageSetup",      "",            32,  32 },
+                  { CT_PRINTDIALOG,"TPrintDialog",    "",            32,  32 },
+                  { CT_REPORTVIEWER,"TReportViewer",  "",           400, 300 },
+                  { CT_BARCODEPRINTER,"TBarcodePrinter","",          32,  32 },
+                  { 0, NULL, NULL, 0, 0 }
+               };
+               for( int i = 0; defs[i].cls; i++ ) {
+                  if( defs[i].type == ctrlType ) {
+                     HBControl * p = [[HBControl alloc] init];
+                     strcpy(p->FClassName, defs[i].cls);
+                     p->FControlType = ctrlType;
+                     if( defs[i].text[0] ) [p setText:defs[i].text];
+                     p->FLeft=rx1; p->FTop=ry1;
+                     p->FWidth = rw > 10 ? rw : defs[i].dw;
+                     p->FHeight = rh > 10 ? rh : defs[i].dh;
+                     newCtrl = p;
+                     break;
+                  }
+               }
+               break;
             }
          }
 

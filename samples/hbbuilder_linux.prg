@@ -93,7 +93,9 @@ function Main()
    DEFINE POPUP oView PROMPT "View" OF oIDE
    MENUITEM "Forms..."     OF oView ACTION MenuViewForms()
    MENUITEM "Code Editor"  OF oView ACTION CodeEditorBringToFront( hCodeEditor )
-   MENUITEM "Inspector"    OF oView ACTION InspectorOpen()
+   MENUITEM "Inspector"        OF oView ACTION InspectorOpen()
+   MENUITEM "Project Inspector" OF oView ACTION MsgInfo( "Project Inspector" )
+   MENUITEM "Debugger"          OF oView ACTION MsgInfo( "Debugger" )
 
    DEFINE POPUP oProject PROMPT "Project" OF oIDE
    MENUITEM "Add to Project..."    OF oProject ACTION MsgInfo( "Add to Project" )
@@ -105,15 +107,25 @@ function Main()
    MENUITEM "Run"           OF oRun ACTION TBRun()                 ACCEL "r"
    MENUITEM "Step Over"     OF oRun ACTION MsgInfo( "Step Over" )
    MENUITEM "Step Into"     OF oRun ACTION MsgInfo( "Step Into" )
+   MENUSEPARATOR OF oRun
+   MENUITEM "Toggle Breakpoint"  OF oRun ACTION MsgInfo( "Toggle Breakpoint" )
+   MENUITEM "Clear Breakpoints"  OF oRun ACTION MsgInfo( "Clear Breakpoints" )
 
    DEFINE POPUP oComp PROMPT "Component" OF oIDE
    MENUITEM "Install Component..." OF oComp ACTION MsgInfo( "Install" )
    MENUITEM "New Component..."     OF oComp ACTION MsgInfo( "New Component" )
 
    DEFINE POPUP oTools PROMPT "Tools" OF oIDE
-   MENUITEM "Environment Options..." OF oTools ACTION MsgInfo( "Options" )
+   MENUITEM "Editor Colors..."        OF oTools ACTION MsgInfo( "Editor Colors" )
+   MENUITEM "Environment Options..."  OF oTools ACTION MsgInfo( "Options" )
+   MENUSEPARATOR OF oTools
+   MENUITEM "AI Assistant..."         OF oTools ACTION MsgInfo( "AI Assistant (Ollama)" )
 
    DEFINE POPUP oHelp PROMPT "Help" OF oIDE
+   MENUITEM "Documentation"        OF oHelp ACTION GTK_ShellExec( "xdg-open ../docs/en/index.html" )
+   MENUITEM "Quick Start"          OF oHelp ACTION GTK_ShellExec( "xdg-open ../docs/en/quickstart.html" )
+   MENUITEM "Controls Reference"   OF oHelp ACTION GTK_ShellExec( "xdg-open ../docs/en/controls-standard.html" )
+   MENUSEPARATOR OF oHelp
    MENUITEM "About HbBuilder..." OF oHelp ACTION ShowAbout()
 
    // Speedbar (toolbar with 28x28 icon-sized buttons)
@@ -178,17 +190,144 @@ return nil
 
 static function CreatePalette()
 
-   local oPal, nStd
+   local oPal, nTab
 
    DEFINE PALETTE oPal OF oIDE
 
-   nStd := oPal:AddTab( "Standard" )
-   oPal:AddComp( nStd, "A",    "Label",    1 )
-   oPal:AddComp( nStd, "ab",   "Edit",     2 )
-   oPal:AddComp( nStd, "Btn",  "Button",   3 )
-   oPal:AddComp( nStd, "Chk",  "CheckBox", 4 )
-   oPal:AddComp( nStd, "Cmb",  "ComboBox", 5 )
-   oPal:AddComp( nStd, "Grp",  "GroupBox", 6 )
+   // Standard tab (C++Builder)
+   nTab := oPal:AddTab( "Standard" )
+   oPal:AddComp( nTab, "A",    "Label",       1 )
+   oPal:AddComp( nTab, "ab",   "Edit",        2 )
+   oPal:AddComp( nTab, "Mem",  "Memo",       24 )
+   oPal:AddComp( nTab, "Btn",  "Button",      3 )
+   oPal:AddComp( nTab, "Chk",  "CheckBox",    4 )
+   oPal:AddComp( nTab, "Rad",  "RadioButton", 8 )
+   oPal:AddComp( nTab, "Lst",  "ListBox",     7 )
+   oPal:AddComp( nTab, "Cmb",  "ComboBox",    5 )
+   oPal:AddComp( nTab, "Grp",  "GroupBox",    6 )
+   oPal:AddComp( nTab, "Pnl",  "Panel",      25 )
+   oPal:AddComp( nTab, "SB",   "ScrollBar",  26 )
+
+   // Additional tab (C++Builder)
+   nTab := oPal:AddTab( "Additional" )
+   oPal:AddComp( nTab, "BBt",  "BitBtn",      12 )
+   oPal:AddComp( nTab, "Spd",  "SpeedButton", 27 )
+   oPal:AddComp( nTab, "Img",  "Image",       14 )
+   oPal:AddComp( nTab, "Shp",  "Shape",       15 )
+   oPal:AddComp( nTab, "Bvl",  "Bevel",       16 )
+   oPal:AddComp( nTab, "Msk",  "MaskEdit",    28 )
+   oPal:AddComp( nTab, "SG",   "StringGrid",  29 )
+   oPal:AddComp( nTab, "SBx",  "ScrollBox",   30 )
+   oPal:AddComp( nTab, "STx",  "StaticText",  31 )
+   oPal:AddComp( nTab, "LEd",  "LabeledEdit", 32 )
+
+   // GTK3 tab (equivalent to Win32 in C++Builder)
+   nTab := oPal:AddTab( "GTK3" )
+   oPal:AddComp( nTab, "Tab",  "TabControl",  33 )
+   oPal:AddComp( nTab, "TV",   "TreeView",    20 )
+   oPal:AddComp( nTab, "LV",   "ListView",    21 )
+   oPal:AddComp( nTab, "PB",   "ProgressBar", 22 )
+   oPal:AddComp( nTab, "RE",   "RichEdit",    23 )
+   oPal:AddComp( nTab, "TB",   "TrackBar",    34 )
+   oPal:AddComp( nTab, "UD",   "SpinButton",  35 )
+   oPal:AddComp( nTab, "DTP",  "DatePicker",  36 )
+   oPal:AddComp( nTab, "MC",   "Calendar",    37 )
+
+   // System tab (C++Builder)
+   nTab := oPal:AddTab( "System" )
+   oPal:AddComp( nTab, "Tmr",  "Timer",       38 )
+   oPal:AddComp( nTab, "PBx",  "PaintBox",    39 )
+
+   // Dialogs tab (C++Builder)
+   nTab := oPal:AddTab( "Dialogs" )
+   oPal:AddComp( nTab, "OD",   "OpenDialog",  40 )
+   oPal:AddComp( nTab, "SD",   "SaveDialog",  41 )
+   oPal:AddComp( nTab, "FD",   "FontDialog",  42 )
+   oPal:AddComp( nTab, "CD",   "ColorDialog", 43 )
+   oPal:AddComp( nTab, "FnD",  "FindDialog",  44 )
+   oPal:AddComp( nTab, "RD",   "ReplaceDialog", 45 )
+
+   // Data Access tab
+   nTab := oPal:AddTab( "Data Access" )
+   oPal:AddComp( nTab, "DBF",  "DBFTable",    53 )
+   oPal:AddComp( nTab, "MyS",  "MySQL",       54 )
+   oPal:AddComp( nTab, "MrD",  "MariaDB",     55 )
+   oPal:AddComp( nTab, "PgS",  "PostgreSQL",  56 )
+   oPal:AddComp( nTab, "SLt",  "SQLite",      57 )
+   oPal:AddComp( nTab, "FB",   "Firebird",    58 )
+   oPal:AddComp( nTab, "MSS",  "SQLServer",   59 )
+   oPal:AddComp( nTab, "Ora",  "Oracle",      60 )
+   oPal:AddComp( nTab, "Mng",  "MongoDB",     61 )
+
+   // Data Controls tab
+   nTab := oPal:AddTab( "Data Controls" )
+   oPal:AddComp( nTab, "Brw",  "Browse",      79 )
+   oPal:AddComp( nTab, "DBG",  "DBGrid",      80 )
+   oPal:AddComp( nTab, "DBN",  "DBNavigator", 81 )
+   oPal:AddComp( nTab, "DBT",  "DBText",      82 )
+   oPal:AddComp( nTab, "DBE",  "DBEdit",      83 )
+   oPal:AddComp( nTab, "DBC",  "DBComboBox",  84 )
+   oPal:AddComp( nTab, "DBK",  "DBCheckBox",  85 )
+   oPal:AddComp( nTab, "DBI",  "DBImage",     86 )
+
+   // Internet tab (full networking stack)
+   nTab := oPal:AddTab( "Internet" )
+   oPal:AddComp( nTab, "Web",  "WebView",     62 )
+   oPal:AddComp( nTab, "WSv",  "WebServer",   71 )
+   oPal:AddComp( nTab, "WSk",  "WebSocket",   72 )
+   oPal:AddComp( nTab, "HTTP", "HttpClient",  73 )
+   oPal:AddComp( nTab, "FTP",  "FtpClient",   74 )
+   oPal:AddComp( nTab, "SMTP", "SmtpClient",  75 )
+   oPal:AddComp( nTab, "TSv",  "TcpServer",   76 )
+   oPal:AddComp( nTab, "TCl",  "TcpClient",   77 )
+   oPal:AddComp( nTab, "UDP",  "UdpSocket",   78 )
+
+   // Printing tab
+   nTab := oPal:AddTab( "Printing" )
+   oPal:AddComp( nTab, "Prt",  "Printer",       102 )
+   oPal:AddComp( nTab, "Rpt",  "Report",        103 )
+   oPal:AddComp( nTab, "Lbl",  "Labels",        104 )
+   oPal:AddComp( nTab, "PPv",  "PrintPreview",  105 )
+   oPal:AddComp( nTab, "PSt",  "PageSetup",     106 )
+   oPal:AddComp( nTab, "PDl",  "PrintDialog",   107 )
+   oPal:AddComp( nTab, "RVw",  "ReportViewer",  108 )
+   oPal:AddComp( nTab, "BPr",  "BarcodePrinter", 109 )
+
+   // ERP tab (enterprise / business components)
+   nTab := oPal:AddTab( "ERP" )
+   oPal:AddComp( nTab, "PP",   "Preprocessor",  90 )
+   oPal:AddComp( nTab, "Scr",  "ScriptEngine",  91 )
+   oPal:AddComp( nTab, "Rpt",  "ReportDesigner", 92 )
+   oPal:AddComp( nTab, "BC",   "Barcode",       93 )
+   oPal:AddComp( nTab, "PDF",  "PDFGenerator",  94 )
+   oPal:AddComp( nTab, "XLS",  "ExcelExport",   95 )
+   oPal:AddComp( nTab, "Aud",  "AuditLog",      96 )
+   oPal:AddComp( nTab, "Prm",  "Permissions",   97 )
+   oPal:AddComp( nTab, "Cur",  "Currency",      98 )
+   oPal:AddComp( nTab, "Tax",  "TaxEngine",     99 )
+   oPal:AddComp( nTab, "Dsh",  "Dashboard",    100 )
+   oPal:AddComp( nTab, "Sch",  "Scheduler",    101 )
+
+   // Threading tab
+   nTab := oPal:AddTab( "Threading" )
+   oPal:AddComp( nTab, "Thr",  "Thread",          63 )
+   oPal:AddComp( nTab, "Mtx",  "Mutex",            64 )
+   oPal:AddComp( nTab, "Sem",  "Semaphore",        65 )
+   oPal:AddComp( nTab, "CS",   "CriticalSection",  66 )
+   oPal:AddComp( nTab, "TPl",  "ThreadPool",       67 )
+   oPal:AddComp( nTab, "Atm",  "AtomicInt",        68 )
+   oPal:AddComp( nTab, "CV",   "CondVar",          69 )
+   oPal:AddComp( nTab, "Ch",   "Channel",          70 )
+
+   // AI tab (LLM & Transformer components)
+   nTab := oPal:AddTab( "AI" )
+   oPal:AddComp( nTab, "OAI",  "OpenAI",      46 )
+   oPal:AddComp( nTab, "Gem",  "Gemini",       47 )
+   oPal:AddComp( nTab, "Cld",  "Claude",       48 )
+   oPal:AddComp( nTab, "DSk",  "DeepSeek",     49 )
+   oPal:AddComp( nTab, "Grk",  "Grok",         50 )
+   oPal:AddComp( nTab, "Oll",  "Ollama",       51 )
+   oPal:AddComp( nTab, "Tfm",  "Transformer",  52 )
 
    UI_PaletteLoadImages( oPal:hCpp, "../resources/palette.bmp" )
 
@@ -355,6 +494,10 @@ static function RegenerateFormCode( cName, hForm )
                cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
                   ' GROUPBOX ::o' + cCtrlName + ' PROMPT "' + cText + '" OF Self SIZE ' + ;
                   LTrim(Str(nCW)) + ", " + LTrim(Str(nCH)) + e
+            otherwise
+               cCreate += '   // ::o' + cCtrlName + ' (' + cCtrlClass + ') at ' + ;
+                  LTrim(Str(nL)) + ',' + LTrim(Str(nT)) + ' SIZE ' + ;
+                  LTrim(Str(nCW)) + ',' + LTrim(Str(nCH)) + e
          endcase
 
          // Scan for event handlers matching this control
@@ -484,18 +627,37 @@ return cHandler
 static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
 
    local cName, nCount, hCtrl
-   static nLabelCnt := 0, nEditCnt := 0, nBtnCnt := 0
-   static nChkCnt := 0, nCmbCnt := 0, nGrpCnt := 0
+   static aCnt := nil
+   static aNames := { ;
+      "Label", "Edit", "Button", "CheckBox", "ComboBox", "GroupBox", ;
+      "ListBox", "RadioButton", "", "", "", "BitBtn", "SpeedButton", ;
+      "Image", "Shape", "Bevel", "", "", "", "TreeView", "ListView", ;
+      "ProgressBar", "RichEdit", "Memo", "Panel", "ScrollBar", ;
+      "SpeedButton", "MaskEdit", "StringGrid", "ScrollBox", ;
+      "StaticText", "LabeledEdit", "TabControl", "TrackBar", ;
+      "SpinButton", "DatePicker", "Calendar", "Timer", "PaintBox", ;
+      "OpenDialog", "SaveDialog", "FontDialog", "ColorDialog", ;
+      "FindDialog", "ReplaceDialog", ;
+      "OpenAI", "Gemini", "Claude", "DeepSeek", "Grok", "Ollama", "Transformer", ;
+      "DBFTable", "MySQL", "MariaDB", "PostgreSQL", "SQLite", ;
+      "Firebird", "SQLServer", "Oracle", "MongoDB", "WebView", ;
+      "Thread", "Mutex", "Semaphore", "CriticalSection", ;
+      "ThreadPool", "AtomicInt", "CondVar", "Channel", ;
+      "WebServer", "WebSocket", "HttpClient", "FtpClient", ;
+      "SmtpClient", "TcpServer", "TcpClient", "UdpSocket", ;
+      "Browse", "DBGrid", "DBNavigator", "DBText", ;
+      "DBEdit", "DBComboBox", "DBCheckBox", "DBImage", ;
+      "", "", "", "Preprocessor", "ScriptEngine", ;
+      "ReportDesigner", "Barcode", "PDFGenerator", "ExcelExport", ;
+      "AuditLog", "Permissions", "Currency", "TaxEngine", ;
+      "Dashboard", "Scheduler", ;
+      "Printer", "Report", "Labels", "PrintPreview", ;
+      "PageSetup", "PrintDialog", "ReportViewer", "BarcodePrinter" }
 
-   do case
-      case nType == 1;  nLabelCnt++;  cName := "Label"    + LTrim(Str(nLabelCnt))
-      case nType == 2;  nEditCnt++;   cName := "Edit"     + LTrim(Str(nEditCnt))
-      case nType == 3;  nBtnCnt++;    cName := "Button"   + LTrim(Str(nBtnCnt))
-      case nType == 4;  nChkCnt++;    cName := "CheckBox" + LTrim(Str(nChkCnt))
-      case nType == 5;  nCmbCnt++;    cName := "ComboBox" + LTrim(Str(nCmbCnt))
-      case nType == 6;  nGrpCnt++;    cName := "GroupBox" + LTrim(Str(nGrpCnt))
-      otherwise;  return nil
-   endcase
+   if aCnt == nil; aCnt := Array(50); AFill(aCnt,0); endif
+   if nType < 1 .or. nType > Len(aNames) .or. Empty(aNames[nType]); return nil; endif
+   aCnt[nType]++
+   cName := aNames[nType] + LTrim(Str(aCnt[nType]))
 
    nCount := UI_GetChildCount( hForm )
    hCtrl  := UI_GetChild( hForm, nCount )
