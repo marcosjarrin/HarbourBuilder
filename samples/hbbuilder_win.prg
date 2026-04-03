@@ -3392,6 +3392,35 @@ static LRESULT CALLBACK CodeEditSubProc( HWND hWnd, UINT msg, WPARAM wParam, LPA
          }
          return 0;
       }
+
+      /* Ctrl+Shift+K = delete entire line */
+      if( ctrl && (GetKeyState(VK_SHIFT) & 0x8000) && wParam == 'K' ) {
+         CHARRANGE crk;
+         int nLine, lineStart, lineEnd;
+         SendMessage(hWnd, EM_EXGETSEL, 0, (LPARAM)&crk);
+         nLine = (int) SendMessage(hWnd, EM_LINEFROMCHAR, crk.cpMin, 0);
+         lineStart = (int) SendMessage(hWnd, EM_LINEINDEX, nLine, 0);
+         lineEnd = (int) SendMessage(hWnd, EM_LINEINDEX, nLine + 1, 0);
+         if( lineEnd <= lineStart ) lineEnd = lineStart + (int)SendMessage(hWnd, EM_LINELENGTH, lineStart, 0);
+         crk.cpMin = lineStart; crk.cpMax = lineEnd;
+         SendMessage(hWnd, EM_EXSETSEL, 0, (LPARAM)&crk);
+         SendMessageA(hWnd, EM_REPLACESEL, TRUE, (LPARAM)"");
+         return 0;
+      }
+
+      /* Ctrl+L = select entire line */
+      if( ctrl && wParam == 'L' && !(GetKeyState(VK_SHIFT) & 0x8000) ) {
+         CHARRANGE crl;
+         int nLine, lineStart, lineEnd;
+         SendMessage(hWnd, EM_EXGETSEL, 0, (LPARAM)&crl);
+         nLine = (int) SendMessage(hWnd, EM_LINEFROMCHAR, crl.cpMin, 0);
+         lineStart = (int) SendMessage(hWnd, EM_LINEINDEX, nLine, 0);
+         lineEnd = (int) SendMessage(hWnd, EM_LINEINDEX, nLine + 1, 0);
+         if( lineEnd <= lineStart ) lineEnd = lineStart + (int)SendMessage(hWnd, EM_LINELENGTH, lineStart, 0);
+         crl.cpMin = lineStart; crl.cpMax = lineEnd;
+         SendMessage(hWnd, EM_EXSETSEL, 0, (LPARAM)&crl);
+         return 0;
+      }
    }
 
    r = CallWindowProc( ed->oldEditProc, hWnd, msg, wParam, lParam );
