@@ -14,6 +14,7 @@ TLabel::TLabel()
 {
    lstrcpy( FClassName, "TLabel" );
    FControlType = CT_LABEL;
+   lstrcpy( FText, "Label" );
    FWidth = 80;
    FHeight = 18;
    FTabStop = FALSE;
@@ -82,6 +83,7 @@ TButton::TButton()
 {
    lstrcpy( FClassName, "TButton" );
    FControlType = CT_BUTTON;
+   lstrcpy( FText, "Button" );
    FWidth = 88;
    FHeight = 26;
    FDefault = FALSE;
@@ -170,6 +172,7 @@ TCheckBox::TCheckBox()
 {
    lstrcpy( FClassName, "TCheckBox" );
    FControlType = CT_CHECKBOX;
+   lstrcpy( FText, "CheckBox" );
    FWidth = 150;
    FHeight = 19;
    FChecked = FALSE;
