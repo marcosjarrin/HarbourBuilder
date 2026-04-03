@@ -3312,13 +3312,27 @@ static void ConfigureScintilla( HWND hSci )
       "nil self super begin end exit loop with sequence recover "
       "try catch finally true false and or not "
       "init announce request external memvar field parameters "
-      "break continue optional redefine " );
+      "break continue optional redefine "
+      "FUNCTION PROCEDURE RETURN LOCAL STATIC PRIVATE PUBLIC "
+      "IF ELSE ELSEIF ENDIF DO WHILE ENDDO FOR NEXT TO STEP IN "
+      "SWITCH CASE OTHERWISE ENDSWITCH ENDCASE DEFAULT "
+      "CLASS ENDCLASS METHOD DATA ACCESS ASSIGN INHERIT INLINE "
+      "NIL SELF SUPER BEGIN END EXIT LOOP WITH SEQUENCE RECOVER "
+      "TRY CATCH FINALLY TRUE FALSE AND OR NOT "
+      "INIT ANNOUNCE REQUEST EXTERNAL MEMVAR FIELD PARAMETERS "
+      "BREAK CONTINUE OPTIONAL REDEFINE "
+      "Function Procedure Return Local Static Private Public "
+      "If Else ElseIf EndIf Do While EndDo For Next To Step In "
+      "Switch Case Otherwise EndSwitch EndCase Default "
+      "Class EndClass Method Data Access Assign Inherit Inline "
+      "Nil Self Super Begin End Exit Loop With Sequence Recover "
+      "Try Catch Finally True False And Or Not " );
 
    /* Keywords set 1: xBase commands + FiveWin (uppercase mapped to WORD2) */
    SciMsg( hSci, SCI_SETKEYWORDS, 1, (LPARAM)
       "DEFINE ACTIVATE FORM TITLE SIZE FONT SIZABLE APPBAR TOOLWINDOW "
       "CENTERED SAY GET BUTTON PROMPT CHECKBOX COMBOBOX GROUPBOX "
-      "ITEMS CHECKED DEFAULT CANCEL OF VAR ACTION ON VALID WHEN "
+      "ITEMS CHECKED DEFAULT CANCEL OF VAR ACTION ON VALID WHEN FROM "
       "TOOLBAR SEPARATOR TOOLTIP MENUBAR POPUP MENUITEM MENUSEPARATOR "
       "PALETTE REQUEST ACCEL BITMAP ICON BROWSE DIALOG "
       "LISTBOX RADIOBUTTON SCROLLBAR PANEL IMAGE SHAPE BEVEL "
