@@ -3935,6 +3935,68 @@ HB_FUNC( CODEEDITORDESTROY )
 }
 
 /* ======================================================================
+ * Code Editor - clipboard, undo/redo, find/replace operations
+ * ====================================================================== */
+
+#define SCI_UNDO       2176
+#define SCI_REDO       2011
+#define SCI_CUT        2177
+#define SCI_COPY       2178
+#define SCI_PASTE      2179
+#define SCI_SELECTALL  2013
+#define SCI_CANUNDO    2174
+#define SCI_CANREDO    2016
+
+/* CodeEditorUndo( hEditor ) */
+HB_FUNC( CODEEDITORUNDO )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( ed && ed->sciWidget ) SciMsg( ed->sciWidget, SCI_UNDO, 0, 0 );
+}
+
+/* CodeEditorRedo( hEditor ) */
+HB_FUNC( CODEEDITORREDO )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( ed && ed->sciWidget ) SciMsg( ed->sciWidget, SCI_REDO, 0, 0 );
+}
+
+/* CodeEditorCut( hEditor ) */
+HB_FUNC( CODEEDITORCUT )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( ed && ed->sciWidget ) SciMsg( ed->sciWidget, SCI_CUT, 0, 0 );
+}
+
+/* CodeEditorCopy( hEditor ) */
+HB_FUNC( CODEEDITORCOPY )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( ed && ed->sciWidget ) SciMsg( ed->sciWidget, SCI_COPY, 0, 0 );
+}
+
+/* CodeEditorPaste( hEditor ) */
+HB_FUNC( CODEEDITORPASTE )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( ed && ed->sciWidget ) SciMsg( ed->sciWidget, SCI_PASTE, 0, 0 );
+}
+
+/* CodeEditorFind( hEditor ) - show find bar */
+HB_FUNC( CODEEDITORFIND )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( ed ) CE_ShowFindBar( ed, 1, 0 );
+}
+
+/* CodeEditorReplace( hEditor ) - show find+replace bar */
+HB_FUNC( CODEEDITORREPLACE )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( ed ) CE_ShowFindBar( ed, 1, 1 );
+}
+
+/* ======================================================================
  * BMP Strip Loader - slice a BMP strip into 32x32 icons with magenta transparency
  * ====================================================================== */
 

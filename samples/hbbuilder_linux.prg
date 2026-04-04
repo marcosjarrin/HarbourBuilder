@@ -74,21 +74,21 @@ function Main()
    MENUSEPARATOR OF oFile
    MENUITEM "Open..."    OF oFile ACTION TBOpen()                   ACCEL "o"
    MENUITEM "Save"       OF oFile ACTION TBSave()                   ACCEL "s"
-   MENUITEM "Save As..." OF oFile ACTION MsgInfo( "Save As" )
+   MENUITEM "Save As..." OF oFile ACTION TBSaveAs()
    MENUSEPARATOR OF oFile
    MENUITEM "Exit"       OF oFile ACTION oIDE:Close()               ACCEL "q"
 
    DEFINE POPUP oEdit PROMPT "Edit" OF oIDE
-   MENUITEM "Undo"  OF oEdit ACTION MsgInfo( "Undo" )              ACCEL "z"
-   MENUITEM "Redo"  OF oEdit ACTION MsgInfo( "Redo" )              ACCEL "y"
+   MENUITEM "Undo"  OF oEdit ACTION CodeEditorUndo( hCodeEditor )  ACCEL "z"
+   MENUITEM "Redo"  OF oEdit ACTION CodeEditorRedo( hCodeEditor )  ACCEL "y"
    MENUSEPARATOR OF oEdit
-   MENUITEM "Cut"   OF oEdit ACTION MsgInfo( "Cut" )               ACCEL "x"
-   MENUITEM "Copy"  OF oEdit ACTION MsgInfo( "Copy" )              ACCEL "c"
-   MENUITEM "Paste" OF oEdit ACTION MsgInfo( "Paste" )             ACCEL "v"
+   MENUITEM "Cut"   OF oEdit ACTION CodeEditorCut( hCodeEditor )   ACCEL "x"
+   MENUITEM "Copy"  OF oEdit ACTION CodeEditorCopy( hCodeEditor )  ACCEL "c"
+   MENUITEM "Paste" OF oEdit ACTION CodeEditorPaste( hCodeEditor ) ACCEL "v"
 
    DEFINE POPUP oSearch PROMPT "Search" OF oIDE
-   MENUITEM "Find..."      OF oSearch ACTION MsgInfo( "Find" )     ACCEL "f"
-   MENUITEM "Replace..."   OF oSearch ACTION MsgInfo( "Replace" )  ACCEL "h"
+   MENUITEM "Find..."      OF oSearch ACTION CodeEditorFind( hCodeEditor )    ACCEL "f"
+   MENUITEM "Replace..."   OF oSearch ACTION CodeEditorReplace( hCodeEditor ) ACCEL "h"
 
    DEFINE POPUP oView PROMPT "View" OF oIDE
    MENUITEM "Forms..."     OF oView ACTION MenuViewForms()
@@ -135,12 +135,12 @@ function Main()
    BUTTON "Open"  OF oTB TOOLTIP "Open file (Ctrl+O)"    ACTION TBOpen()
    BUTTON "Save"  OF oTB TOOLTIP "Save file (Ctrl+S)"    ACTION TBSave()
    SEPARATOR OF oTB
-   BUTTON "Cut"   OF oTB TOOLTIP "Cut (Ctrl+X)"          ACTION MsgInfo( "Cut" )
-   BUTTON "Copy"  OF oTB TOOLTIP "Copy (Ctrl+C)"         ACTION MsgInfo( "Copy" )
-   BUTTON "Paste" OF oTB TOOLTIP "Paste (Ctrl+V)"        ACTION MsgInfo( "Paste" )
+   BUTTON "Cut"   OF oTB TOOLTIP "Cut (Ctrl+X)"          ACTION CodeEditorCut( hCodeEditor )
+   BUTTON "Copy"  OF oTB TOOLTIP "Copy (Ctrl+C)"         ACTION CodeEditorCopy( hCodeEditor )
+   BUTTON "Paste" OF oTB TOOLTIP "Paste (Ctrl+V)"        ACTION CodeEditorPaste( hCodeEditor )
    SEPARATOR OF oTB
-   BUTTON "Undo"  OF oTB TOOLTIP "Undo (Ctrl+Z)"         ACTION MsgInfo( "Undo" )
-   BUTTON "Redo"  OF oTB TOOLTIP "Redo (Ctrl+Y)"         ACTION MsgInfo( "Redo" )
+   BUTTON "Undo"  OF oTB TOOLTIP "Undo (Ctrl+Z)"         ACTION CodeEditorUndo( hCodeEditor )
+   BUTTON "Redo"  OF oTB TOOLTIP "Redo (Ctrl+Y)"         ACTION CodeEditorRedo( hCodeEditor )
    SEPARATOR OF oTB
    BUTTON "Run"   OF oTB TOOLTIP "Run project (F9)"       ACTION TBRun()
 
@@ -948,6 +948,11 @@ static function TBOpen()
 
    cCurrentFile := cFile
 
+return nil
+
+static function TBSaveAs()
+   cCurrentFile := ""
+   TBSave()
 return nil
 
 static function TBSave()
