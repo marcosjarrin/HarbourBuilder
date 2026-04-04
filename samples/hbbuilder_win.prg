@@ -1563,7 +1563,7 @@ static function SelectCompiler()
       return nil
    endif
 
-   nSel := W32_SelectFromList( "Select C/C++ Compiler", aOptions )
+   nSel := W32_SelectFromList( "Select C Compiler", aOptions )
 
    if nSel > 0
       if nSel <= Len( aCompilers )
