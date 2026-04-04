@@ -1527,7 +1527,7 @@ void TForm::UpdateOverlay()
    w = rcClient.right;
    h = rcClient.bottom;
 
-   /* Create overlay popup if needed */
+   /* Create overlay popup owned by the form (stays with form in z-order) */
    if( !FOverlay )
    {
       FOverlay = CreateWindowExA(
@@ -1535,7 +1535,8 @@ void TForm::UpdateOverlay()
          "STATIC", "",
          WS_POPUP,
          0, 0, 1, 1,
-         FHandle, NULL, GetModuleHandle(NULL), NULL );
+         FHandle,  /* owner = form, so overlay follows form's z-order */
+         NULL, GetModuleHandle(NULL), NULL );
    }
 
    /* Create 32-bit DIB for per-pixel alpha */
@@ -1582,7 +1583,9 @@ void TForm::UpdateOverlay()
    bf.SourceConstantAlpha = 255;
    bf.AlphaFormat = AC_SRC_ALPHA;
 
-   SetWindowPos( FOverlay, HWND_TOPMOST, ptDst.x, ptDst.y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW );
+   /* Position overlay — owned window stays above owner automatically */
+   SetWindowPos( FOverlay, NULL, ptDst.x, ptDst.y, w, h,
+      SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_NOZORDER );
    UpdateLayeredWindow( FOverlay, hScreenDC, &ptDst, &sz, hMemDC, &ptSrc, 0, &bf, ULW_ALPHA );
 
    SelectObject( hMemDC, hOldBmp );

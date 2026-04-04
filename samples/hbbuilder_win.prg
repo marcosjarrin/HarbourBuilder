@@ -68,6 +68,7 @@ function Main()
 
    UI_FormSetPos( oIDE:hCpp, 0, 0 )
    oIDE:Show()
+   W32_BringToTop( UI_FormGetHwnd( oIDE:hCpp ) )
 
    // Enable dark mode for all IDE windows (Windows 10/11)
    W32_SetDarkMode( UI_FormGetHwnd( oIDE:hCpp ), .T. )
@@ -280,6 +281,8 @@ function Main()
    BUTTON "Over"  OF oTB2 TOOLTIP "Step Over (F8)"          ACTION DebugStepOver()
    BUTTON "Go"    OF oTB2 TOOLTIP "Continue (F5)"           ACTION IDE_DebugGo()
    BUTTON "Stop"  OF oTB2 TOOLTIP "Stop Debugging"          ACTION IDE_DebugStop()
+   SEPARATOR OF oTB2
+   BUTTON "Exit"  OF oTB2 TOOLTIP "Exit IDE"                ACTION oIDE:Close()
 
    // Load debug toolbar icons
    UI_ToolBarLoadImages( oTB2:hCpp, HB_DirBase() + "..\resources\toolbar_debug.bmp" )

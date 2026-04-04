@@ -12,6 +12,12 @@
 #include "hbide.h"
 #include <string.h>
 
+/* SetDPIAware() - enable DPI awareness to prevent zoom distortion */
+HB_FUNC( SETDPIAWARE )
+{
+   SetProcessDPIAware();
+}
+
 /* UI_MsgBox - cross-platform message box */
 HB_FUNC( UI_MSGBOX )
 {
