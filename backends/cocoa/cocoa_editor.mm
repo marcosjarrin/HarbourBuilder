@@ -2780,16 +2780,478 @@ HB_FUNC( RPT_PREVIEWRENDER )
    rpt_prv_update_label();
 }
 
-/* Report Designer — stubs (visual designer not yet ported to macOS) */
-HB_FUNC( RPT_DESIGNEROPEN )  {}
-HB_FUNC( RPT_DESIGNERCLOSE ) {}
-HB_FUNC( RPT_SETREPORT )     {}
-HB_FUNC( RPT_ADDBAND )       {}
-HB_FUNC( RPT_ADDFIELD )      {}
-HB_FUNC( RPT_GETSELECTED )   { hb_retni(0); }
-HB_FUNC( RPT_GETBANDPROPS )  { hb_reta(0); }
-HB_FUNC( RPT_GETFIELDPROPS ) { hb_reta(0); }
-HB_FUNC( RPT_SETBANDPROP )   {}
-HB_FUNC( RPT_SETFIELDPROP )  {}
+/* -----------------------------------------------------------------------
+ * Report Designer — Visual band/field editor with Core Graphics
+ * ----------------------------------------------------------------------- */
+
+#define RPT_MAX_BANDS  20
+#define RPT_MAX_FIELDS 50
+#define RPT_MARGIN_W   24
+#define RPT_RULER_H    24
+#define RPT_PAGE_PAD   30
+#define RPT_HANDLE_SZ  6
+
+typedef struct {
+   char cName[32]; char cText[128]; char cFieldName[64];
+   int  nLeft, nTop, nWidth, nHeight, nAlignment;
+} RptField;
+
+typedef struct {
+   char     cName[32];
+   int      nHeight, nFieldCount;
+   RptField fields[RPT_MAX_FIELDS];
+   double   colorR, colorG, colorB;
+   int      lPrintOnEveryPage, lKeepTogether, lVisible;
+} RptBand;
+
+static NSWindow * s_rptDesigner = nil;
+static NSView *   s_rptDesDrawView = nil;
+static RptBand    s_rptBands[RPT_MAX_BANDS];
+static int        s_rptBandCount = 0;
+static int        s_rptSelBand = -1, s_rptSelField = -1;
+static int        s_rptPageWidth = 210, s_rptPageHeight = 297, s_rptScale = 3;
+static int        s_rptDragging = 0, s_rptDragStartX = 0, s_rptDragStartY = 0;
+static int        s_rptDragOrigX = 0, s_rptDragOrigY = 0, s_rptDragOrigH = 0;
+
+static void rpt_band_color( const char * name, double * r, double * g, double * b )
+{
+   if( strcasecmp(name,"Header")==0 || strcasecmp(name,"Footer")==0 )
+      { *r=0.290; *g=0.565; *b=0.851; }
+   else if( strcasecmp(name,"Detail")==0 ) { *r=0.850; *g=0.850; *b=0.850; }
+   else if( strncasecmp(name,"Group",5)==0 ) { *r=0.420; *g=0.749; *b=0.420; }
+   else if( strncasecmp(name,"Page",4)==0 ) { *r=0.831; *g=0.659; *b=0.263; }
+   else { *r=0.600; *g=0.600; *b=0.600; }
+}
+
+static int rpt_band_y( int idx )
+{
+   int y = RPT_RULER_H;
+   for( int i = 0; i < idx && i < s_rptBandCount; i++ )
+      y += s_rptBands[i].nHeight + 2;
+   return y;
+}
+
+/* Custom drawing view for report designer */
+@interface HBReportDesignerView : NSView
+@end
+
+@implementation HBReportDesignerView
+
+- (BOOL)isFlipped { return YES; }
+- (BOOL)acceptsFirstResponder { return YES; }
+
+- (void)drawRect:(NSRect)dirtyRect
+{
+   (void)dirtyRect;
+   int pageW = s_rptPageWidth * s_rptScale;
+   int pageX = RPT_PAGE_PAD;
+
+   /* Dark background */
+   [[NSColor colorWithCalibratedRed:0.145 green:0.145 blue:0.149 alpha:1] set];
+   NSRectFill( [self bounds] );
+
+   /* White page area */
+   int totalBandH = rpt_band_y( s_rptBandCount ) - RPT_RULER_H;
+   int pageH = totalBandH > 200 ? totalBandH + RPT_RULER_H + 20 : s_rptPageHeight * s_rptScale;
+   [[NSColor whiteColor] set];
+   NSRectFill( NSMakeRect( pageX, RPT_RULER_H, pageW, pageH ) );
+
+   /* Ruler */
+   [[NSColor colorWithCalibratedRed:0.22 green:0.22 blue:0.22 alpha:1] set];
+   NSRectFill( NSMakeRect( pageX, 0, pageW, RPT_RULER_H ) );
+
+   NSDictionary * rulerAttrs = @{ NSFontAttributeName: [NSFont systemFontOfSize:9],
+      NSForegroundColorAttributeName: [NSColor colorWithCalibratedWhite:0.8 alpha:1] };
+   for( int mm = 0; mm <= s_rptPageWidth; mm += 10 )
+   {
+      int rx = pageX + mm * s_rptScale;
+      NSBezierPath * tick = [NSBezierPath bezierPath];
+      [[NSColor colorWithCalibratedWhite:0.8 alpha:1] set];
+      [tick moveToPoint:NSMakePoint(rx, RPT_RULER_H - 2)];
+      [tick lineToPoint:NSMakePoint(rx, RPT_RULER_H - 10)];
+      [tick stroke];
+      if( mm % 50 == 0 )
+         [[NSString stringWithFormat:@"%d", mm] drawAtPoint:NSMakePoint(rx+2, 1) withAttributes:rulerAttrs];
+   }
+
+   /* Bands */
+   int bandY = RPT_RULER_H;
+   for( int i = 0; i < s_rptBandCount; i++ )
+   {
+      RptBand * b = &s_rptBands[i];
+      int bH = b->nHeight;
+      NSColor * bandClr = [NSColor colorWithCalibratedRed:b->colorR green:b->colorG blue:b->colorB alpha:1];
+
+      /* Left margin strip */
+      [bandClr set];
+      NSRectFill( NSMakeRect( pageX, bandY, RPT_MARGIN_W, bH ) );
+
+      /* Band name in margin (horizontal, small) */
+      NSDictionary * nameAttrs = @{ NSFontAttributeName: [NSFont systemFontOfSize:8],
+         NSForegroundColorAttributeName: [NSColor whiteColor] };
+      [[NSString stringWithUTF8String:b->cName] drawAtPoint:NSMakePoint(pageX+2, bandY+2) withAttributes:nameAttrs];
+
+      /* Content area */
+      [[NSColor whiteColor] set];
+      NSRectFill( NSMakeRect( pageX + RPT_MARGIN_W, bandY, pageW - RPT_MARGIN_W, bH ) );
+
+      /* Selected band highlight */
+      if( i == s_rptSelBand && s_rptSelField < 0 )
+      {
+         [[NSColor colorWithCalibratedRed:b->colorR green:b->colorG blue:b->colorB alpha:0.12] set];
+         NSRectFill( NSMakeRect( pageX + RPT_MARGIN_W, bandY, pageW - RPT_MARGIN_W, bH ) );
+      }
+
+      /* Fields */
+      for( int f = 0; f < b->nFieldCount; f++ )
+      {
+         RptField * fld = &b->fields[f];
+         int fx = pageX + RPT_MARGIN_W + fld->nLeft;
+         int fy = bandY + fld->nTop;
+         int fw = fld->nWidth, fh = fld->nHeight;
+
+         [[NSColor colorWithCalibratedRed:0.95 green:0.95 blue:0.97 alpha:1] set];
+         NSRectFill( NSMakeRect(fx, fy, fw, fh) );
+         [[NSColor colorWithCalibratedWhite:0.7 alpha:1] set];
+         NSFrameRect( NSMakeRect(fx, fy, fw, fh) );
+
+         /* Field label */
+         const char * label = fld->cFieldName[0] ? fld->cFieldName : fld->cText;
+         char display[140];
+         if( fld->cFieldName[0] )
+            snprintf( display, sizeof(display), "[%s]", label );
+         else
+            snprintf( display, sizeof(display), "%s", label );
+         NSDictionary * fldAttrs = @{ NSFontAttributeName: [NSFont systemFontOfSize:10],
+            NSForegroundColorAttributeName: [NSColor colorWithCalibratedWhite:0.15 alpha:1] };
+         [[NSString stringWithUTF8String:display] drawAtPoint:NSMakePoint(fx+3, fy+2) withAttributes:fldAttrs];
+
+         /* Selection handles */
+         if( i == s_rptSelBand && f == s_rptSelField )
+         {
+            [[NSColor colorWithCalibratedRed:0 green:0.47 blue:0.84 alpha:1] set];
+            NSFrameRectWithWidth( NSMakeRect(fx-1, fy-1, fw+2, fh+2), 2 );
+            int hx[4] = { fx-3, fx+fw-3, fx+fw-3, fx-3 };
+            int hy[4] = { fy-3, fy-3, fy+fh-3, fy+fh-3 };
+            for( int j = 0; j < 4; j++ ) {
+               [[NSColor whiteColor] set];
+               NSRectFill( NSMakeRect(hx[j], hy[j], RPT_HANDLE_SZ, RPT_HANDLE_SZ) );
+               [[NSColor colorWithCalibratedRed:0 green:0.47 blue:0.84 alpha:1] set];
+               NSFrameRect( NSMakeRect(hx[j], hy[j], RPT_HANDLE_SZ, RPT_HANDLE_SZ) );
+            }
+         }
+      }
+
+      /* Separator */
+      NSBezierPath * sep = [NSBezierPath bezierPath];
+      CGFloat dashes[] = { 4.0, 2.0 };
+      [sep setLineDash:dashes count:2 phase:0];
+      [[NSColor colorWithCalibratedWhite:0.6 alpha:1] set];
+      [sep moveToPoint:NSMakePoint(pageX, bandY + bH + 0.5)];
+      [sep lineToPoint:NSMakePoint(pageX + pageW, bandY + bH + 0.5)];
+      [sep stroke];
+
+      bandY += bH + 2;
+   }
+
+   int minH = rpt_band_y( s_rptBandCount ) + 40;
+   int minW = pageX + pageW + RPT_PAGE_PAD;
+   [self setFrameSize:NSMakeSize( minW, minH < 400 ? 400 : minH )];
+}
+
+- (void)mouseDown:(NSEvent *)event
+{
+   NSPoint pt = [self convertPoint:[event locationInWindow] fromView:nil];
+   int mx = (int)pt.x, my = (int)pt.y;
+   int pageX = RPT_PAGE_PAD;
+
+   s_rptSelBand = -1; s_rptSelField = -1; s_rptDragging = 0;
+
+   int bandY = RPT_RULER_H;
+   for( int i = 0; i < s_rptBandCount; i++ )
+   {
+      RptBand * b = &s_rptBands[i];
+      int bH = b->nHeight;
+      if( my >= bandY && my < bandY + bH + 2 )
+      {
+         if( my >= bandY + bH - 8 && mx >= pageX && mx < pageX + RPT_MARGIN_W )
+         { s_rptSelBand = i; s_rptDragging = 2; s_rptDragStartY = my; s_rptDragOrigH = bH; break; }
+
+         if( mx >= pageX && mx < pageX + RPT_MARGIN_W )
+         { s_rptSelBand = i; break; }
+
+         for( int f = b->nFieldCount - 1; f >= 0; f-- )
+         {
+            RptField * fld = &b->fields[f];
+            int fx = pageX + RPT_MARGIN_W + fld->nLeft, fy = bandY + fld->nTop;
+            if( mx >= fx && mx < fx + fld->nWidth && my >= fy && my < fy + fld->nHeight )
+            {
+               s_rptSelBand = i; s_rptSelField = f; s_rptDragging = 1;
+               s_rptDragStartX = mx; s_rptDragStartY = my;
+               s_rptDragOrigX = fld->nLeft; s_rptDragOrigY = fld->nTop;
+               goto done;
+            }
+         }
+         s_rptSelBand = i; break;
+      }
+      bandY += bH + 2;
+   }
+done:
+   [self setNeedsDisplay:YES];
+}
+
+- (void)mouseDragged:(NSEvent *)event
+{
+   if( !s_rptDragging ) return;
+   NSPoint pt = [self convertPoint:[event locationInWindow] fromView:nil];
+   int mx = (int)pt.x, my = (int)pt.y;
+
+   if( s_rptDragging == 1 && s_rptSelBand >= 0 && s_rptSelField >= 0 )
+   {
+      RptField * fld = &s_rptBands[s_rptSelBand].fields[s_rptSelField];
+      fld->nLeft = s_rptDragOrigX + (mx - s_rptDragStartX);
+      fld->nTop  = s_rptDragOrigY + (my - s_rptDragStartY);
+      if( fld->nLeft < 0 ) fld->nLeft = 0;
+      if( fld->nTop < 0 ) fld->nTop = 0;
+   }
+   else if( s_rptDragging == 2 && s_rptSelBand >= 0 )
+   {
+      int newH = s_rptDragOrigH + (my - s_rptDragStartY);
+      if( newH < 20 ) newH = 20;
+      if( newH > 600 ) newH = 600;
+      s_rptBands[s_rptSelBand].nHeight = newH;
+   }
+   [self setNeedsDisplay:YES];
+}
+
+- (void)mouseUp:(NSEvent *)event { (void)event; s_rptDragging = 0; }
+
+@end
+
+/* Designer toolbar targets */
+@interface HBRptDesTarget : NSObject
+- (void)addBand:(id)sender;
+- (void)addField:(id)sender;
+- (void)deleteSel:(id)sender;
+- (void)preview:(id)sender;
+@end
+
+@implementation HBRptDesTarget
+
+- (void)addBand:(id)sender
+{
+   (void)sender;
+   NSMenu * menu = [[NSMenu alloc] init];
+   NSString * types[] = { @"Header", @"Detail", @"Footer", @"GroupHeader", @"GroupFooter", @"PageHeader", @"PageFooter" };
+   for( int i = 0; i < 7; i++ ) {
+      NSMenuItem * mi = [[NSMenuItem alloc] initWithTitle:types[i] action:@selector(addBandType:) keyEquivalent:@""];
+      [mi setTarget:self]; [mi setTag:i];
+      [menu addItem:mi];
+   }
+   [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(5, 0) inView:nil];
+}
+
+- (void)addBandType:(NSMenuItem *)item
+{
+   if( s_rptBandCount >= RPT_MAX_BANDS ) return;
+   const char * names[] = { "Header", "Detail", "Footer", "GroupHeader", "GroupFooter", "PageHeader", "PageFooter" };
+   RptBand * b = &s_rptBands[s_rptBandCount];
+   memset( b, 0, sizeof(RptBand) );
+   strncpy( b->cName, names[[item tag]], 31 );
+   b->nHeight = 80; b->lVisible = 1;
+   rpt_band_color( b->cName, &b->colorR, &b->colorG, &b->colorB );
+   s_rptBandCount++;
+   [s_rptDesDrawView setNeedsDisplay:YES];
+}
+
+- (void)addField:(id)sender
+{
+   (void)sender;
+   int bi = s_rptSelBand >= 0 ? s_rptSelBand : (s_rptBandCount > 0 ? 0 : -1);
+   if( bi < 0 ) return;
+   RptBand * b = &s_rptBands[bi];
+   if( b->nFieldCount >= RPT_MAX_FIELDS ) return;
+   RptField * f = &b->fields[b->nFieldCount];
+   memset( f, 0, sizeof(RptField) );
+   snprintf( f->cName, 32, "Field%d", b->nFieldCount + 1 );
+   snprintf( f->cText, 128, "Field%d", b->nFieldCount + 1 );
+   f->nLeft = 10 + (b->nFieldCount % 4) * 80; f->nTop = 10; f->nWidth = 70; f->nHeight = 20;
+   s_rptSelBand = bi; s_rptSelField = b->nFieldCount; b->nFieldCount++;
+   [s_rptDesDrawView setNeedsDisplay:YES];
+}
+
+- (void)deleteSel:(id)sender
+{
+   (void)sender;
+   if( s_rptSelBand < 0 ) return;
+   if( s_rptSelField >= 0 ) {
+      RptBand * b = &s_rptBands[s_rptSelBand];
+      if( s_rptSelField < b->nFieldCount - 1 )
+         memmove( &b->fields[s_rptSelField], &b->fields[s_rptSelField+1],
+                  sizeof(RptField) * (b->nFieldCount - s_rptSelField - 1) );
+      b->nFieldCount--; s_rptSelField = -1;
+   } else {
+      if( s_rptSelBand < s_rptBandCount - 1 )
+         memmove( &s_rptBands[s_rptSelBand], &s_rptBands[s_rptSelBand+1],
+                  sizeof(RptBand) * (s_rptBandCount - s_rptSelBand - 1) );
+      s_rptBandCount--; s_rptSelBand = -1;
+   }
+   [s_rptDesDrawView setNeedsDisplay:YES];
+}
+
+- (void)preview:(id)sender { (void)sender; /* TODO: trigger report preview from designer */ }
+
+@end
+
+static HBRptDesTarget * s_rptDesTarget = nil;
+
+HB_FUNC( RPT_DESIGNEROPEN )
+{
+   if( s_rptDesigner ) { [s_rptDesigner makeKeyAndOrderFront:nil]; return; }
+
+   NSRect frame = NSMakeRect(100, 80, 800, 600);
+   s_rptDesigner = [[NSWindow alloc] initWithContentRect:frame
+      styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable
+      backing:NSBackingStoreBuffered defer:NO];
+   [s_rptDesigner setTitle:@"Report Designer"];
+   [s_rptDesigner setReleasedWhenClosed:NO];
+   [s_rptDesigner setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]];
+
+   NSView * cv = [s_rptDesigner contentView];
+   CGFloat w = [cv bounds].size.width, h = [cv bounds].size.height;
+   CGFloat tbH = 36;
+
+   s_rptDesTarget = [[HBRptDesTarget alloc] init];
+   NSButton * b1 = [NSButton buttonWithTitle:@"Add Band" target:s_rptDesTarget action:@selector(addBand:)];
+   NSButton * b2 = [NSButton buttonWithTitle:@"Add Field" target:s_rptDesTarget action:@selector(addField:)];
+   NSButton * b3 = [NSButton buttonWithTitle:@"Delete" target:s_rptDesTarget action:@selector(deleteSel:)];
+   NSButton * b4 = [NSButton buttonWithTitle:@"Preview" target:s_rptDesTarget action:@selector(preview:)];
+   int bx = 5;
+   for( NSButton * btn in @[b1, b2, b3, b4] ) {
+      [btn setFrame:NSMakeRect(bx, h-tbH+4, 80, 28)]; [btn setAutoresizingMask:NSViewMinYMargin];
+      [cv addSubview:btn]; bx += 84;
+   }
+
+   NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, w, h-tbH)];
+   [sv setHasVerticalScroller:YES]; [sv setHasHorizontalScroller:YES];
+   [sv setAutoresizingMask:NSViewWidthSizable|NSViewHeightSizable];
+   s_rptDesDrawView = [[HBReportDesignerView alloc] initWithFrame:NSMakeRect(0,0,700,400)];
+   [sv setDocumentView:s_rptDesDrawView];
+   [cv addSubview:sv];
+
+   [s_rptDesigner makeKeyAndOrderFront:nil];
+}
+
+HB_FUNC( RPT_DESIGNERCLOSE ) { if( s_rptDesigner ) [s_rptDesigner orderOut:nil]; }
+HB_FUNC( RPT_SETREPORT )     { (void)hb_parni(1); }
+
+HB_FUNC( RPT_ADDBAND )
+{
+   if( s_rptBandCount >= RPT_MAX_BANDS ) { hb_retni(-1); return; }
+   const char * cName = hb_parc(1);
+   int nHeight = HB_ISNUM(2) ? hb_parni(2) : 80;
+   if( !cName || !cName[0] ) { hb_retni(-1); return; }
+   RptBand * b = &s_rptBands[s_rptBandCount];
+   memset( b, 0, sizeof(RptBand) );
+   strncpy( b->cName, cName, 31 ); b->nHeight = nHeight; b->lVisible = 1;
+   rpt_band_color( cName, &b->colorR, &b->colorG, &b->colorB );
+   int idx = s_rptBandCount++; if( s_rptDesDrawView ) [s_rptDesDrawView setNeedsDisplay:YES];
+   hb_retni( idx );
+}
+
+HB_FUNC( RPT_ADDFIELD )
+{
+   int bi = hb_parni(1);
+   if( bi < 0 || bi >= s_rptBandCount ) { hb_retni(-1); return; }
+   RptBand * b = &s_rptBands[bi];
+   if( b->nFieldCount >= RPT_MAX_FIELDS ) { hb_retni(-1); return; }
+   RptField * f = &b->fields[b->nFieldCount]; memset( f, 0, sizeof(RptField) );
+   if( HB_ISCHAR(2) ) strncpy( f->cName, hb_parc(2), 31 );
+   if( HB_ISCHAR(3) ) strncpy( f->cText, hb_parc(3), 127 );
+   f->nLeft = HB_ISNUM(4)?hb_parni(4):10; f->nTop = HB_ISNUM(5)?hb_parni(5):10;
+   f->nWidth = HB_ISNUM(6)?hb_parni(6):70; f->nHeight = HB_ISNUM(7)?hb_parni(7):20;
+   int idx = b->nFieldCount++; if( s_rptDesDrawView ) [s_rptDesDrawView setNeedsDisplay:YES];
+   hb_retni( idx );
+}
+
+HB_FUNC( RPT_GETSELECTED )
+{
+   PHB_ITEM p = hb_itemArrayNew(4);
+   hb_arraySetNI(p,1,s_rptSelBand); hb_arraySetNI(p,2,s_rptSelField);
+   if( s_rptSelBand >= 0 && s_rptSelBand < s_rptBandCount ) {
+      hb_arraySetC(p,3,s_rptBands[s_rptSelBand].cName);
+      if( s_rptSelField >= 0 && s_rptSelField < s_rptBands[s_rptSelBand].nFieldCount )
+         hb_arraySetC(p,4,s_rptBands[s_rptSelBand].fields[s_rptSelField].cName);
+      else hb_arraySetC(p,4,"");
+   } else { hb_arraySetC(p,3,""); hb_arraySetC(p,4,""); }
+   hb_itemReturnRelease(p);
+}
+
+HB_FUNC( RPT_GETBANDPROPS )
+{
+   int bi = hb_parni(1);
+   if( bi < 0 || bi >= s_rptBandCount ) { hb_reta(0); return; }
+   RptBand * b = &s_rptBands[bi];
+   PHB_ITEM a = hb_itemArrayNew(5), r;
+   #define BPR(i,n,v,c,t) r=hb_itemArrayNew(4); hb_arraySetC(r,1,n); hb_arraySet##t(r,2,v); \
+      hb_arraySetC(r,3,c); hb_arraySetC(r,4,#t[0]=='C'?"S":(#t[0]=='N'?"N":"L")); hb_arraySet(a,i,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"cName"); hb_arraySetC(r,2,b->cName); hb_arraySetC(r,3,"Info"); hb_arraySetC(r,4,"S"); hb_arraySet(a,1,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"nHeight"); hb_arraySetNI(r,2,b->nHeight); hb_arraySetC(r,3,"Position"); hb_arraySetC(r,4,"N"); hb_arraySet(a,2,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"lPrintOnEveryPage"); hb_arraySetL(r,2,b->lPrintOnEveryPage); hb_arraySetC(r,3,"Behavior"); hb_arraySetC(r,4,"L"); hb_arraySet(a,3,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"lKeepTogether"); hb_arraySetL(r,2,b->lKeepTogether); hb_arraySetC(r,3,"Behavior"); hb_arraySetC(r,4,"L"); hb_arraySet(a,4,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"lVisible"); hb_arraySetL(r,2,b->lVisible); hb_arraySetC(r,3,"Behavior"); hb_arraySetC(r,4,"L"); hb_arraySet(a,5,r); hb_itemRelease(r);
+   #undef BPR
+   hb_itemReturnRelease(a);
+}
+
+HB_FUNC( RPT_GETFIELDPROPS )
+{
+   int bi = hb_parni(1), fi = hb_parni(2);
+   if( bi<0||bi>=s_rptBandCount||fi<0||fi>=s_rptBands[bi].nFieldCount ) { hb_reta(0); return; }
+   RptField * f = &s_rptBands[bi].fields[fi];
+   PHB_ITEM a = hb_itemArrayNew(8), r;
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"cName"); hb_arraySetC(r,2,f->cName); hb_arraySetC(r,3,"Info"); hb_arraySetC(r,4,"S"); hb_arraySet(a,1,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"cText"); hb_arraySetC(r,2,f->cText); hb_arraySetC(r,3,"Appearance"); hb_arraySetC(r,4,"S"); hb_arraySet(a,2,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"cFieldName"); hb_arraySetC(r,2,f->cFieldName); hb_arraySetC(r,3,"Data"); hb_arraySetC(r,4,"S"); hb_arraySet(a,3,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"nLeft"); hb_arraySetNI(r,2,f->nLeft); hb_arraySetC(r,3,"Position"); hb_arraySetC(r,4,"N"); hb_arraySet(a,4,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"nTop"); hb_arraySetNI(r,2,f->nTop); hb_arraySetC(r,3,"Position"); hb_arraySetC(r,4,"N"); hb_arraySet(a,5,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"nWidth"); hb_arraySetNI(r,2,f->nWidth); hb_arraySetC(r,3,"Position"); hb_arraySetC(r,4,"N"); hb_arraySet(a,6,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"nHeight"); hb_arraySetNI(r,2,f->nHeight); hb_arraySetC(r,3,"Position"); hb_arraySetC(r,4,"N"); hb_arraySet(a,7,r); hb_itemRelease(r);
+   r=hb_itemArrayNew(4); hb_arraySetC(r,1,"nAlignment"); hb_arraySetNI(r,2,f->nAlignment); hb_arraySetC(r,3,"Appearance"); hb_arraySetC(r,4,"N"); hb_arraySet(a,8,r); hb_itemRelease(r);
+   hb_itemReturnRelease(a);
+}
+
+HB_FUNC( RPT_SETBANDPROP )
+{
+   int bi = hb_parni(1); const char * p = hb_parc(2);
+   if( bi<0||bi>=s_rptBandCount||!p ) { hb_retl(0); return; }
+   RptBand * b = &s_rptBands[bi];
+   if(!strcmp(p,"cName")&&HB_ISCHAR(3)) strncpy(b->cName,hb_parc(3),31);
+   else if(!strcmp(p,"nHeight")&&HB_ISNUM(3)) b->nHeight=hb_parni(3);
+   else if(!strcmp(p,"lPrintOnEveryPage")&&HB_ISLOG(3)) b->lPrintOnEveryPage=hb_parl(3);
+   else if(!strcmp(p,"lKeepTogether")&&HB_ISLOG(3)) b->lKeepTogether=hb_parl(3);
+   else if(!strcmp(p,"lVisible")&&HB_ISLOG(3)) b->lVisible=hb_parl(3);
+   else { hb_retl(0); return; }
+   if( s_rptDesDrawView ) [s_rptDesDrawView setNeedsDisplay:YES];
+   hb_retl(1);
+}
+
+HB_FUNC( RPT_SETFIELDPROP )
+{
+   int bi = hb_parni(1), fi = hb_parni(2); const char * p = hb_parc(3);
+   if( bi<0||bi>=s_rptBandCount||fi<0||fi>=s_rptBands[bi].nFieldCount||!p ) { hb_retl(0); return; }
+   RptField * f = &s_rptBands[bi].fields[fi];
+   if(!strcmp(p,"cName")&&HB_ISCHAR(4)) strncpy(f->cName,hb_parc(4),31);
+   else if(!strcmp(p,"cText")&&HB_ISCHAR(4)) strncpy(f->cText,hb_parc(4),127);
+   else if(!strcmp(p,"cFieldName")&&HB_ISCHAR(4)) strncpy(f->cFieldName,hb_parc(4),63);
+   else if(!strcmp(p,"nLeft")&&HB_ISNUM(4)) f->nLeft=hb_parni(4);
+   else if(!strcmp(p,"nTop")&&HB_ISNUM(4)) f->nTop=hb_parni(4);
+   else if(!strcmp(p,"nWidth")&&HB_ISNUM(4)) f->nWidth=hb_parni(4);
+   else if(!strcmp(p,"nHeight")&&HB_ISNUM(4)) f->nHeight=hb_parni(4);
+   else if(!strcmp(p,"nAlignment")&&HB_ISNUM(4)) f->nAlignment=hb_parni(4);
+   else { hb_retl(0); return; }
+   if( s_rptDesDrawView ) [s_rptDesDrawView setNeedsDisplay:YES];
+   hb_retl(1);
+}
 
 } /* extern "C" */
