@@ -1,6 +1,55 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-03 (Session 5b: Database Components + Data Controls)
+--------------------------------------------------------------
+
+DATABASE COMPONENTS (classes.prg - non-visual, Data Access tab):
+  TDatabase ........... abstract base class with unified API:
+                         Open/Close/Execute/Query/Tables/IsConnected/LastError
+  TDBFTable ........... native DBF/NTX/CDX via Harbour RDD (20+ methods:
+                         GoTop/Skip/Seek/Append/Delete/FieldGet/FieldPut/
+                         RecNo/RecCount/Eof/Structure/CreateIndex)
+  TSQLite ............. SQLite3 via hbsqlit3 (Execute/Query/CreateTable/
+                         BeginTransaction/Commit/Rollback/LastInsertId)
+  TMySQL .............. stub (needs libmysqlclient-dev)
+  TMariaDB ........... inherits TMySQL (wire-compatible)
+  TPostgreSQL ........ stub (needs libpq-dev)
+  TFirebird .......... stub (needs firebird-dev)
+  TSQLServer ......... stub (needs freetds-dev)
+  TOracle ............ stub (needs Oracle Instant Client)
+  TMongoDB ........... stub (needs libmongoc-dev)
+
+  Architecture: all inherit TDatabase, same API. Changing backend = one line.
+
+DATA CONTROLS (classes.prg - visual, Data Controls tab):
+  TDataSource ........ binds TDatabase to visual controls
+                        MoveFirst/Prev/Next/Last/Append/Delete/Save/Refresh
+  TDBControl ......... base class (RefreshFromDB/WriteToDB)
+  TDBText ............ label displaying field value
+  TDBEdit ............ editable entry bound to field
+  TDBComboBox ........ combo bound to field
+  TDBCheckBox ........ check button bound to logical field
+  TDBNavigator ....... 7 buttons (First/Prior/Next/Last/Insert/Remove/Post)
+
+GTK3 WIDGETS (gtk3_core.c - Data Controls):
+  HBDBGrid ........... GtkTreeView with 4 resizable columns + grid lines
+  HBDBNavigator ...... GtkButtonBox with 7 navigation buttons
+  HBDBText ........... GtkLabel bound to field
+  HBDBEdit ........... GtkEntry bound to field
+  HBDBComboBox ....... GtkComboBoxText bound to field
+  HBDBCheckBox ....... GtkCheckButton bound to logical field
+  HBDBImage .......... GtkFrame + GtkImage for blob/path fields
+
+SAMPLE PROJECTS (samples/projects/database/):
+  dbf_example.prg .......... create/write/read DBF with TDBFTable
+  sqlite_example.prg ....... SQL tables, transactions, queries with TSQLite
+  portable_example.prg ..... same API across all backends
+  datacontrols_example.prg . TDataSource + TDBNavigator + bound controls
+
+BUILD: added -lhbsqlit3 -lsddsqlt3 -lrddsql -lsqlite3 to linker.
+
+
 2026-04-03 (Session 5: Linux full IDE + Debugger Engine + Windows parity)
 --------------------------------------------------------------------------
 

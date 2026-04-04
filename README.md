@@ -344,11 +344,14 @@ All three desktop platforms are **fully functional** with zero MsgInfo stubs —
 | | Build & Run (native compile) | ✅ | ✅ | ✅ |
 | | Build to .app bundle | — | — | ✅ |
 | **Database** | TDatabase (abstract base) | ✅ | ✅ | ✅ |
-| | TDBFTable (native DBF/CDX) | ✅ | ✅ | ✅ |
-| | TSQLite (SQLite3) | ✅ | ✅ | ✅ |
+| | TDBFTable (native DBF/CDX, 20+ methods) | ✅ | ✅ | ✅ |
+| | TSQLite (SQL, transactions, queries) | ✅ | ✅ | ✅ |
 | | TMySQL / TMariaDB | 🔧 | 🔧 | 🔧 |
-| | TPostgreSQL | 🔧 | 🔧 | 🔧 |
-| | TFirebird / TSQLServer / TOracle / TMongoDB | 🔧 | 🔧 | 🔧 |
+| | TPostgreSQL / TFirebird / TSQLServer | 🔧 | 🔧 | 🔧 |
+| | TDataSource (binds DB to controls) | ✅ | ✅ | ✅ |
+| | TDBGrid / TDBNavigator / TDBEdit | ✅ | ✅ | ✅ |
+| | TDBText / TDBComboBox / TDBCheckBox | ✅ | ✅ | ✅ |
+| | 4 sample projects (DBF, SQLite, portable, controls) | ✅ | ✅ | ✅ |
 | **Theme** | Dark mode | ✅ | ✅ | ✅ |
 | | Dark code editor | ✅ | ✅ | ✅ |
 | **Menus** | All menus functional (zero stubs) | ✅ 35 | ✅ 47 | ✅ 53 |
