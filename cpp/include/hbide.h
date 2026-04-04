@@ -363,6 +363,7 @@ public:
    PHB_ITEM     FOnHide;
    PHB_ITEM     FOnCloseQuery;
    PHB_ITEM     FOnActivate;
+   PHB_ITEM     FOnActivateApp;  /* fires only when switching from another app */
    PHB_ITEM     FOnDeactivate;
    PHB_ITEM     FOnResize;
    PHB_ITEM     FOnPaint;

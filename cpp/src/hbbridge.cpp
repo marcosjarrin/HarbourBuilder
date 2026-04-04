@@ -2318,6 +2318,18 @@ HB_FUNC( UI_FORMONCOMPONENTDROP )
    }
 }
 
+/* UI_FormSetActivateApp( hForm, bBlock ) - set callback for WM_ACTIVATEAPP */
+HB_FUNC( UI_FORMSETACTIVATEAPP )
+{
+   TForm * p = GetForm(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( p )
+   {
+      if( p->FOnActivateApp ) hb_itemRelease( p->FOnActivateApp );
+      p->FOnActivateApp = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
+}
+
 /* UI_FormAlignSelected( hForm, nMode ) - align selected controls
  * Modes: 1=left, 2=right, 3=top, 4=bottom, 5=centerH, 6=centerV, 7=spaceH, 8=spaceV */
 HB_FUNC( UI_FORMALIGNSELECTED )

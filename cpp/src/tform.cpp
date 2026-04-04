@@ -62,6 +62,7 @@ TForm::TForm()
    FOnHide = NULL;
    FOnCloseQuery = NULL;
    FOnActivate = NULL;
+   FOnActivateApp = NULL;
    FOnDeactivate = NULL;
    FOnResize = NULL;
    FOnPaint = NULL;
@@ -543,14 +544,15 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
          break;
       }
 
+      case WM_ACTIVATEAPP:
+         /* Fires only when switching from another application */
+         if( wParam )  /* TRUE = our app is being activated */
+            FireEvent( FOnActivateApp );
+         break;
+
       case WM_ACTIVATE:
          if( LOWORD(wParam) != WA_INACTIVE )
-         {
-            if( !FDesignMode )
-               FireEvent( FOnActivate );
-            else
-               FireEvent( FOnActivate );  /* Design mode: also fire to restore IDE */
-         }
+            FireEvent( FOnActivate );
          else
          {
             if( !FDesignMode )
@@ -1747,7 +1749,7 @@ void TForm::ReleaseFormEvents()
    #define REL(e) if( e ) { hb_itemRelease( e ); e = NULL; }
    REL(FOnDblClick);    REL(FOnCreate);      REL(FOnDestroy);
    REL(FOnShow);        REL(FOnHide);        REL(FOnCloseQuery);
-   REL(FOnActivate);    REL(FOnDeactivate);   REL(FOnResize);
+   REL(FOnActivate);    REL(FOnActivateApp);  REL(FOnDeactivate);   REL(FOnResize);
    REL(FOnPaint);       REL(FOnKeyDown);      REL(FOnKeyUp);
    REL(FOnKeyPress);    REL(FOnMouseDown);    REL(FOnMouseUp);
    REL(FOnMouseMove);   REL(FOnMouseWheel);

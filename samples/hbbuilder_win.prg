@@ -1083,9 +1083,9 @@ static function WireDesignForm()
    oDesignForm:OnResize := { || SyncDesignerToCode(), ;
       InspectorRefresh( oDesignForm:hCpp ) }
 
-   // When design form gets focus, bring all IDE windows to front
-   // (disabled: was blocking resize by stealing focus)
-   // oDesignForm:OnActivate := { || RestoreAllIDEWindows() }
+   // When design form gets focus from another app, bring IDE to front
+   // Uses WM_ACTIVATEAPP (not WM_ACTIVATE) to avoid blocking resize
+   UI_FormSetActivateApp( oDesignForm:hCpp, { || RestoreAllIDEWindows() } )
 
 return nil
 
