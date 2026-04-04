@@ -231,7 +231,7 @@ oDb:Close()
 ![macOS](images/macos_scintilla.png)
 
 ### Linux (GTK3 + Scintilla + Inspector + Form Designer)
-![Linux](images/linux_ide_full.png)
+![Linux](images/linux_scintilla.png)
 
 ---
 
