@@ -51,6 +51,7 @@ function Main()
       SIZE nScreenW, nBarH FONT "Sans", 11 APPBAR
 
    UI_FormSetPos( oIDE:hCpp, 0, 0 )
+   GTK_SetDarkMode( .T. )
    oIDE:Show()
 
    // Inspector: right below IDE window
@@ -95,7 +96,7 @@ function Main()
    MENUITEM "Code Editor"  OF oView ACTION CodeEditorBringToFront( hCodeEditor )
    MENUITEM "Inspector"        OF oView ACTION InspectorOpen()
    MENUITEM "Project Inspector" OF oView ACTION ShowProjectInspector()
-   MENUITEM "Debugger"          OF oView ACTION MsgInfo( "Debugger" )
+   MENUITEM "Debugger"          OF oView ACTION GTK_DebugPanel()
 
    DEFINE POPUP oProject PROMPT "Project" OF oIDE
    MENUITEM "Add to Project..."    OF oProject ACTION MsgInfo( "Add to Project" )
@@ -1097,7 +1098,7 @@ static function TBRun()
 
 return nil
 
-// === Debugger (placeholder) ===
+// === Debugger ===
 
 static function ToggleBreakpoint()
    static aBreakpoints := {}
@@ -1109,49 +1110,36 @@ static function ClearBreakpoints()
    MsgInfo( "All breakpoints cleared" )
 return nil
 
-// === AI Assistant (placeholder) ===
+// === AI Assistant ===
 
 static function ShowAIAssistant()
-   MsgInfo( "AI Assistant (Ollama)" + Chr(10) + Chr(10) + ;
-            "Connect to localhost:11434 for local AI" + Chr(10) + ;
-            "Models: codellama, llama3, deepseek-coder" + Chr(10) + Chr(10) + ;
-            "Coming soon: full chat interface" )
+   GTK_AIAssistantPanel()
 return nil
 
-// === Project Inspector (placeholder) ===
+// === Project Inspector ===
 
 static function ShowProjectInspector()
-   local cInfo := "Project Inspector" + Chr(10) + Chr(10)
+   local aItems := {}
    local i
-   cInfo += "Project1" + Chr(10)
+   AAdd( aItems, "Project1" )
    for i := 1 to Len( aForms )
-      cInfo += "  " + aForms[i][1] + ".prg" + Chr(10)
+      AAdd( aItems, "  " + aForms[i][1] + ".prg" )
    next
-   cInfo += "  classes.prg" + Chr(10)
-   cInfo += "  hbbuilder.ch" + Chr(10)
-   MsgInfo( cInfo )
+   AAdd( aItems, "  classes.prg" )
+   AAdd( aItems, "  hbbuilder.ch" )
+   GTK_ProjectInspector( aItems )
 return nil
 
-// === Editor Settings (placeholder) ===
+// === Editor Settings ===
 
 static function ShowEditorSettings()
-   MsgInfo( "Editor Colors" + Chr(10) + Chr(10) + ;
-            "Font: Sans, 11pt" + Chr(10) + ;
-            "Theme: Dark" + Chr(10) + ;
-            "Keywords: Blue bold" + Chr(10) + ;
-            "Commands: Teal" + Chr(10) + ;
-            "Strings: Orange" + Chr(10) + ;
-            "Comments: Green" )
+   GTK_EditorSettingsDialog()
 return nil
 
-// === Project Options (placeholder) ===
+// === Project Options ===
 
 static function ShowProjectOptions()
-   MsgInfo( "Project Options" + Chr(10) + Chr(10) + ;
-            "Harbour: ~/harbour" + Chr(10) + ;
-            "Flags: -n -w -q" + Chr(10) + ;
-            "Compiler: gcc" + Chr(10) + ;
-            "Backend: GTK3" )
+   GTK_ProjectOptionsDialog()
 return nil
 
 // === Helpers ===

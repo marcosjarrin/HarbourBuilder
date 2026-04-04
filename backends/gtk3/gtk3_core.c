@@ -4651,3 +4651,583 @@ HB_FUNC( GTK_ABOUTDIALOG )
    gtk_widget_destroy( dialog );
 }
 
+/* ======================================================================
+ * Dark Mode - apply GTK dark theme
+ * ====================================================================== */
+
+HB_FUNC( GTK_SETDARKMODE )
+{
+   EnsureGTK();
+   int bDark = hb_parl(1);
+   GtkSettings * settings = gtk_settings_get_default();
+   if( settings )
+      g_object_set( settings, "gtk-application-prefer-dark-theme", (gboolean)bDark, NULL );
+}
+
+/* ======================================================================
+ * Debugger Panel - floating window with 5 tabs
+ * ====================================================================== */
+
+static GtkWidget * s_hDbgWnd = NULL;
+
+HB_FUNC( GTK_DEBUGPANEL )
+{
+   EnsureGTK();
+
+   if( s_hDbgWnd ) {
+      gtk_window_present( GTK_WINDOW(s_hDbgWnd) );
+      return;
+   }
+
+   s_hDbgWnd = gtk_window_new( GTK_WINDOW_TOPLEVEL );
+   gtk_window_set_title( GTK_WINDOW(s_hDbgWnd), "Debugger" );
+   gtk_window_set_default_size( GTK_WINDOW(s_hDbgWnd), 400, 300 );
+   gtk_window_set_type_hint( GTK_WINDOW(s_hDbgWnd), GDK_WINDOW_TYPE_HINT_UTILITY );
+   g_signal_connect( s_hDbgWnd, "delete-event",
+      G_CALLBACK(gtk_widget_hide_on_delete), NULL );
+
+   GtkWidget * nb = gtk_notebook_new();
+   gtk_container_add( GTK_CONTAINER(s_hDbgWnd), nb );
+
+   /* Tab names */
+   const char * tabs[] = { "Watch", "Locals", "Call Stack", "Breakpoints", "Output" };
+   int i;
+
+   for( i = 0; i < 5; i++ )
+   {
+      GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
+      gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW(sw),
+         GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
+
+      if( i <= 1 ) {
+         /* Watch / Locals: 3-column TreeView (Name, Value, Type) */
+         GtkListStore * store = gtk_list_store_new( 3,
+            G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING );
+         GtkWidget * tv = gtk_tree_view_new_with_model( GTK_TREE_MODEL(store) );
+         g_object_unref( store );
+
+         GtkCellRenderer * r = gtk_cell_renderer_text_new();
+         gtk_tree_view_append_column( GTK_TREE_VIEW(tv),
+            gtk_tree_view_column_new_with_attributes( "Name", r, "text", 0, NULL ) );
+         gtk_tree_view_append_column( GTK_TREE_VIEW(tv),
+            gtk_tree_view_column_new_with_attributes( "Value", r, "text", 1, NULL ) );
+         gtk_tree_view_append_column( GTK_TREE_VIEW(tv),
+            gtk_tree_view_column_new_with_attributes( "Type", r, "text", 2, NULL ) );
+
+         /* Sample data for Locals */
+         if( i == 1 ) {
+            GtkTreeIter iter;
+            gtk_list_store_append( store, &iter );
+            gtk_list_store_set( store, &iter, 0, "oForm", 1, "TForm Object", 2, "Object", -1 );
+            gtk_list_store_append( store, &iter );
+            gtk_list_store_set( store, &iter, 0, "nCount", 1, "42", 2, "Numeric", -1 );
+            gtk_list_store_append( store, &iter );
+            gtk_list_store_set( store, &iter, 0, "cName", 1, "\"Form1\"", 2, "String", -1 );
+         }
+         gtk_container_add( GTK_CONTAINER(sw), tv );
+      }
+      else if( i == 2 ) {
+         /* Call Stack: 2-column (Level, Location) */
+         GtkListStore * store = gtk_list_store_new( 2, G_TYPE_STRING, G_TYPE_STRING );
+         GtkWidget * tv = gtk_tree_view_new_with_model( GTK_TREE_MODEL(store) );
+         g_object_unref( store );
+         GtkCellRenderer * r = gtk_cell_renderer_text_new();
+         gtk_tree_view_append_column( GTK_TREE_VIEW(tv),
+            gtk_tree_view_column_new_with_attributes( "Level", r, "text", 0, NULL ) );
+         gtk_tree_view_append_column( GTK_TREE_VIEW(tv),
+            gtk_tree_view_column_new_with_attributes( "Location", r, "text", 1, NULL ) );
+         gtk_container_add( GTK_CONTAINER(sw), tv );
+      }
+      else if( i == 3 ) {
+         /* Breakpoints: 3-column (File, Line, Enabled) */
+         GtkListStore * store = gtk_list_store_new( 3,
+            G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING );
+         GtkWidget * tv = gtk_tree_view_new_with_model( GTK_TREE_MODEL(store) );
+         g_object_unref( store );
+         GtkCellRenderer * r = gtk_cell_renderer_text_new();
+         gtk_tree_view_append_column( GTK_TREE_VIEW(tv),
+            gtk_tree_view_column_new_with_attributes( "File", r, "text", 0, NULL ) );
+         gtk_tree_view_append_column( GTK_TREE_VIEW(tv),
+            gtk_tree_view_column_new_with_attributes( "Line", r, "text", 1, NULL ) );
+         gtk_tree_view_append_column( GTK_TREE_VIEW(tv),
+            gtk_tree_view_column_new_with_attributes( "Enabled", r, "text", 2, NULL ) );
+         gtk_container_add( GTK_CONTAINER(sw), tv );
+      }
+      else {
+         /* Output: read-only text view */
+         GtkWidget * tv = gtk_text_view_new();
+         gtk_text_view_set_editable( GTK_TEXT_VIEW(tv), FALSE );
+         gtk_text_view_set_monospace( GTK_TEXT_VIEW(tv), TRUE );
+         gtk_container_add( GTK_CONTAINER(sw), tv );
+      }
+
+      gtk_notebook_append_page( GTK_NOTEBOOK(nb),
+         sw, gtk_label_new( tabs[i] ) );
+   }
+
+   gtk_widget_show_all( s_hDbgWnd );
+}
+
+/* ======================================================================
+ * Project Inspector - floating TreeView showing project structure
+ * ====================================================================== */
+
+static GtkWidget * s_hProjInsp = NULL;
+
+HB_FUNC( GTK_PROJECTINSPECTOR )
+{
+   EnsureGTK();
+
+   PHB_ITEM pArray = hb_param( 1, HB_IT_ARRAY );
+
+   if( s_hProjInsp ) {
+      if( !pArray ) {
+         gtk_window_present( GTK_WINDOW(s_hProjInsp) );
+         return;
+      }
+      gtk_widget_destroy( s_hProjInsp );
+      s_hProjInsp = NULL;
+   }
+
+   s_hProjInsp = gtk_window_new( GTK_WINDOW_TOPLEVEL );
+   gtk_window_set_title( GTK_WINDOW(s_hProjInsp), "Project Inspector" );
+   gtk_window_set_default_size( GTK_WINDOW(s_hProjInsp), 250, 400 );
+   gtk_window_set_type_hint( GTK_WINDOW(s_hProjInsp), GDK_WINDOW_TYPE_HINT_UTILITY );
+   g_signal_connect( s_hProjInsp, "delete-event",
+      G_CALLBACK(gtk_widget_hide_on_delete), NULL );
+
+   GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
+   gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW(sw),
+      GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
+   gtk_container_add( GTK_CONTAINER(s_hProjInsp), sw );
+
+   GtkTreeStore * store = gtk_tree_store_new( 1, G_TYPE_STRING );
+   GtkWidget * tv = gtk_tree_view_new_with_model( GTK_TREE_MODEL(store) );
+   g_object_unref( store );
+
+   GtkCellRenderer * r = gtk_cell_renderer_text_new();
+   gtk_tree_view_append_column( GTK_TREE_VIEW(tv),
+      gtk_tree_view_column_new_with_attributes( "Project", r, "text", 0, NULL ) );
+   gtk_tree_view_set_headers_visible( GTK_TREE_VIEW(tv), FALSE );
+
+   /* Populate tree from array */
+   if( pArray )
+   {
+      int n = (int) hb_arrayLen( pArray );
+      GtkTreeIter parent, child;
+      int hasParent = 0;
+      int j;
+
+      for( j = 1; j <= n; j++ )
+      {
+         const char * item = hb_arrayGetCPtr( pArray, j );
+         if( !item ) continue;
+
+         if( item[0] == ' ' && item[1] == ' ' ) {
+            if( hasParent ) {
+               gtk_tree_store_append( store, &child, &parent );
+               gtk_tree_store_set( store, &child, 0, item + 2, -1 );
+            }
+         } else {
+            gtk_tree_store_append( store, &parent, NULL );
+            gtk_tree_store_set( store, &parent, 0, item, -1 );
+            hasParent = 1;
+         }
+      }
+   }
+
+   gtk_container_add( GTK_CONTAINER(sw), tv );
+   gtk_tree_view_expand_all( GTK_TREE_VIEW(tv) );
+   gtk_widget_show_all( s_hProjInsp );
+}
+
+/* ======================================================================
+ * AI Assistant Panel - Ollama chat interface
+ * ====================================================================== */
+
+static GtkWidget * s_hAIWnd = NULL;
+static GtkWidget * s_aiWidgets[4];  /* entry, output, combo, statusLbl */
+
+static void on_ai_send( GtkButton * btn, gpointer data )
+{
+   GtkWidget ** w = (GtkWidget **) data;
+   GtkWidget * entry  = w[0];
+   GtkWidget * output = w[1];
+   GtkWidget * combo  = w[2];
+   GtkWidget * status = w[3];
+
+   const char * prompt = gtk_entry_get_text( GTK_ENTRY(entry) );
+   if( !prompt || !prompt[0] ) return;
+
+   char * model = gtk_combo_box_text_get_active_text( GTK_COMBO_BOX_TEXT(combo) );
+   if( !model ) model = g_strdup( "codellama" );
+
+   GtkTextBuffer * buf = gtk_text_view_get_buffer( GTK_TEXT_VIEW(output) );
+   GtkTextIter endIter;
+   gtk_text_buffer_get_end_iter( buf, &endIter );
+
+   char * userMsg = g_strdup_printf( "\n> %s\n", prompt );
+   gtk_text_buffer_insert( buf, &endIter, userMsg, -1 );
+   g_free( userMsg );
+
+   gtk_label_set_text( GTK_LABEL(status), "Status: Sending..." );
+
+   /* Call Ollama via curl */
+   char * escaped = g_strescape( prompt, NULL );
+   char * cmd = g_strdup_printf(
+      "curl -s -m 30 http://localhost:11434/api/generate "
+      "-d '{\"model\":\"%s\",\"prompt\":\"%s\",\"stream\":false}' 2>/dev/null "
+      "| python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('response',''))\" 2>/dev/null",
+      model, escaped );
+   g_free( escaped );
+
+   char * response = NULL;
+   g_spawn_command_line_sync( cmd, &response, NULL, NULL, NULL );
+   g_free( cmd );
+
+   gtk_text_buffer_get_end_iter( buf, &endIter );
+   if( response && response[0] ) {
+      gtk_text_buffer_insert( buf, &endIter, response, -1 );
+      if( response[strlen(response)-1] != '\n' )
+         gtk_text_buffer_insert( buf, &endIter, "\n", -1 );
+      { char * s = g_strdup_printf( "Status: Ready | Model: %s | Ollama: localhost:11434", model );
+        gtk_label_set_text( GTK_LABEL(status), s );
+        g_free( s );
+      }
+   } else {
+      gtk_text_buffer_insert( buf, &endIter,
+         "[No response - check Ollama is running on localhost:11434]\n", -1 );
+      gtk_label_set_text( GTK_LABEL(status), "Status: Error - Ollama not responding" );
+   }
+   if( response ) g_free( response );
+
+   /* Scroll to bottom */
+   gtk_text_buffer_get_end_iter( buf, &endIter );
+   GtkTextMark * mark = gtk_text_buffer_get_mark( buf, "insert" );
+   gtk_text_buffer_move_mark( buf, mark, &endIter );
+   gtk_text_view_scroll_mark_onscreen( GTK_TEXT_VIEW(output), mark );
+
+   gtk_entry_set_text( GTK_ENTRY(entry), "" );
+   g_free( model );
+   (void)btn;
+}
+
+static void on_ai_clear( GtkButton * btn, gpointer data )
+{
+   GtkWidget * output = (GtkWidget *) data;
+   GtkTextBuffer * buf = gtk_text_view_get_buffer( GTK_TEXT_VIEW(output) );
+   gtk_text_buffer_set_text( buf, "AI Assistant ready.\nType a question and press Send.\n", -1 );
+   (void)btn;
+}
+
+static gboolean on_ai_entry_key( GtkWidget * w, GdkEventKey * ev, gpointer data )
+{
+   if( ev->keyval == GDK_KEY_Return || ev->keyval == GDK_KEY_KP_Enter ) {
+      on_ai_send( NULL, data );
+      return TRUE;
+   }
+   (void)w;
+   return FALSE;
+}
+
+HB_FUNC( GTK_AIASSISTANTPANEL )
+{
+   EnsureGTK();
+
+   if( s_hAIWnd ) {
+      gtk_window_present( GTK_WINDOW(s_hAIWnd) );
+      return;
+   }
+
+   s_hAIWnd = gtk_window_new( GTK_WINDOW_TOPLEVEL );
+   gtk_window_set_title( GTK_WINDOW(s_hAIWnd), "AI Assistant" );
+   gtk_window_set_default_size( GTK_WINDOW(s_hAIWnd), 420, 550 );
+   gtk_window_set_type_hint( GTK_WINDOW(s_hAIWnd), GDK_WINDOW_TYPE_HINT_UTILITY );
+   g_signal_connect( s_hAIWnd, "delete-event",
+      G_CALLBACK(gtk_widget_hide_on_delete), NULL );
+
+   GtkWidget * vbox = gtk_box_new( GTK_ORIENTATION_VERTICAL, 4 );
+   gtk_container_set_border_width( GTK_CONTAINER(vbox), 6 );
+   gtk_container_add( GTK_CONTAINER(s_hAIWnd), vbox );
+
+   /* Top bar: Model selector + Clear */
+   GtkWidget * topBox = gtk_box_new( GTK_ORIENTATION_HORIZONTAL, 4 );
+   gtk_box_pack_start( GTK_BOX(vbox), topBox, FALSE, FALSE, 0 );
+   gtk_box_pack_start( GTK_BOX(topBox), gtk_label_new("Model:"), FALSE, FALSE, 4 );
+
+   GtkWidget * combo = gtk_combo_box_text_new();
+   { const char * mdl[] = { "codellama","llama3","deepseek-coder","mistral","phi3","gemma2",NULL };
+     int m; for( m = 0; mdl[m]; m++ )
+       gtk_combo_box_text_append_text( GTK_COMBO_BOX_TEXT(combo), mdl[m] );
+   }
+   gtk_combo_box_set_active( GTK_COMBO_BOX(combo), 0 );
+   gtk_box_pack_start( GTK_BOX(topBox), combo, TRUE, TRUE, 0 );
+
+   /* Chat output */
+   GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
+   gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW(sw),
+      GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
+   gtk_box_pack_start( GTK_BOX(vbox), sw, TRUE, TRUE, 0 );
+
+   GtkWidget * output = gtk_text_view_new();
+   gtk_text_view_set_editable( GTK_TEXT_VIEW(output), FALSE );
+   gtk_text_view_set_wrap_mode( GTK_TEXT_VIEW(output), GTK_WRAP_WORD );
+   gtk_text_view_set_left_margin( GTK_TEXT_VIEW(output), 6 );
+   { GtkTextBuffer * tbuf = gtk_text_view_get_buffer( GTK_TEXT_VIEW(output) );
+     gtk_text_buffer_set_text( tbuf,
+        "AI Assistant ready.\nType a question and press Send.\n", -1 );
+   }
+   /* Monospace dark theme for chat */
+   { GtkCssProvider * cp = gtk_css_provider_new();
+     gtk_css_provider_load_from_data( cp,
+        "textview text { background-color: #1E1E1E; color: #D4D4D4;"
+        "  font-family: Monospace; font-size: 11pt; }", -1, NULL );
+     gtk_style_context_add_provider( gtk_widget_get_style_context(output),
+        GTK_STYLE_PROVIDER(cp), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION );
+     g_object_unref( cp );
+   }
+   gtk_container_add( GTK_CONTAINER(sw), output );
+
+   GtkWidget * clearBtn = gtk_button_new_with_label( "Clear" );
+   gtk_box_pack_start( GTK_BOX(topBox), clearBtn, FALSE, FALSE, 0 );
+   g_signal_connect( clearBtn, "clicked", G_CALLBACK(on_ai_clear), output );
+
+   /* Input bar */
+   GtkWidget * inputBox = gtk_box_new( GTK_ORIENTATION_HORIZONTAL, 4 );
+   gtk_box_pack_start( GTK_BOX(vbox), inputBox, FALSE, FALSE, 0 );
+
+   GtkWidget * entry = gtk_entry_new();
+   gtk_entry_set_placeholder_text( GTK_ENTRY(entry), "Ask a question..." );
+   gtk_box_pack_start( GTK_BOX(inputBox), entry, TRUE, TRUE, 0 );
+
+   GtkWidget * sendBtn = gtk_button_new_with_label( "Send" );
+   gtk_box_pack_start( GTK_BOX(inputBox), sendBtn, FALSE, FALSE, 0 );
+
+   /* Status bar */
+   GtkWidget * statusLbl = gtk_label_new( "Status: Ready | Ollama: localhost:11434" );
+   gtk_label_set_xalign( GTK_LABEL(statusLbl), 0.0 );
+   gtk_box_pack_start( GTK_BOX(vbox), statusLbl, FALSE, FALSE, 0 );
+
+   /* Wire callbacks */
+   s_aiWidgets[0] = entry;
+   s_aiWidgets[1] = output;
+   s_aiWidgets[2] = combo;
+   s_aiWidgets[3] = statusLbl;
+
+   g_signal_connect( sendBtn, "clicked", G_CALLBACK(on_ai_send), s_aiWidgets );
+   g_signal_connect( entry, "key-press-event", G_CALLBACK(on_ai_entry_key), s_aiWidgets );
+
+   gtk_widget_show_all( s_hAIWnd );
+}
+
+/* ======================================================================
+ * Editor Colors Dialog - syntax color settings with presets
+ * ====================================================================== */
+
+HB_FUNC( GTK_EDITORSETTINGSDIALOG )
+{
+   EnsureGTK();
+
+   GtkWidget * dlg = gtk_dialog_new_with_buttons( "Editor Colors",
+      NULL, GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+      "_OK", GTK_RESPONSE_OK, "_Cancel", GTK_RESPONSE_CANCEL, NULL );
+   gtk_window_set_default_size( GTK_WINDOW(dlg), 480, 500 );
+
+   GtkWidget * content = gtk_dialog_get_content_area( GTK_DIALOG(dlg) );
+   gtk_container_set_border_width( GTK_CONTAINER(content), 10 );
+
+   /* Font section */
+   GtkWidget * fontBox = gtk_box_new( GTK_ORIENTATION_HORIZONTAL, 8 );
+   gtk_box_pack_start( GTK_BOX(content), fontBox, FALSE, FALSE, 4 );
+   gtk_box_pack_start( GTK_BOX(fontBox), gtk_label_new("Font:"), FALSE, FALSE, 0 );
+   GtkWidget * fontEntry = gtk_entry_new();
+   gtk_entry_set_text( GTK_ENTRY(fontEntry), "Monospace" );
+   gtk_box_pack_start( GTK_BOX(fontBox), fontEntry, TRUE, TRUE, 0 );
+   gtk_box_pack_start( GTK_BOX(fontBox), gtk_label_new("Size:"), FALSE, FALSE, 0 );
+   GtkWidget * sizeSpn = gtk_spin_button_new_with_range( 8, 32, 1 );
+   gtk_spin_button_set_value( GTK_SPIN_BUTTON(sizeSpn), 14 );
+   gtk_box_pack_start( GTK_BOX(fontBox), sizeSpn, FALSE, FALSE, 0 );
+
+   /* Color rows with GtkColorButton */
+   const char * colorLabels[] = {
+      "Background", "Text", "Keywords", "Commands", "Comments",
+      "Strings", "Preprocessor", "Numbers", "Selection"
+   };
+   const char * colorDefaults[] = {
+      "#1E1E1E", "#D4D4D4", "#569CD6", "#4EC9B0", "#6A9955",
+      "#CE9178", "#C586C0", "#B5CEA8", "#264F78"
+   };
+   GtkWidget * colorBtns[9];
+
+   GtkWidget * grid = gtk_grid_new();
+   gtk_grid_set_row_spacing( GTK_GRID(grid), 4 );
+   gtk_grid_set_column_spacing( GTK_GRID(grid), 8 );
+   gtk_box_pack_start( GTK_BOX(content), grid, FALSE, FALSE, 4 );
+
+   { int c;
+     for( c = 0; c < 9; c++ ) {
+        GtkWidget * lbl = gtk_label_new( colorLabels[c] );
+        gtk_label_set_xalign( GTK_LABEL(lbl), 0.0 );
+        gtk_grid_attach( GTK_GRID(grid), lbl, 0, c, 1, 1 );
+        GdkRGBA rgba;
+        gdk_rgba_parse( &rgba, colorDefaults[c] );
+        colorBtns[c] = gtk_color_button_new_with_rgba( &rgba );
+        gtk_color_chooser_set_use_alpha( GTK_COLOR_CHOOSER(colorBtns[c]), FALSE );
+        gtk_grid_attach( GTK_GRID(grid), colorBtns[c], 1, c, 1, 1 );
+     }
+   }
+
+   /* Preset buttons */
+   GtkWidget * presetBox = gtk_box_new( GTK_ORIENTATION_HORIZONTAL, 4 );
+   gtk_box_pack_start( GTK_BOX(content), presetBox, FALSE, FALSE, 4 );
+   gtk_box_pack_start( GTK_BOX(presetBox), gtk_label_new("Presets:"), FALSE, FALSE, 4 );
+   { const char * presets[] = { "Dark", "Light", "Monokai", "Solarized" };
+     int p; for( p = 0; p < 4; p++ )
+        gtk_box_pack_start( GTK_BOX(presetBox),
+           gtk_button_new_with_label( presets[p] ), FALSE, FALSE, 0 );
+   }
+
+   /* Preview */
+   gtk_box_pack_start( GTK_BOX(content), gtk_label_new("Preview:"), FALSE, FALSE, 2 );
+   GtkWidget * prevSw = gtk_scrolled_window_new( NULL, NULL );
+   gtk_widget_set_size_request( prevSw, -1, 100 );
+   gtk_box_pack_start( GTK_BOX(content), prevSw, TRUE, TRUE, 0 );
+   GtkWidget * prevTv = gtk_text_view_new();
+   gtk_text_view_set_editable( GTK_TEXT_VIEW(prevTv), FALSE );
+   gtk_text_view_set_monospace( GTK_TEXT_VIEW(prevTv), TRUE );
+   { GtkTextBuffer * pbuf = gtk_text_view_get_buffer( GTK_TEXT_VIEW(prevTv) );
+     gtk_text_buffer_set_text( pbuf,
+        "// Preview\nfunction Main()\n   local x := 42\n"
+        "   MsgInfo( \"Hello\" )\nreturn nil\n", -1 );
+   }
+   /* Dark preview */
+   { GtkCssProvider * cp = gtk_css_provider_new();
+     gtk_css_provider_load_from_data( cp,
+        "textview text { background-color: #1E1E1E; color: #D4D4D4;"
+        "  font-family: Monospace; font-size: 12pt; }", -1, NULL );
+     gtk_style_context_add_provider( gtk_widget_get_style_context(prevTv),
+        GTK_STYLE_PROVIDER(cp), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION );
+     g_object_unref( cp );
+   }
+   gtk_container_add( GTK_CONTAINER(prevSw), prevTv );
+
+   gtk_widget_show_all( dlg );
+   gtk_dialog_run( GTK_DIALOG(dlg) );
+   gtk_widget_destroy( dlg );
+}
+
+/* ======================================================================
+ * Project Options Dialog - build settings with 4 tabs
+ * ====================================================================== */
+
+HB_FUNC( GTK_PROJECTOPTIONSDIALOG )
+{
+   EnsureGTK();
+
+   GtkWidget * dlg = gtk_dialog_new_with_buttons( "Project Options",
+      NULL, GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+      "_OK", GTK_RESPONSE_OK, "_Cancel", GTK_RESPONSE_CANCEL, NULL );
+   gtk_window_set_default_size( GTK_WINDOW(dlg), 520, 440 );
+
+   GtkWidget * content = gtk_dialog_get_content_area( GTK_DIALOG(dlg) );
+
+   GtkWidget * nb = gtk_notebook_new();
+   gtk_box_pack_start( GTK_BOX(content), nb, TRUE, TRUE, 0 );
+
+   const char * defHbDir  = HB_ISCHAR(1) ? hb_parc(1) : "~/harbour";
+   const char * defCDir   = HB_ISCHAR(2) ? hb_parc(2) : "/usr/bin";
+   const char * defPDir   = HB_ISCHAR(3) ? hb_parc(3) : ".";
+   const char * defODir   = HB_ISCHAR(4) ? hb_parc(4) : "./build";
+   const char * defHbFlag = HB_ISCHAR(5) ? hb_parc(5) : "-n -w -q";
+   const char * defCFlag  = HB_ISCHAR(6) ? hb_parc(6) : "-g -Wno-unused-value";
+   const char * defLFlag  = HB_ISCHAR(7) ? hb_parc(7) : "";
+   const char * defInc    = HB_ISCHAR(8) ? hb_parc(8) : "";
+   const char * defLib    = HB_ISCHAR(9) ? hb_parc(9) : "";
+   const char * defLibs   = HB_ISCHAR(10) ? hb_parc(10) : "";
+
+   /* Tab 0: Harbour */
+   { GtkWidget * g = gtk_grid_new();
+     gtk_grid_set_row_spacing( GTK_GRID(g), 8 );
+     gtk_grid_set_column_spacing( GTK_GRID(g), 8 );
+     gtk_container_set_border_width( GTK_CONTAINER(g), 10 );
+     GtkWidget * e;
+     gtk_grid_attach( GTK_GRID(g), gtk_label_new("Harbour directory:"), 0, 0, 1, 1 );
+     e = gtk_entry_new(); gtk_entry_set_text(GTK_ENTRY(e),defHbDir);
+     gtk_widget_set_hexpand(e,TRUE); gtk_grid_attach(GTK_GRID(g),e,1,0,1,1);
+     gtk_grid_attach( GTK_GRID(g), gtk_label_new("Compiler flags:"), 0, 1, 1, 1 );
+     e = gtk_entry_new(); gtk_entry_set_text(GTK_ENTRY(e),defHbFlag);
+     gtk_grid_attach(GTK_GRID(g),e,1,1,1,1);
+     gtk_grid_attach(GTK_GRID(g),
+        gtk_check_button_new_with_label("Enable warnings"),0,2,2,1);
+     gtk_grid_attach(GTK_GRID(g),
+        gtk_check_button_new_with_label("Debug info"),0,3,2,1);
+     gtk_notebook_append_page(GTK_NOTEBOOK(nb),g,gtk_label_new("Harbour"));
+   }
+
+   /* Tab 1: C Compiler */
+   { GtkWidget * g = gtk_grid_new();
+     gtk_grid_set_row_spacing( GTK_GRID(g), 8 );
+     gtk_grid_set_column_spacing( GTK_GRID(g), 8 );
+     gtk_container_set_border_width( GTK_CONTAINER(g), 10 );
+     GtkWidget * e;
+     gtk_grid_attach(GTK_GRID(g),gtk_label_new("C Compiler directory:"),0,0,1,1);
+     e = gtk_entry_new(); gtk_entry_set_text(GTK_ENTRY(e),defCDir);
+     gtk_widget_set_hexpand(e,TRUE); gtk_grid_attach(GTK_GRID(g),e,1,0,1,1);
+     gtk_grid_attach(GTK_GRID(g),gtk_label_new("C compiler flags:"),0,1,1,1);
+     e = gtk_entry_new(); gtk_entry_set_text(GTK_ENTRY(e),defCFlag);
+     gtk_grid_attach(GTK_GRID(g),e,1,1,1,1);
+     gtk_grid_attach(GTK_GRID(g),
+        gtk_check_button_new_with_label("Enable optimization (-O2)"),0,2,2,1);
+     gtk_notebook_append_page(GTK_NOTEBOOK(nb),g,gtk_label_new("C Compiler"));
+   }
+
+   /* Tab 2: Linker */
+   { GtkWidget * g = gtk_grid_new();
+     gtk_grid_set_row_spacing( GTK_GRID(g), 8 );
+     gtk_grid_set_column_spacing( GTK_GRID(g), 8 );
+     gtk_container_set_border_width( GTK_CONTAINER(g), 10 );
+     GtkWidget * e;
+     gtk_grid_attach(GTK_GRID(g),gtk_label_new("Linker flags:"),0,0,1,1);
+     e = gtk_entry_new(); gtk_entry_set_text(GTK_ENTRY(e),defLFlag);
+     gtk_widget_set_hexpand(e,TRUE); gtk_grid_attach(GTK_GRID(g),e,1,0,1,1);
+     gtk_grid_attach(GTK_GRID(g),gtk_label_new("Libraries:"),0,1,1,1);
+     GtkWidget * sw2 = gtk_scrolled_window_new(NULL,NULL);
+     gtk_widget_set_size_request(sw2,-1,150);
+     GtkWidget * tv2 = gtk_text_view_new();
+     gtk_text_view_set_monospace(GTK_TEXT_VIEW(tv2),TRUE);
+     if( defLibs[0] ) {
+        GtkTextBuffer * b2 = gtk_text_view_get_buffer(GTK_TEXT_VIEW(tv2));
+        gtk_text_buffer_set_text(b2,defLibs,-1);
+     }
+     gtk_container_add(GTK_CONTAINER(sw2),tv2);
+     gtk_widget_set_hexpand(sw2,TRUE); gtk_widget_set_vexpand(sw2,TRUE);
+     gtk_grid_attach(GTK_GRID(g),sw2,1,1,1,1);
+     gtk_notebook_append_page(GTK_NOTEBOOK(nb),g,gtk_label_new("Linker"));
+   }
+
+   /* Tab 3: Directories */
+   { GtkWidget * g = gtk_grid_new();
+     gtk_grid_set_row_spacing( GTK_GRID(g), 8 );
+     gtk_grid_set_column_spacing( GTK_GRID(g), 8 );
+     gtk_container_set_border_width( GTK_CONTAINER(g), 10 );
+     GtkWidget * e;
+     gtk_grid_attach(GTK_GRID(g),gtk_label_new("Project directory:"),0,0,1,1);
+     e = gtk_entry_new(); gtk_entry_set_text(GTK_ENTRY(e),defPDir);
+     gtk_widget_set_hexpand(e,TRUE); gtk_grid_attach(GTK_GRID(g),e,1,0,1,1);
+     gtk_grid_attach(GTK_GRID(g),gtk_label_new("Output directory:"),0,1,1,1);
+     e = gtk_entry_new(); gtk_entry_set_text(GTK_ENTRY(e),defODir);
+     gtk_grid_attach(GTK_GRID(g),e,1,1,1,1);
+     gtk_grid_attach(GTK_GRID(g),gtk_label_new("Include paths:"),0,2,1,1);
+     e = gtk_entry_new(); gtk_entry_set_text(GTK_ENTRY(e),defInc);
+     gtk_grid_attach(GTK_GRID(g),e,1,2,1,1);
+     gtk_grid_attach(GTK_GRID(g),gtk_label_new("Library paths:"),0,3,1,1);
+     e = gtk_entry_new(); gtk_entry_set_text(GTK_ENTRY(e),defLib);
+     gtk_grid_attach(GTK_GRID(g),e,1,3,1,1);
+     gtk_notebook_append_page(GTK_NOTEBOOK(nb),g,gtk_label_new("Directories"));
+   }
+
+   gtk_widget_show_all( dlg );
+   gtk_dialog_run( GTK_DIALOG(dlg) );
+   gtk_widget_destroy( dlg );
+}
+
