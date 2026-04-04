@@ -51,7 +51,6 @@ function Main()
       SIZE nScreenW, nBarH FONT "Sans", 11 APPBAR
 
    UI_FormSetPos( oIDE:hCpp, 0, 0 )
-   GTK_SetDarkMode( .T. )
    oIDE:Show()
 
    // Inspector: right below IDE window
@@ -119,6 +118,7 @@ function Main()
    DEFINE POPUP oTools PROMPT "Tools" OF oIDE
    MENUITEM "Editor Colors..."        OF oTools ACTION ShowEditorSettings()
    MENUITEM "Environment Options..."  OF oTools ACTION MsgInfo( "Options" )
+   MENUITEM "Dark Mode"              OF oTools ACTION ToggleDarkMode()
    MENUSEPARATOR OF oTools
    MENUITEM "AI Assistant..."         OF oTools ACTION ShowAIAssistant()
 
@@ -1128,6 +1128,14 @@ static function ShowProjectInspector()
    AAdd( aItems, "  classes.prg" )
    AAdd( aItems, "  hbbuilder.ch" )
    GTK_ProjectInspector( aItems )
+return nil
+
+// === Dark Mode (toggle) ===
+
+static function ToggleDarkMode()
+   static lDark := .F.
+   lDark := !lDark
+   GTK_SetDarkMode( lDark )
 return nil
 
 // === Editor Settings ===
