@@ -71,9 +71,10 @@ gcc ${PROG}.o gtk3_core.o gtk3_inspector.o -g -o ${PROG} \
    -Wl,--start-group \
    -lhbcommon -lhbvm -lhbrtl -lhbrdd -lhbmacro -lhblang -lhbcpage -lhbpp \
    -lhbcplr -lrddntx -lrddcdx -lrddfpt -lhbsix -lhbusrrdd -lhbct \
+   -lhbsqlit3 -lsddsqlt3 -lrddsql \
    -lgttrm -lhbdebug -lhbpcre \
    $(pkg-config --libs gtk+-3.0) \
-   -lm -lpthread -ldl -lrt \
+   -lm -lpthread -ldl -lrt -lsqlite3 \
    -L/usr/lib/x86_64-linux-gnu -l:libncurses.so.6 \
    -Wl,--end-group
 

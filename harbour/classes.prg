@@ -449,3 +449,570 @@ function MsgInfo( cText, cTitle )
    UI_MsgBox( cText, cTitle )
 
 return nil
+
+//============================================================================//
+//  DATABASE COMPONENTS (non-visual, Data Access tab)
+//============================================================================//
+
+//----------------------------------------------------------------------------//
+// TDatabase - Abstract base class for all database connections
+//----------------------------------------------------------------------------//
+
+CLASS TDatabase
+
+   DATA cServer     INIT ""        // Host/server name
+   DATA nPort       INIT 0         // Port number
+   DATA cDatabase   INIT ""        // Database name or file path
+   DATA cUser       INIT ""        // Username
+   DATA cPassword   INIT ""        // Password
+   DATA cCharSet    INIT "UTF8"    // Character set
+   DATA lConnected  INIT .F.       // Connection status
+   DATA cLastError  INIT ""        // Last error message
+   DATA pHandle     INIT nil       // Native connection handle
+   DATA cDriver     INIT ""        // Driver name (for identification)
+
+   METHOD New() CONSTRUCTOR
+   METHOD Open()
+   METHOD Close()
+   METHOD Execute( cSQL )
+   METHOD Query( cSQL )
+   METHOD TableExists( cTable )
+   METHOD Tables()
+   METHOD LastError()
+   METHOD IsConnected()
+
+ENDCLASS
+
+METHOD New() CLASS TDatabase
+return Self
+
+METHOD Open() CLASS TDatabase
+   ::cLastError := "Abstract: override Open() in subclass"
+return .F.
+
+METHOD Close() CLASS TDatabase
+   ::lConnected := .F.
+   ::pHandle := nil
+return nil
+
+METHOD Execute( cSQL ) CLASS TDatabase
+   HB_SYMBOL_UNUSED( cSQL )
+   ::cLastError := "Abstract: override Execute() in subclass"
+return .F.
+
+METHOD Query( cSQL ) CLASS TDatabase
+   HB_SYMBOL_UNUSED( cSQL )
+   ::cLastError := "Abstract: override Query() in subclass"
+return {}
+
+METHOD TableExists( cTable ) CLASS TDatabase
+   HB_SYMBOL_UNUSED( cTable )
+return .F.
+
+METHOD Tables() CLASS TDatabase
+return {}
+
+METHOD LastError() CLASS TDatabase
+return ::cLastError
+
+METHOD IsConnected() CLASS TDatabase
+return ::lConnected
+
+//----------------------------------------------------------------------------//
+// TDBFTable - Native DBF/NTX/CDX table access via Harbour RDD
+//----------------------------------------------------------------------------//
+
+CLASS TDBFTable INHERIT TDatabase
+
+   DATA cAlias      INIT ""        // Work area alias
+   DATA cRDD        INIT "DBFCDX"  // RDD driver: DBFNTX, DBFCDX, DBFFPT
+   DATA cIndexFile  INIT ""        // Index file (.ntx, .cdx)
+   DATA lExclusive  INIT .F.       // Open exclusive
+   DATA lReadOnly   INIT .F.       // Open read-only
+   DATA nArea       INIT 0         // Work area number
+
+   METHOD New() CONSTRUCTOR
+   METHOD Open()
+   METHOD Close()
+   METHOD Execute( cSQL )
+   METHOD Query( cSQL )
+   METHOD Tables()
+
+   // DBF-specific methods
+   METHOD GoTop()
+   METHOD GoBottom()
+   METHOD Skip( n )
+   METHOD GoTo( nRec )
+   METHOD RecNo()
+   METHOD RecCount()
+   METHOD Eof()
+   METHOD Bof()
+   METHOD FieldGet( nField )
+   METHOD FieldPut( nField, xValue )
+   METHOD FieldName( nField )
+   METHOD FieldCount()
+   METHOD Append()
+   METHOD Delete()
+   METHOD Recall()
+   METHOD Deleted()
+   METHOD Seek( xKey )
+   METHOD Found()
+   METHOD CreateIndex( cFile, cKey )
+   METHOD Structure()
+
+ENDCLASS
+
+METHOD New() CLASS TDBFTable
+   ::cDriver := "DBF"
+return Self
+
+METHOD Open() CLASS TDBFTable
+   local lOk := .F., nArea
+
+   if Empty( ::cDatabase )
+      ::cLastError := "Database (file path) not specified"
+      return .F.
+   endif
+
+   begin sequence
+      if ! Empty( ::cAlias )
+         if ::lExclusive
+            dbUseArea( .T., ::cRDD, ::cDatabase, ::cAlias, .F., ::lReadOnly )
+         else
+            dbUseArea( .T., ::cRDD, ::cDatabase, ::cAlias, .T., ::lReadOnly )
+         endif
+      else
+         ::cAlias := hb_FNameName( ::cDatabase )
+         dbUseArea( .T., ::cRDD, ::cDatabase, ::cAlias, ! ::lExclusive, ::lReadOnly )
+      endif
+
+      ::nArea := Select()
+      ::lConnected := .T.
+      lOk := .T.
+
+      if ! Empty( ::cIndexFile )
+         dbSetIndex( ::cIndexFile )
+      endif
+
+   recover
+      ::cLastError := "Error opening " + ::cDatabase
+      ::lConnected := .F.
+   end sequence
+
+return lOk
+
+METHOD Close() CLASS TDBFTable
+   if ::lConnected .and. ::nArea > 0
+      ( ::cAlias )->( dbCloseArea() )
+   endif
+   ::lConnected := .F.
+   ::nArea := 0
+return nil
+
+METHOD Execute( cSQL ) CLASS TDBFTable
+   HB_SYMBOL_UNUSED( cSQL )
+   ::cLastError := "DBF does not support SQL. Use DBF methods directly."
+return .F.
+
+METHOD Query( cSQL ) CLASS TDBFTable
+   HB_SYMBOL_UNUSED( cSQL )
+   ::cLastError := "DBF does not support SQL. Use DBF methods directly."
+return {}
+
+METHOD Tables() CLASS TDBFTable
+   local aFiles := Directory( hb_FNameDir( ::cDatabase ) + "*.dbf" )
+   local aNames := {}, i
+   for i := 1 to Len( aFiles )
+      AAdd( aNames, aFiles[i][1] )
+   next
+return aNames
+
+METHOD GoTop() CLASS TDBFTable
+   if ::lConnected; ( ::cAlias )->( dbGoTop() ); endif
+return nil
+
+METHOD GoBottom() CLASS TDBFTable
+   if ::lConnected; ( ::cAlias )->( dbGoBottom() ); endif
+return nil
+
+METHOD Skip( n ) CLASS TDBFTable
+   if n == nil; n := 1; endif
+   if ::lConnected; ( ::cAlias )->( dbSkip( n ) ); endif
+return nil
+
+METHOD GoTo( nRec ) CLASS TDBFTable
+   if ::lConnected; ( ::cAlias )->( dbGoTo( nRec ) ); endif
+return nil
+
+METHOD RecNo() CLASS TDBFTable
+   if ::lConnected; return ( ::cAlias )->( RecNo() ); endif
+return 0
+
+METHOD RecCount() CLASS TDBFTable
+   if ::lConnected; return ( ::cAlias )->( RecCount() ); endif
+return 0
+
+METHOD Eof() CLASS TDBFTable
+   if ::lConnected; return ( ::cAlias )->( Eof() ); endif
+return .T.
+
+METHOD Bof() CLASS TDBFTable
+   if ::lConnected; return ( ::cAlias )->( Bof() ); endif
+return .T.
+
+METHOD FieldGet( nField ) CLASS TDBFTable
+   if ::lConnected; return ( ::cAlias )->( FieldGet( nField ) ); endif
+return nil
+
+METHOD FieldPut( nField, xValue ) CLASS TDBFTable
+   if ::lConnected; ( ::cAlias )->( FieldPut( nField, xValue ) ); endif
+return nil
+
+METHOD FieldName( nField ) CLASS TDBFTable
+   if ::lConnected; return ( ::cAlias )->( FieldName( nField ) ); endif
+return ""
+
+METHOD FieldCount() CLASS TDBFTable
+   if ::lConnected; return ( ::cAlias )->( FCount() ); endif
+return 0
+
+METHOD Append() CLASS TDBFTable
+   if ::lConnected; ( ::cAlias )->( dbAppend() ); endif
+return nil
+
+METHOD Delete() CLASS TDBFTable
+   if ::lConnected; ( ::cAlias )->( dbDelete() ); endif
+return nil
+
+METHOD Recall() CLASS TDBFTable
+   if ::lConnected; ( ::cAlias )->( dbRecall() ); endif
+return nil
+
+METHOD Deleted() CLASS TDBFTable
+   if ::lConnected; return ( ::cAlias )->( Deleted() ); endif
+return .F.
+
+METHOD Seek( xKey ) CLASS TDBFTable
+   if ::lConnected; return ( ::cAlias )->( dbSeek( xKey ) ); endif
+return .F.
+
+METHOD Found() CLASS TDBFTable
+   if ::lConnected; return ( ::cAlias )->( Found() ); endif
+return .F.
+
+METHOD CreateIndex( cFile, cKey ) CLASS TDBFTable
+   if ::lConnected
+      ( ::cAlias )->( dbCreateIndex( cFile, cKey ) )
+   endif
+return nil
+
+METHOD Structure() CLASS TDBFTable
+   local aStruct := {}, i, nFields
+   if ::lConnected
+      nFields := ( ::cAlias )->( FCount() )
+      for i := 1 to nFields
+         AAdd( aStruct, { ;
+            ( ::cAlias )->( FieldName(i) ), ;
+            ( ::cAlias )->( hb_FieldType(i) ), ;
+            ( ::cAlias )->( hb_FieldLen(i) ), ;
+            ( ::cAlias )->( hb_FieldDec(i) ) } )
+      next
+   endif
+return aStruct
+
+//----------------------------------------------------------------------------//
+// TSQLite - SQLite3 database via Harbour's hbsqlit3 library
+//----------------------------------------------------------------------------//
+
+CLASS TSQLite INHERIT TDatabase
+
+   DATA lAutoCommit  INIT .T.       // Auto-commit mode
+
+   METHOD New() CONSTRUCTOR
+   METHOD Open()
+   METHOD Close()
+   METHOD Execute( cSQL )
+   METHOD Query( cSQL )
+   METHOD TableExists( cTable )
+   METHOD Tables()
+
+   // SQLite-specific
+   METHOD CreateTable( cName, aFields )
+   METHOD BeginTransaction()
+   METHOD Commit()
+   METHOD Rollback()
+   METHOD LastInsertId()
+
+ENDCLASS
+
+METHOD New() CLASS TSQLite
+   ::cDriver := "SQLite"
+   ::nPort   := 0
+return Self
+
+METHOD Open() CLASS TSQLite
+   if Empty( ::cDatabase )
+      ::cLastError := "Database file path not specified"
+      return .F.
+   endif
+   ::pHandle := sqlite3_open( ::cDatabase )
+   if ::pHandle != nil .and. ::pHandle != 0
+      ::lConnected := .T.
+      if ! Empty( ::cCharSet )
+         sqlite3_exec( ::pHandle, "PRAGMA encoding = '" + ::cCharSet + "'" )
+      endif
+      return .T.
+   endif
+   ::cLastError := "Failed to open SQLite database: " + ::cDatabase
+return .F.
+
+METHOD Close() CLASS TSQLite
+   // Harbour's hbsqlit3 uses GC-managed handles - no explicit close needed
+   ::pHandle := nil
+   ::lConnected := .F.
+return nil
+
+METHOD Execute( cSQL ) CLASS TSQLite
+   local nResult
+   if ! ::lConnected; ::cLastError := "Not connected"; return .F.; endif
+   nResult := sqlite3_exec( ::pHandle, cSQL )
+   if nResult != 0   // SQLITE_OK = 0
+      ::cLastError := sqlite3_errmsg( ::pHandle )
+      return .F.
+   endif
+return .T.
+
+METHOD Query( cSQL ) CLASS TSQLite
+   local pStmt, aRows := {}, aRow, nCols, i, nType
+   if ! ::lConnected; ::cLastError := "Not connected"; return {}; endif
+
+   pStmt := sqlite3_prepare( ::pHandle, cSQL )
+   if pStmt == nil
+      ::cLastError := sqlite3_errmsg( ::pHandle )
+      return {}
+   endif
+
+   nCols := sqlite3_column_count( pStmt )
+
+   while sqlite3_step( pStmt ) == 100  // SQLITE_ROW = 100
+      aRow := Array( nCols )
+      for i := 1 to nCols
+         nType := sqlite3_column_type( pStmt, i )
+         do case
+            case nType == 1  // SQLITE_INTEGER
+               aRow[i] := sqlite3_column_int( pStmt, i )
+            case nType == 2  // SQLITE_FLOAT
+               aRow[i] := sqlite3_column_double( pStmt, i )
+            case nType == 3  // SQLITE_TEXT
+               aRow[i] := sqlite3_column_text( pStmt, i )
+            case nType == 5  // SQLITE_NULL
+               aRow[i] := nil
+            otherwise
+               aRow[i] := sqlite3_column_text( pStmt, i )
+         endcase
+      next
+      AAdd( aRows, aRow )
+   enddo
+
+   sqlite3_finalize( pStmt )
+return aRows
+
+METHOD TableExists( cTable ) CLASS TSQLite
+   local aResult
+   if ! ::lConnected; return .F.; endif
+   aResult := ::Query( "SELECT name FROM sqlite_master WHERE type='table' AND name='" + cTable + "'" )
+return Len( aResult ) > 0
+
+METHOD Tables() CLASS TSQLite
+   local aResult, aNames := {}, i
+   if ! ::lConnected; return {}; endif
+   aResult := ::Query( "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" )
+   for i := 1 to Len( aResult )
+      AAdd( aNames, aResult[i][1] )
+   next
+return aNames
+
+METHOD CreateTable( cName, aFields ) CLASS TSQLite
+   local cSQL := "CREATE TABLE IF NOT EXISTS " + cName + " (", i
+   for i := 1 to Len( aFields )
+      if i > 1; cSQL += ", "; endif
+      cSQL += aFields[i][1] + " " + aFields[i][2]
+   next
+   cSQL += ")"
+return ::Execute( cSQL )
+
+METHOD BeginTransaction() CLASS TSQLite
+return ::Execute( "BEGIN TRANSACTION" )
+
+METHOD Commit() CLASS TSQLite
+return ::Execute( "COMMIT" )
+
+METHOD Rollback() CLASS TSQLite
+return ::Execute( "ROLLBACK" )
+
+METHOD LastInsertId() CLASS TSQLite
+   local aResult
+   if ! ::lConnected; return 0; endif
+   aResult := ::Query( "SELECT last_insert_rowid()" )
+   if Len( aResult ) > 0; return aResult[1][1]; endif
+return 0
+
+//----------------------------------------------------------------------------//
+// TMySQL - MySQL/MariaDB connection (requires libmysqlclient)
+//----------------------------------------------------------------------------//
+
+CLASS TMySQL INHERIT TDatabase
+   METHOD New() CONSTRUCTOR
+   METHOD Open()
+   METHOD Close()
+   METHOD Execute( cSQL )
+   METHOD Query( cSQL )
+   METHOD Tables()
+ENDCLASS
+
+METHOD New() CLASS TMySQL
+   ::cDriver := "MySQL"
+   ::nPort   := 3306
+return Self
+
+METHOD Open() CLASS TMySQL
+   ::cLastError := "MySQL support requires libmysqlclient. Install with: apt install libmysqlclient-dev"
+return .F.
+
+METHOD Close() CLASS TMySQL
+   ::lConnected := .F.
+return nil
+
+METHOD Execute( cSQL ) CLASS TMySQL
+   HB_SYMBOL_UNUSED( cSQL )
+return .F.
+
+METHOD Query( cSQL ) CLASS TMySQL
+   HB_SYMBOL_UNUSED( cSQL )
+return {}
+
+METHOD Tables() CLASS TMySQL
+return {}
+
+//----------------------------------------------------------------------------//
+// TMariaDB - alias for TMySQL (wire-compatible)
+//----------------------------------------------------------------------------//
+
+CLASS TMariaDB INHERIT TMySQL
+   METHOD New() CONSTRUCTOR
+ENDCLASS
+
+METHOD New() CLASS TMariaDB
+   ::Super:New()
+   ::cDriver := "MariaDB"
+   ::nPort   := 3306
+return Self
+
+//----------------------------------------------------------------------------//
+// TPostgreSQL - PostgreSQL connection (requires libpq)
+//----------------------------------------------------------------------------//
+
+CLASS TPostgreSQL INHERIT TDatabase
+   METHOD New() CONSTRUCTOR
+   METHOD Open()
+   METHOD Close()
+   METHOD Execute( cSQL )
+   METHOD Query( cSQL )
+   METHOD Tables()
+ENDCLASS
+
+METHOD New() CLASS TPostgreSQL
+   ::cDriver := "PostgreSQL"
+   ::nPort   := 5432
+return Self
+
+METHOD Open() CLASS TPostgreSQL
+   ::cLastError := "PostgreSQL support requires libpq-dev. Install with: apt install libpq-dev"
+return .F.
+
+METHOD Close() CLASS TPostgreSQL
+   ::lConnected := .F.
+return nil
+
+METHOD Execute( cSQL ) CLASS TPostgreSQL
+   HB_SYMBOL_UNUSED( cSQL )
+return .F.
+
+METHOD Query( cSQL ) CLASS TPostgreSQL
+   HB_SYMBOL_UNUSED( cSQL )
+return {}
+
+METHOD Tables() CLASS TPostgreSQL
+return {}
+
+//----------------------------------------------------------------------------//
+// TFirebird - Firebird connection (requires libfbclient)
+//----------------------------------------------------------------------------//
+
+CLASS TFirebird INHERIT TDatabase
+   METHOD New() CONSTRUCTOR
+   METHOD Open()
+ENDCLASS
+
+METHOD New() CLASS TFirebird
+   ::cDriver := "Firebird"
+   ::nPort   := 3050
+return Self
+
+METHOD Open() CLASS TFirebird
+   ::cLastError := "Firebird support requires libfbclient. Install with: apt install firebird-dev"
+return .F.
+
+//----------------------------------------------------------------------------//
+// TSQLServer - SQL Server connection (requires FreeTDS/ODBC)
+//----------------------------------------------------------------------------//
+
+CLASS TSQLServer INHERIT TDatabase
+   METHOD New() CONSTRUCTOR
+   METHOD Open()
+ENDCLASS
+
+METHOD New() CLASS TSQLServer
+   ::cDriver := "SQLServer"
+   ::nPort   := 1433
+return Self
+
+METHOD Open() CLASS TSQLServer
+   ::cLastError := "SQL Server support requires FreeTDS. Install with: apt install freetds-dev"
+return .F.
+
+//----------------------------------------------------------------------------//
+// TOracle - Oracle connection (requires OCI)
+//----------------------------------------------------------------------------//
+
+CLASS TOracle INHERIT TDatabase
+   METHOD New() CONSTRUCTOR
+   METHOD Open()
+ENDCLASS
+
+METHOD New() CLASS TOracle
+   ::cDriver := "Oracle"
+   ::nPort   := 1521
+return Self
+
+METHOD Open() CLASS TOracle
+   ::cLastError := "Oracle support requires Oracle Instant Client"
+return .F.
+
+//----------------------------------------------------------------------------//
+// TMongoDB - MongoDB connection (requires mongoc driver)
+//----------------------------------------------------------------------------//
+
+CLASS TMongoDB INHERIT TDatabase
+   METHOD New() CONSTRUCTOR
+   METHOD Open()
+ENDCLASS
+
+METHOD New() CLASS TMongoDB
+   ::cDriver := "MongoDB"
+   ::nPort   := 27017
+return Self
+
+METHOD Open() CLASS TMongoDB
+   ::cLastError := "MongoDB support requires libmongoc. Install with: apt install libmongoc-dev"
+return .F.
