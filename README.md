@@ -297,7 +297,7 @@ Professional HTML documentation with dark/light theme, Mermaid diagrams, and cod
 |----------|---------|-------|--------|----------|--------|
 | **Windows** | Win32 API (C++) + Scintilla DLL | 100% | Scintilla 5.6.1 | Panel + engine | ✅ Full IDE |
 | **Linux** | GTK3 (C) + Scintilla shared lib | 100% | Scintilla 5.6.1 | Panel + engine + 16 tests | ✅ Full IDE |
-| **macOS** | Cocoa/AppKit (Obj-C) + NSTextView | 51% | NSTextView (no Scintilla) | Stub | 🔧 In progress |
+| **macOS** | Cocoa/AppKit (Obj-C++) + Scintilla static lib | 100% | Scintilla 5.5.3 | Panel | ✅ Full IDE |
 | **Android** | NDK + JNI | — | — | — | 🔮 Planned |
 | **iOS** | UIKit (Objective-C) | — | — | — | 🔮 Planned |
 
