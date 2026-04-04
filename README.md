@@ -293,13 +293,36 @@ Professional HTML documentation with dark/light theme, Mermaid diagrams, and cod
 
 ## 🖥️ Platforms
 
-| Platform | Backend | Menus | Editor | Debugger | Status |
-|----------|---------|-------|--------|----------|--------|
-| **Windows** | Win32 API (C++) + Scintilla DLL | 100% | Scintilla 5.6.1 | Panel + engine | ✅ Full IDE |
-| **Linux** | GTK3 (C) + Scintilla shared lib | 100% | Scintilla 5.6.1 | Panel + engine + 16 tests | ✅ Full IDE |
-| **macOS** | Cocoa/AppKit (Obj-C++) + Scintilla static lib | 100% | Scintilla 5.5.3 | Panel | ✅ Full IDE |
+All three desktop platforms are **fully functional** with zero MsgInfo stubs — every menu item, toolbar button, and dialog is implemented with native controls.
+
+| Platform | Backend | Editor | CodeEditor Funcs | Panels | Status |
+|----------|---------|--------|-----------------|--------|--------|
+| **Windows** | Win32 API (C++) + Scintilla 5.6.1 DLL | Scintilla (dynamic) | 18 | All 6 | ✅ Full IDE |
+| **Linux** | GTK3 (C) + Scintilla 5.6.1 shared lib | Scintilla (dynamic) | 22 | All 6 + debugger engine + 16 tests | ✅ Full IDE |
+| **macOS** | Cocoa/AppKit (Obj-C++) + Scintilla 5.5.3 static lib | Scintilla (static) | 27 | All 6 | ✅ Full IDE |
 | **Android** | NDK + JNI | — | — | — | 🔮 Planned |
 | **iOS** | UIKit (Objective-C) | — | — | — | 🔮 Planned |
+
+### Platform parity details
+
+| Feature | Windows | Linux | macOS |
+|---------|---------|-------|-------|
+| Menu items functional | 35/35 (100%) | 36/36 (100%) | 35/35 (100%) |
+| Toolbar buttons functional | 9/9 (100%) | 9/9 (100%) | 9/9 (100%) |
+| MsgInfo stubs remaining | **0** | **0** | **0** |
+| Scintilla editor | ✅ DLL (824 KB) | ✅ .so (2.0 MB) | ✅ .a (static) |
+| Syntax highlighting | ✅ Lexilla C++ lexer | ✅ Lexilla C++ lexer | ✅ Lexilla C++ lexer |
+| Code folding | ✅ Harbour-aware | ✅ Harbour-aware | ✅ Harbour-aware |
+| Auto-complete (Ctrl+Space) | ✅ | ✅ | ✅ |
+| Find/Replace bar | ✅ | ✅ | ✅ |
+| Undo/Redo/Cut/Copy/Paste | ✅ | ✅ | ✅ |
+| Status bar (Ln/Col/INS) | ✅ | ✅ | ✅ |
+| Debugger panel | ✅ 5 tabs | ✅ 5 tabs + toolbar | ✅ 5 tabs |
+| AI Assistant (Ollama) | ✅ | ✅ | ✅ |
+| Project Inspector | ✅ TreeView | ✅ TreeView | ✅ TreeView |
+| Editor Colors dialog | ✅ Color picker | ✅ GtkColorButton | ✅ NSColorWell |
+| Project Options dialog | ✅ 4 tabs | ✅ 4 tabs | ✅ 4 tabs |
+| Dark Mode | ✅ Title bar | ✅ GTK theme toggle | ✅ NSAppearance |
 
 ---
 
