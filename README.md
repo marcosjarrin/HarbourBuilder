@@ -218,7 +218,7 @@ oDb:Close()
 ![Windows](images/windows_scintilla.png)
 
 ### macOS (Cocoa/AppKit + Scintilla)
-![macOS](images/macos_now.png)
+![macOS](images/macos_scintilla.png)
 
 ### Linux (GTK3 + Scintilla)
 ![Linux](images/linux_now.png)
