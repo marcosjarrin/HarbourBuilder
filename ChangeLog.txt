@@ -1,7 +1,50 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
-2026-04-04 (Session 7: Report Designer Data Model)
+2026-04-04 (Session 7: Visual Report Designer - Tasks 1-3)
+------------------------------------------------------------
+
+REPORT DESIGNER WINDOW (gtk3_core.c, +656 lines):
+  RPT_DesignerOpen() .... singleton dark-themed GTK window (800x600)
+  RPT_DesignerClose() ... hide window
+  RPT_AddBand() ......... add band with auto-color by type
+  RPT_AddField() ........ add field to band, returns index
+  RPT_GetSelected() ..... returns {nBandIdx, nFieldIdx, cBandName, cFieldName}
+
+  CAIRO RENDERING:
+  - Ruler at top with mm marks (0 to page width)
+  - Bands as horizontal colored strips:
+    Header=#4A90D9 (blue), Detail=#808080 (gray), Footer=#4A90D9 (blue),
+    GroupHeader=#6BBF6B (green), PageHeader=#D4A843 (gold)
+  - Band name label rotated 90° in left margin strip (20px)
+  - Fields as rectangles with text/[FieldName] labels
+  - Selected field: blue border + 4 corner handles
+  - Band height drag handle at bottom separator
+
+  TOOLBAR:
+  - "Add Band" dropdown (7 types), "Add Field", "Delete", "Preview"
+  - Dark theme consistent with IDE
+
+  MOUSE INTERACTION:
+  - Click margin → select band
+  - Click field → select field (blue handles)
+  - Drag field → move within band
+  - Drag band separator → resize band height
+
+INSPECTOR INTEGRATION (gtk3_core.c):
+  RPT_GetBandProps() .... returns {cName, nHeight, lPrintOnEveryPage,
+                           lKeepTogether, lVisible} as inspector-compatible array
+  RPT_GetFieldProps() ... returns {cName, cText, cFieldName, nLeft, nTop,
+                           nWidth, nHeight, nAlignment} for inspector display
+  RPT_SetBandProp() ..... update band property + trigger redraw
+  RPT_SetFieldProp() .... update field property + trigger redraw
+
+IDE WIRING (hbbuilder_linux.prg):
+  - Tools > Report Designer menu item
+  - OpenReportDesigner() opens designer with 3 default bands
+    (Header + title field, Detail + 2 data fields, Footer)
+
+2026-04-04 (Session 7a: Report Designer Data Model)
 ----------------------------------------------------
 
 REPORT DATA MODEL (classes.prg):

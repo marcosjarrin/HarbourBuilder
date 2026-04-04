@@ -411,6 +411,11 @@ All three desktop platforms are **fully functional** with zero MsgInfo stubs —
 | | TDBGrid / TDBNavigator / TDBEdit | ✅ | ✅ | ✅ |
 | | TDBText / TDBComboBox / TDBCheckBox | ✅ | ✅ | ✅ |
 | | 4 sample projects (DBF, SQLite, portable, controls) | ✅ | ✅ | ✅ |
+| **Reports** | Visual Report Designer (Cairo) | — | ✅ | — |
+| | TReportBand + TReportField data model | ✅ | ✅ | ✅ |
+| | Report code generation (GenerateCode) | ✅ | ✅ | ✅ |
+| | Inspector integration (band/field props) | — | ✅ | — |
+| | 49 report unit tests | ✅ | ✅ | ✅ |
 | **Theme** | Dark mode | ✅ | ✅ | ✅ |
 | | Dark code editor | ✅ | ✅ | ✅ |
 | **Menus** | All menus functional (zero stubs) | ✅ 35 | ✅ 47 | ✅ 53 |
