@@ -146,7 +146,7 @@ function Main()
    BUTTON "Undo"  OF oTB TOOLTIP "Undo (Ctrl+Z)"         ACTION CodeEditorUndo( hCodeEditor )
    BUTTON "Redo"  OF oTB TOOLTIP "Redo (Ctrl+Y)"         ACTION CodeEditorRedo( hCodeEditor )
 
-   // Load toolbar icons (Silk icon set by famfamfam, CC BY 2.5)
+   // Load toolbar icons (Lazarus IDE icon set)
    UI_ToolBarLoadImages( oTB:hCpp, "../resources/toolbar.bmp" )
 
    // Row 2: Run & Debug speedbar
@@ -158,6 +158,8 @@ function Main()
    BUTTON "Over"  OF oTB2 TOOLTIP "Step Over (F8)"         ACTION DebugStepOver()
    BUTTON "Go"    OF oTB2 TOOLTIP "Continue (F5)"          ACTION IDE_DebugGo()
    BUTTON "Stop"  OF oTB2 TOOLTIP "Stop Debugging"         ACTION IDE_DebugStop()
+
+   UI_ToolBarLoadImages( oTB2:hCpp, "../resources/toolbar_debug.bmp" )
 
    // Component Palette (icon grid, tabbed, right of splitter)
    CreatePalette()
