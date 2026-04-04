@@ -365,6 +365,18 @@ static function CreatePalette()
    oPal:AddComp( nTab, "Wsp",  "Whisper",     110 )
    oPal:AddComp( nTab, "Emb",  "Embeddings",  111 )
 
+   // Connectivity tab (language/runtime interop)
+   nTab := oPal:AddTab( "Connectivity" )
+   oPal:AddComp( nTab, "Py",   "Python",      112 )
+   oPal:AddComp( nTab, "Swf",  "Swift",       113 )
+   oPal:AddComp( nTab, "Go",   "Go",          114 )
+   oPal:AddComp( nTab, "Nod",  "Node",        115 )
+   oPal:AddComp( nTab, "Rst",  "Rust",        116 )
+   oPal:AddComp( nTab, "Jav",  "Java",        117 )
+   oPal:AddComp( nTab, "Net",  "DotNet",      118 )
+   oPal:AddComp( nTab, "Lua",  "Lua",         119 )
+   oPal:AddComp( nTab, "Rby",  "Ruby",        120 )
+
    UI_PaletteLoadImages( oPal:hCpp, "../resources/palette.bmp" )
 
 return nil
@@ -689,7 +701,8 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
       "Dashboard", "Scheduler", ;
       "Printer", "Report", "Labels", "PrintPreview", ;
       "PageSetup", "PrintDialog", "ReportViewer", "BarcodePrinter", ;
-      "Whisper", "Embeddings" }
+      "Whisper", "Embeddings", ;
+      "Python", "Swift", "Go", "Node", "Rust", "Java", "DotNet", "Lua", "Ruby" }
 
    if aCnt == nil; aCnt := Array(120); AFill(aCnt,0); endif
    if nType < 1 .or. nType > Len(aNames) .or. Empty(aNames[nType]); return nil; endif

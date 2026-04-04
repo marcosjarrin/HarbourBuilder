@@ -83,6 +83,16 @@ class TComponentPalette;
 #define CT_TRANSFORMER 52
 #define CT_WHISPER    110
 #define CT_EMBEDDINGS 111
+/* Connectivity (language/runtime interop) */
+#define CT_PYTHON     112
+#define CT_SWIFT      113
+#define CT_GO         114
+#define CT_NODE       115
+#define CT_RUST       116
+#define CT_JAVA       117
+#define CT_DOTNET     118
+#define CT_LUA        119
+#define CT_RUBY       120
 /* Database components */
 #define CT_DBFTABLE   53
 #define CT_MYSQL      54

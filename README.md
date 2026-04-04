@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-green.svg)](#platforms)
-[![Controls](https://img.shields.io/badge/Controls-111-orange.svg)](#component-palette)
+[![Controls](https://img.shields.io/badge/Controls-120-orange.svg)](#component-palette)
 [![Docs](https://img.shields.io/badge/Docs-20%20pages-purple.svg)](docs/en/index.html)
 [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet.svg)](https://claude.ai/claude-code)
 
@@ -75,7 +75,7 @@ return nil
 - **Align & Distribute** (Format menu: Left/Right/Top/Bottom, Center, Space Evenly)
 - Real-time two-way tools: design ↔ code sync
 
-### 📦 111 Components in 14 Tabs
+### 📦 120 Components in 15 Tabs
 
 | Tab | Controls | Description |
 |-----|----------|-------------|
@@ -91,6 +91,25 @@ return nil
 | **ERP** | 12 | Preprocessor, ScriptEngine, ReportDesigner, Barcode, PDFGenerator, ExcelExport, AuditLog, Permissions, Currency, TaxEngine, Dashboard, Scheduler |
 | **Threading** | 8 | Thread, Mutex, Semaphore, CriticalSection, ThreadPool, AtomicInt, CondVar, Channel |
 | **AI** | 9 | OpenAI, Gemini, Claude, DeepSeek, Grok, Ollama, Transformer, **Whisper**, **Embeddings** |
+| **Connectivity** | 9 | **Python**, **Swift**, **Go**, **Node**, **Rust**, **Java**, **DotNet**, **Lua**, **Ruby** |
+
+### 🔌 Connectivity (Language Interop)
+
+Call any language from Harbour — or embed Harbour in any language:
+
+| Component | Mechanism | Use Case |
+|---|---|---|
+| **Python** | C API (`Py_Initialize`, `PyRun_SimpleString`) | AI/ML (TensorFlow, PyTorch), data science (pandas, numpy), scripting |
+| **Swift** | Bridging header + `@objc` interop | Native macOS/iOS APIs, SwiftUI, Apple frameworks |
+| **Go** | `cgo` FFI (`import "C"`) | Microservices, CLI tools, high-concurrency backends |
+| **Node** | `child_process` / N-API addon | npm ecosystem, Electron UIs, REST APIs, real-time (Socket.io) |
+| **Rust** | C ABI (`extern "C"` + `#[no_mangle]`) | Performance-critical code, WASM compilation, safe systems |
+| **Java** | JNI (`JNI_CreateJavaVM`) | Enterprise (Spring, JDBC), Android apps, cross-platform libs |
+| **DotNet** | COM Interop / CLR hosting | Windows enterprise (.NET, WPF, Entity Framework), C# libraries |
+| **Lua** | `lua_State` embedding (< 300KB) | User scripting, plugin systems, game logic, config files |
+| **Ruby** | C extension API (`rb_define_method`) | DSLs, web (Rails), DevOps (Chef, Vagrant), text processing |
+
+> Each component wraps the target language's C-level embedding/FFI API, letting you call functions, pass data, and receive results without leaving Harbour.
 
 ### 🔍 Object Inspector
 - Properties tab with categorized grid (Appearance, Position, Behavior, Data)
@@ -326,6 +345,7 @@ Professional HTML documentation with dark/light theme, Mermaid diagrams, and cod
 | [Internet](docs/en/controls-internet.html) | WebServer, WebSocket, TCP... (9) |
 | [Threading](docs/en/controls-threading.html) | Thread, Mutex, Channel... (8) |
 | [AI](docs/en/controls-ai.html) | OpenAI, Ollama, Transformer, Whisper, Embeddings... (9) |
+| [Connectivity](docs/en/controls-connectivity.html) | Python, Swift, Go, Node, Rust, Java, DotNet, Lua, Ruby (9) |
 | [ERP](docs/en/controls-erp.html) | Report, Barcode, PDF... (12) |
 
 ---
@@ -392,7 +412,7 @@ All three desktop platforms are **fully functional** with zero MsgInfo stubs —
 | | Undo design (50-step) | ✅ | — | ✅ |
 | | Tab Order dialog | ✅ | — | ✅ |
 | | Format > Align controls (8 modes) | ✅ | ✅ | ✅ |
-| | 111 components in 14 tabs | ✅ | ✅ | ✅ |
+| | 120 components in 15 tabs | ✅ | ✅ | ✅ |
 | **Debugger** | Debugger panel (5 tabs) | ✅ | ✅ | ✅ |
 | | Debug toolbar (Run/Step/Stop) | ✅ | ✅ | ✅ |
 | | In-process .hrb execution | ✅ | ✅ | ✅ |

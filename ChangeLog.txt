@@ -1,6 +1,39 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-04 (Session 8b: Connectivity Tab + AI components)
+
+  NEW COMPONENTS:
+  CT_WHISPER (110) ....... speech-to-text via OpenAI Whisper API
+  CT_EMBEDDINGS (111) .... vector embeddings for semantic search / RAG
+  CT_PYTHON (112) ........ C API embedding (Py_Initialize, PyRun_SimpleString)
+  CT_SWIFT (113) ......... Obj-C bridging header + @objc interop
+  CT_GO (114) ............ cgo FFI (import "C")
+  CT_NODE (115) .......... child_process / N-API addon
+  CT_RUST (116) .......... C ABI (extern "C" + #[no_mangle])
+  CT_JAVA (117) .......... JNI (JNI_CreateJavaVM)
+  CT_DOTNET (118) ........ COM Interop / CLR hosting
+  CT_LUA (119) ........... lua_State embedding (< 300KB runtime)
+  CT_RUBY (120) .......... C extension API (rb_define_method)
+
+  NEW TAB: "Connectivity" (9 components)
+  - Language/runtime interop: call Python, Swift, Go, Node, Rust,
+    Java, .NET, Lua, Ruby from Harbour via their native C FFI APIs
+  - Added to palette on all 3 platforms (Windows, Linux, macOS)
+
+  WHY THESE LANGUAGES:
+  - Python: #1 for AI/ML (TensorFlow, PyTorch), data science (pandas)
+  - Swift: native macOS/iOS, required for Apple frameworks
+  - Go: dominant in microservices, CLIs, cloud infrastructure
+  - Node: npm ecosystem (2M+ packages), Electron, real-time
+  - Rust: memory-safe systems code, WASM target, growing fast
+  - Java: enterprise standard, Android, massive library ecosystem
+  - DotNet: Windows enterprise (.NET/C#, WPF, Entity Framework)
+  - Lua: ultra-lightweight (300KB), ideal for user scripting/plugins
+  - Ruby: expressive DSLs, web (Rails), DevOps tooling
+
+  PALETTE: 111 → 120 components, 14 → 15 tabs
+
 2026-04-04 (Session 8: Windows Parity - Full IDE feature parity across 3 platforms)
 
   DEBUGGER ENGINE (hbbridge.cpp, +12 HB_FUNC):
