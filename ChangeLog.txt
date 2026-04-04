@@ -1,7 +1,44 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
-2026-04-04 (Session 7: Visual Report Designer - Tasks 1-3)
+2026-04-04 (Session 7: Visual Report Designer - Tasks 1-5 COMPLETE)
+
+  REPORT PREVIEW WINDOW (gtk3_core.c, +520 lines):
+  RPT_PreviewOpen() ..... singleton window with dark theme, page rendering
+  RPT_PreviewAddPage() .. start new page in preview
+  RPT_PreviewDrawText().. add text element with font/color to page
+  RPT_PreviewDrawRect().. add rectangle (filled or outline)
+  RPT_PreviewDrawLine().. add line with color/width
+  RPT_PreviewRender() ... trigger Cairo rendering of all draw commands
+  RPT_PreviewClose() .... hide preview window
+
+  PREVIEW FEATURES:
+  - White page with drop shadow on dark background
+  - Dashed margin lines
+  - Page navigation: First/Prev/Next/Last
+  - Zoom: 25% to 400% in 25% steps
+  - Cairo rendering: text, rectangles, lines
+  - Connected to designer Preview button
+
+  XCOMMAND MACROS (hbbuilder.ch):
+  DEFINE REPORT oRpt TITLE "..." DATASOURCE oDS
+  DEFINE BAND oBand NAME "Header" HEIGHT 40 OF oRpt
+  REPORT TEXT oFld PROMPT "Title" AT 5, 10 SIZE 180, 20 FONT "Sans", 18 BOLD OF oBand
+  REPORT DATA oFld FIELD "NAME" AT 1, 10 SIZE 80, 14 OF oBand
+  REPORT PREVIEW oRpt
+  REPORT PRINT oRpt
+
+  HELPER FUNCTIONS (classes.prg):
+  RPT_NewTextField() ... handles optional font/alignment parameters
+  RPT_NewDataField() ... same for data-bound fields
+  TReport:Preview() .... renders bands to preview window
+
+  EXAMPLE: samples/projects/printing/report_visual_example.prg
+  - 4 bands (Header/PageHeader/Detail/Footer)
+  - Static text + data-bound fields
+  - Code generation output verified
+
+2026-04-04 (Session 7a: Visual Report Designer - Tasks 1-3)
 ------------------------------------------------------------
 
 REPORT DESIGNER WINDOW (gtk3_core.c, +656 lines):
