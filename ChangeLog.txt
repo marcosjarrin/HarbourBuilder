@@ -1,6 +1,82 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-03 (Session 5: Linux full IDE + Debugger Engine + Windows parity)
+--------------------------------------------------------------------------
+
+LINUX SCINTILLA INTEGRATION:
+  - Replaced GtkTextView editor with Scintilla 5.6.1 + Lexilla 5.4.8
+  - Dynamic loading via dlopen() of libscintilla.so / liblexilla.so
+  - build_scintilla.sh downloads and compiles from source
+  - Full feature set: syntax highlighting, code folding, auto-complete,
+    find/replace bar, auto-indent, status bar, all keyboard shortcuts
+
+LINUX IDE PANELS & DIALOGS (6 new, all native GTK3):
+  - GTK_SetDarkMode ......... GTK dark theme toggle (Tools > Dark Mode)
+  - GTK_DebugPanel .......... 5-tab debugger (Watch/Locals/Call Stack/Breakpoints/Output)
+                               Professional toolbar: Run, Pause, Step Into, Step Over, Stop
+                               Dark themed, monospace fonts, resizable columns
+  - GTK_AIAssistantPanel .... Ollama chat with model selector, curl integration
+  - GTK_ProjectInspector .... TreeView with parent/child hierarchy
+  - GTK_EditorSettingsDialog  Font, 9 color buttons, presets, preview
+  - GTK_ProjectOptionsDialog  4 tabs (Harbour/C Compiler/Linker/Directories)
+
+LINUX EDITOR OPERATIONS (7 new CodeEditor HB_FUNCs):
+  - CodeEditorUndo, CodeEditorRedo, CodeEditorCut, CodeEditorCopy,
+    CodeEditorPaste, CodeEditorFind, CodeEditorReplace
+  - Find bar: properly shows/hides replace widgets per mode
+
+LINUX MENU/TOOLBAR COMPLETION:
+  - All 36 menu items functional (zero MsgInfo stubs)
+  - All 9 toolbar buttons functional
+  - Added: Save As, Add/Remove from Project, Install/New Component,
+    Step Over/Into, Environment Options, Dark Mode toggle
+
+INTEGRATED DEBUGGER ENGINE (gtk3_core.c):
+  - In-process debugging via .hrb bytecode (harbour -gh -b)
+  - hb_dbg_SetEntry() VM hook intercepts every source line
+  - gtk_main_iteration() keeps UI responsive while paused
+  - IDE_DebugStart/Go/Step/StepOver/Stop control commands
+  - IDE_DebugAddBreakpoint/ClearBreakpoints
+  - IDE_DebugGetLocals: introspects local variables via hb_dbg_vmVarLGet
+  - OnDebugPause callback updates Locals and Call Stack tabs
+  - NOTE: HRB pcode does not trigger debug hooks (VM limitation);
+    future: pipe-based debug agent for compiled executables
+
+DEBUGGER UNIT TEST SUITE (tests/test_debugger.prg):
+  - 16 tests across 5 groups, all passing
+  - State machine, breakpoint management, HRB compilation,
+    debug execution, variable inspection
+  - Build script: tests/build_test_debugger.sh
+
+TWO-ROW TOOLBAR:
+  - Row 1: New, Open, Save | Cut, Copy, Paste | Undo, Redo (original icons)
+  - Row 2: Run, Debug | Step Into, Step Over, Continue, Stop (debug icons)
+  - Compact 20x20 icon size, multiple toolbar support (up to 4 rows)
+  - toolbar_debug.bmp: 6 generated icons for debug operations
+
+WINDOWS PARITY:
+  - 7 CodeEditor HB_FUNCs added (Undo/Redo/Cut/Copy/Paste/Find/Replace)
+  - All 35 menu items + 9 toolbar buttons functional (zero stubs)
+  - Added: Save As, Add/Remove from Project, Install/New Component,
+    Step Over/Into, Environment Options
+
+FILES ADDED:
+  - build_scintilla.sh .............. Linux Scintilla build script
+  - resources/libscintilla.so ....... Scintilla 5.6.1 (Linux x86_64)
+  - resources/liblexilla.so ......... Lexilla 5.4.8 (Linux x86_64)
+  - resources/toolbar_debug.bmp ..... 6 debug toolbar icons (32x32 strip)
+  - tests/test_debugger.prg ........ 16 debugger unit tests
+  - tests/build_test_debugger.sh ... Test build script
+
+FILES MODIFIED:
+  - backends/gtk3/gtk3_core.c ....... Scintilla editor, 6 panels, debugger engine,
+                                       multi-toolbar support, editor operations
+  - samples/hbbuilder_linux.prg ..... All stubs replaced, debug UI, two toolbars
+  - samples/hbbuilder_win.prg ....... All stubs replaced, editor operations
+  - README.md ....................... Platform parity tables, debugger docs
+
+
 2026-04-04 (Session 6: macOS Scintilla Integration + IDE Panels)
 -----------------------------------------------------------------
 
