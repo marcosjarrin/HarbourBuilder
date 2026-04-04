@@ -32,7 +32,7 @@ static nActiveForm   // Index of active form (1-based)
 
 function Main()
 
-   local oTB, oFile, oEdit, oSearch, oView, oProject, oRun, oComp, oTools, oHelp
+   local oTB, oFile, oEdit, oSearch, oView, oProject, oRun, oFormat, oComp, oTools, oHelp
    local nBarH, nInsW, nEditorX, nEditorW, nEditorH
    local nFormX, nFormY, nInsTop, nEditorTop, nBottomY
 
@@ -118,6 +118,18 @@ function Main()
    MENUSEPARATOR OF oRun
    MENUITEM "Toggle Breakpoint"  OF oRun ACTION ToggleBreakpoint()
    MENUITEM "Clear Breakpoints"  OF oRun ACTION ClearBreakpoints()
+
+   DEFINE POPUP oFormat PROMPT "Format" OF oIDE
+   MENUITEM "Align Left"             OF oFormat ACTION AlignControls( 1 )
+   MENUITEM "Align Right"            OF oFormat ACTION AlignControls( 2 )
+   MENUITEM "Align Top"              OF oFormat ACTION AlignControls( 3 )
+   MENUITEM "Align Bottom"           OF oFormat ACTION AlignControls( 4 )
+   MENUSEPARATOR OF oFormat
+   MENUITEM "Center Horizontally"    OF oFormat ACTION AlignControls( 5 )
+   MENUITEM "Center Vertically"      OF oFormat ACTION AlignControls( 6 )
+   MENUSEPARATOR OF oFormat
+   MENUITEM "Space Evenly Horizontal" OF oFormat ACTION AlignControls( 7 )
+   MENUITEM "Space Evenly Vertical"   OF oFormat ACTION AlignControls( 8 )
 
    DEFINE POPUP oComp PROMPT "Component" OF oIDE
    MENUITEM "Install Component..." OF oComp ACTION InstallComponent()
@@ -1408,6 +1420,30 @@ return nil
 
 static function ShowEnvironmentOptions()
    MAC_ProjectOptionsDialog()
+return nil
+
+// === Copy/Paste Controls ===
+
+static function CopyControls()
+   if oDesignForm != nil
+      UI_FormCopySelected( oDesignForm:hCpp )
+   endif
+return nil
+
+static function PasteControls()
+   if oDesignForm != nil .and. UI_FormGetClipCount() > 0
+      UI_FormPasteControls( oDesignForm:hCpp )
+      SyncDesignerToCode()
+   endif
+return nil
+
+// === Align/Distribute ===
+
+static function AlignControls( nMode )
+   if oDesignForm != nil
+      UI_FormAlignSelected( oDesignForm:hCpp, nMode )
+      SyncDesignerToCode()
+   endif
 return nil
 
 // === Helpers ===

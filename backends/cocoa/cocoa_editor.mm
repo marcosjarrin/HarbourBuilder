@@ -309,6 +309,25 @@ static void CE_ConfigureScintilla( ScintillaView * sv )
 
    /* Indentation guides */
    SciMsg( sv, SCI_SETINDENTATIONGUIDES, SC_IV_LOOKBOTH, 0 );
+
+   /* Bracket matching style */
+   SciMsg( sv, SCI_STYLESETFORE, STYLE_BRACELIGHT, SCIRGB(255,255,0) );
+   SciMsg( sv, SCI_STYLESETBACK, STYLE_BRACELIGHT, SCIRGB(60,60,60) );
+   SciMsg( sv, SCI_STYLESETBOLD, STYLE_BRACELIGHT, 1 );
+   SciMsg( sv, SCI_STYLESETFORE, STYLE_BRACEBAD, SCIRGB(255,0,0) );
+   SciMsg( sv, SCI_STYLESETBACK, STYLE_BRACEBAD, SCIRGB(60,30,30) );
+   SciMsg( sv, SCI_STYLESETBOLD, STYLE_BRACEBAD, 1 );
+
+   /* Bookmarks: markers 0-9 using circles in margin 1 */
+   SciMsg( sv, SCI_SETMARGINTYPEN, 1, SC_MARGIN_SYMBOL );
+   SciMsg( sv, SCI_SETMARGINWIDTHN, 1, 16 );
+   SciMsg( sv, SCI_SETMARGINMASKN, 1, 0x3FF );  /* bits 0-9 */
+   SciMsg( sv, SCI_SETMARGINSENSITIVEN, 1, 1 );
+   for( int m = 0; m <= 9; m++ ) {
+      SciMsg( sv, SCI_MARKERDEFINE, m, SC_MARK_SHORTARROW );
+      SciMsg( sv, 2041, m, SCIRGB(80,180,255) );  /* SCI_MARKERSETFORE */
+      SciMsg( sv, 2042, m, SCIRGB(40,40,50) );    /* SCI_MARKERSETBACK */
+   }
 }
 
 /* -----------------------------------------------------------------------
@@ -416,8 +435,32 @@ static HBSciTabTarget * s_sciTabTarget = nil;
 
       case SCN_UPDATEUI:
       {
-         /* Update status bar on cursor/selection change */
+         /* Update status bar */
          CE_UpdateStatusBar( ed );
+
+         /* Bracket matching */
+         sptr_t pos = SciMsg0( ed->sciView, SCI_GETCURRENTPOS );
+         char ch = (char) SciMsg( ed->sciView, SCI_GETCHARAT, (uptr_t)pos, 0 );
+         char chPrev = pos > 0 ? (char) SciMsg( ed->sciView, SCI_GETCHARAT, (uptr_t)(pos-1), 0 ) : 0;
+
+         sptr_t bracePos = -1;
+         if( ch == '(' || ch == ')' || ch == '[' || ch == ']' || ch == '{' || ch == '}' )
+            bracePos = pos;
+         else if( chPrev == '(' || chPrev == ')' || chPrev == '[' || chPrev == ']' || chPrev == '{' || chPrev == '}' )
+            bracePos = pos - 1;
+
+         if( bracePos >= 0 )
+         {
+            sptr_t match = SciMsg( ed->sciView, SCI_BRACEMATCH, (uptr_t)bracePos, 0 );
+            if( match >= 0 )
+               SciMsg( ed->sciView, SCI_BRACEHIGHLIGHT, (uptr_t)bracePos, match );
+            else
+               SciMsg( ed->sciView, SCI_BRACEBADLIGHT, (uptr_t)bracePos, 0 );
+         }
+         else
+         {
+            SciMsg( ed->sciView, SCI_BRACEHIGHLIGHT, (uptr_t)-1, -1 );
+         }
          break;
       }
 
@@ -616,6 +659,42 @@ static void CE_InstallKeyMonitor( CODEEDITOR * ed )
          SciMsg( sv, SCI_AUTOCSHOW, (uptr_t)(pos - wordStart),
                  (sptr_t) s_harbourAutoComplete );
          return nil;
+      }
+
+      /* Cmd+0..9 — Toggle bookmark / Cmd+Shift+0..9 — Go to bookmark */
+      /* macOS keyCodes: 0=29, 1=18, 2=19, 3=20, 4=21, 5=23, 6=22, 7=26, 8=28, 9=25 */
+      {
+         static const unsigned short numKeyCodes[] = {29,18,19,20,21,23,22,26,28,25};
+         for( int bm = 0; bm <= 9; bm++ )
+         {
+            if( cmd && keyCode == numKeyCodes[bm] )
+            {
+               sptr_t curLine = SciMsg( sv, SCI_LINEFROMPOSITION,
+                  (uptr_t)SciMsg0( sv, SCI_GETCURRENTPOS ), 0 );
+
+               if( shift )
+               {
+                  /* Cmd+Shift+N: go to bookmark N */
+                  sptr_t found = SciMsg( sv, SCI_MARKERNEXT, 0, 1 << bm );
+                  if( found >= 0 )
+                  {
+                     sptr_t pos = SciMsg( sv, SCI_POSITIONFROMLINE, (uptr_t)found, 0 );
+                     SciMsg( sv, SCI_GOTOPOS, (uptr_t)pos, 0 );
+                     SciMsg( sv, SCI_SCROLLCARET, 0, 0 );
+                  }
+               }
+               else
+               {
+                  /* Cmd+N: toggle bookmark N on current line */
+                  sptr_t mask = SciMsg( sv, SCI_MARKERGET, (uptr_t)curLine, 0 );
+                  if( mask & (1 << bm) )
+                     SciMsg( sv, SCI_MARKERDELETE, (uptr_t)curLine, bm );
+                  else
+                     SciMsg( sv, SCI_MARKERADD, (uptr_t)curLine, bm );
+               }
+               return nil;
+            }
+         }
       }
 
       return event;

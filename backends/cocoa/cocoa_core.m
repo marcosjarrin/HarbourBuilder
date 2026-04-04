@@ -3502,3 +3502,192 @@ HB_FUNC( UI_FORMCLEARCHILDREN )
       [(NSView *)pForm->FOverlayView setNeedsDisplay:YES];
 }
 
+/* ======================================================================
+ * Form Designer: Copy/Paste controls + Align/Distribute
+ * ====================================================================== */
+
+/* Clipboard for copied controls: type, left, top, width, height, text */
+#define MAX_CLIPBOARD 32
+
+static struct {
+   int nType;
+   int nLeft, nTop, nWidth, nHeight;
+   char szText[128];
+} s_clipboard[MAX_CLIPBOARD];
+static int s_clipCount = 0;
+
+/* UI_FormCopySelected( hForm ) — copy selected controls to clipboard */
+HB_FUNC( UI_FORMCOPYSELECTED )
+{
+   HBForm * pForm = (__bridge HBForm *)(void *)(HB_PTRUINT) hb_parnint(1);
+   if( !pForm ) return;
+
+   s_clipCount = 0;
+   for( int i = 0; i < pForm->FSelCount && s_clipCount < MAX_CLIPBOARD; i++ )
+   {
+      HBControl * c = pForm->FSelected[i];
+      s_clipboard[s_clipCount].nType   = c->FControlType;
+      s_clipboard[s_clipCount].nLeft   = c->FLeft;
+      s_clipboard[s_clipCount].nTop    = c->FTop;
+      s_clipboard[s_clipCount].nWidth  = c->FWidth;
+      s_clipboard[s_clipCount].nHeight = c->FHeight;
+      strncpy( s_clipboard[s_clipCount].szText, c->FText, 127 );
+      s_clipCount++;
+   }
+   hb_retni( s_clipCount );
+}
+
+/* UI_FormPasteControls( hForm ) --> nPasted — paste with +16px offset */
+HB_FUNC( UI_FORMPASTECONTROLS )
+{
+   HBForm * pForm = (__bridge HBForm *)(void *)(HB_PTRUINT) hb_parnint(1);
+   if( !pForm || s_clipCount == 0 ) { hb_retni(0); return; }
+
+   [pForm clearSelection];
+
+   for( int i = 0; i < s_clipCount; i++ )
+   {
+      /* Create control of the appropriate type */
+      HBControl * c = nil;
+      int t = s_clipboard[i].nType;
+      if( t == CT_LABEL )         c = [[HBLabel alloc] init];
+      else if( t == CT_EDIT )     c = [[HBEdit alloc] init];
+      else if( t == CT_BUTTON )   c = [[HBButton alloc] init];
+      else if( t == CT_CHECKBOX ) c = [[HBCheckBox alloc] init];
+      else if( t == CT_COMBOBOX ) c = [[HBComboBox alloc] init];
+      else if( t == CT_GROUPBOX ) c = [[HBGroupBox alloc] init];
+      else                        c = [[HBControl alloc] init];
+
+      if( c ) {
+         c->FControlType = t;
+         c->FLeft   = s_clipboard[i].nLeft + 16;
+         c->FTop    = s_clipboard[i].nTop + 16;
+         c->FWidth  = s_clipboard[i].nWidth;
+         c->FHeight = s_clipboard[i].nHeight;
+         strncpy( c->FText, s_clipboard[i].szText, sizeof(c->FText) - 1 );
+         [pForm addChild:c];
+         if( pForm->FSelCount < MAX_CHILDREN )
+            pForm->FSelected[pForm->FSelCount++] = c;
+      }
+   }
+
+   if( pForm->FOverlayView )
+      [(NSView *)pForm->FOverlayView setNeedsDisplay:YES];
+
+   hb_retni( s_clipCount );
+}
+
+/* UI_FormGetClipCount() --> nCount */
+HB_FUNC( UI_FORMGETCLIPCOUNT )
+{
+   hb_retni( s_clipCount );
+}
+
+/* -----------------------------------------------------------------------
+ * Align selected controls
+ * UI_FormAlignSelected( hForm, nMode )
+ *   1=AlignLeft, 2=AlignRight, 3=AlignTop, 4=AlignBottom
+ *   5=CenterH, 6=CenterV, 7=SpaceEvenlyH, 8=SpaceEvenlyV
+ * ----------------------------------------------------------------------- */
+
+HB_FUNC( UI_FORMALIGNSELECTED )
+{
+   HBForm * pForm = (__bridge HBForm *)(void *)(HB_PTRUINT) hb_parnint(1);
+   int mode = hb_parni(2);
+   if( !pForm || pForm->FSelCount < 2 ) return;
+
+   int i, n = pForm->FSelCount;
+   int minL = 99999, maxR = 0, minT = 99999, maxB = 0;
+   int totalW = 0, totalH = 0;
+
+   /* Find bounding box */
+   for( i = 0; i < n; i++ )
+   {
+      HBControl * c = pForm->FSelected[i];
+      if( c->FLeft < minL ) minL = c->FLeft;
+      if( c->FTop < minT ) minT = c->FTop;
+      if( c->FLeft + c->FWidth > maxR ) maxR = c->FLeft + c->FWidth;
+      if( c->FTop + c->FHeight > maxB ) maxB = c->FTop + c->FHeight;
+      totalW += c->FWidth;
+      totalH += c->FHeight;
+   }
+
+   switch( mode )
+   {
+      case 1: /* Align Left */
+         for( i = 0; i < n; i++ ) pForm->FSelected[i]->FLeft = minL;
+         break;
+      case 2: /* Align Right */
+         for( i = 0; i < n; i++ )
+            pForm->FSelected[i]->FLeft = maxR - pForm->FSelected[i]->FWidth;
+         break;
+      case 3: /* Align Top */
+         for( i = 0; i < n; i++ ) pForm->FSelected[i]->FTop = minT;
+         break;
+      case 4: /* Align Bottom */
+         for( i = 0; i < n; i++ )
+            pForm->FSelected[i]->FTop = maxB - pForm->FSelected[i]->FHeight;
+         break;
+      case 5: /* Center Horizontally */
+      {
+         int center = (minL + maxR) / 2;
+         for( i = 0; i < n; i++ )
+            pForm->FSelected[i]->FLeft = center - pForm->FSelected[i]->FWidth / 2;
+         break;
+      }
+      case 6: /* Center Vertically */
+      {
+         int center = (minT + maxB) / 2;
+         for( i = 0; i < n; i++ )
+            pForm->FSelected[i]->FTop = center - pForm->FSelected[i]->FHeight / 2;
+         break;
+      }
+      case 7: /* Space Evenly Horizontal */
+      {
+         if( n < 3 ) break;
+         int gap = (maxR - minL - totalW) / (n - 1);
+         /* Sort by left position (bubble sort, small n) */
+         for( int a = 0; a < n-1; a++ )
+            for( int b = a+1; b < n; b++ )
+               if( pForm->FSelected[b]->FLeft < pForm->FSelected[a]->FLeft )
+               { HBControl * t = pForm->FSelected[a]; pForm->FSelected[a] = pForm->FSelected[b]; pForm->FSelected[b] = t; }
+         int x = minL;
+         for( i = 0; i < n; i++ ) {
+            pForm->FSelected[i]->FLeft = x;
+            x += pForm->FSelected[i]->FWidth + gap;
+         }
+         break;
+      }
+      case 8: /* Space Evenly Vertical */
+      {
+         if( n < 3 ) break;
+         int gap = (maxB - minT - totalH) / (n - 1);
+         for( int a = 0; a < n-1; a++ )
+            for( int b = a+1; b < n; b++ )
+               if( pForm->FSelected[b]->FTop < pForm->FSelected[a]->FTop )
+               { HBControl * t = pForm->FSelected[a]; pForm->FSelected[a] = pForm->FSelected[b]; pForm->FSelected[b] = t; }
+         int y = minT;
+         for( i = 0; i < n; i++ ) {
+            pForm->FSelected[i]->FTop = y;
+            y += pForm->FSelected[i]->FHeight + gap;
+         }
+         break;
+      }
+   }
+
+   /* Update all views — reposition NSViews to match new FLeft/FTop */
+   for( i = 0; i < n; i++ )
+   {
+      HBControl * c = pForm->FSelected[i];
+      if( c->FView )
+      {
+         NSRect f = [(NSView *)c->FView frame];
+         f.origin.x = c->FLeft;
+         f.origin.y = c->FTop + pForm->FClientTop;
+         [(NSView *)c->FView setFrame:f];
+      }
+   }
+   if( pForm->FOverlayView )
+      [(NSView *)pForm->FOverlayView setNeedsDisplay:YES];
+}
+
