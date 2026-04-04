@@ -98,8 +98,8 @@ function Main()
    MENUITEM "Debugger"          OF oView ACTION GTK_DebugPanel()
 
    DEFINE POPUP oProject PROMPT "Project" OF oIDE
-   MENUITEM "Add to Project..."    OF oProject ACTION MsgInfo( "Add to Project" )
-   MENUITEM "Remove from Project"  OF oProject ACTION MsgInfo( "Remove" )
+   MENUITEM "Add to Project..."    OF oProject ACTION AddToProject()
+   MENUITEM "Remove from Project"  OF oProject ACTION RemoveFromProject()
    MENUSEPARATOR OF oProject
    MENUITEM "Options..."           OF oProject ACTION ShowProjectOptions()
 
@@ -117,7 +117,7 @@ function Main()
 
    DEFINE POPUP oTools PROMPT "Tools" OF oIDE
    MENUITEM "Editor Colors..."        OF oTools ACTION ShowEditorSettings()
-   MENUITEM "Environment Options..."  OF oTools ACTION MsgInfo( "Options" )
+   MENUITEM "Environment Options..."  OF oTools ACTION ShowEnvironmentOptions()
    MENUITEM "Dark Mode"              OF oTools ACTION ToggleDarkMode()
    MENUSEPARATOR OF oTools
    MENUITEM "AI Assistant..."         OF oTools ACTION ShowAIAssistant()
@@ -1133,6 +1133,74 @@ static function ShowProjectInspector()
    AAdd( aItems, "  classes.prg" )
    AAdd( aItems, "  hbbuilder.ch" )
    GTK_ProjectInspector( aItems )
+return nil
+
+// === Add/Remove from Project ===
+
+static function AddToProject()
+   local cFile := GTK_OpenFileDialog( "Add File to Project", "prg" )
+   local cName, cCode, i
+   if Empty( cFile ); return nil; endif
+   cName := SubStr( cFile, RAt( "/", cFile ) + 1 )
+   // Remove extension
+   if "." $ cName
+      cName := Left( cName, At( ".", cName ) - 1 )
+   endif
+   // Check if already in project
+   for i := 1 to Len( aForms )
+      if Lower( aForms[i][1] ) == Lower( cName )
+         MsgInfo( cName + " is already in the project" )
+         return nil
+      endif
+   next
+   // Read file and add as new form tab
+   cCode := MemoRead( cFile )
+   if Empty( cCode )
+      cCode := "// " + cName + ".prg" + Chr(10)
+   endif
+   // Add to project (as code-only unit, no visual form)
+   CodeEditorAddTab( hCodeEditor, cName + ".prg" )
+   CodeEditorSetTabText( hCodeEditor, Len(aForms) + 2, cCode )
+   CodeEditorSelectTab( hCodeEditor, Len(aForms) + 2 )
+   CodeEditorSetTabText( hCodeEditor, 1, GenerateProjectCode() )
+return nil
+
+static function RemoveFromProject()
+   local aNames := {}, i, nSel
+   if Len( aForms ) <= 1
+      MsgInfo( "Cannot remove the last form" )
+      return nil
+   endif
+   for i := 1 to Len( aForms )
+      AAdd( aNames, aForms[i][1] + ".prg" )
+   next
+   nSel := GTK_SelectFromList( "Remove from Project", aNames )
+   if nSel > 0 .and. nSel <= Len( aForms )
+      aForms[nSel][2]:Destroy()
+      ADel( aForms, nSel )
+      ASize( aForms, Len(aForms) - 1 )
+      if nActiveForm > Len( aForms )
+         nActiveForm := Len( aForms )
+      endif
+      // Rebuild editor tabs
+      CodeEditorClearTabs( hCodeEditor )
+      CodeEditorSetTabText( hCodeEditor, 1, GenerateProjectCode() )
+      for i := 1 to Len( aForms )
+         CodeEditorAddTab( hCodeEditor, aForms[i][1] + ".prg" )
+         CodeEditorSetTabText( hCodeEditor, i + 1, aForms[i][3] )
+      next
+      SwitchToForm( nActiveForm )
+   endif
+return nil
+
+// === Environment Options ===
+
+static function ShowEnvironmentOptions()
+   static cHbDir  := "~/harbour"
+   static cCFlags := "-g -Wno-unused-value"
+   static cHbFlags := "-n -w -q"
+   GTK_ProjectOptionsDialog( cHbDir, "/usr/bin", ".", "./build", ;
+      cHbFlags, cCFlags, "", "", "", "" )
 return nil
 
 // === Dark Mode (toggle) ===
