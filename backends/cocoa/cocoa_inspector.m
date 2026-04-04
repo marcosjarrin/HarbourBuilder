@@ -228,6 +228,44 @@ static HBFontPickerTarget * s_fontTarget = nil;
    if( d->rows[nReal].bIsCat ) return;
 
    const char * szVal = [value UTF8String];
+
+   /* === Property validation === */
+   const char * propName = d->rows[nReal].szName;
+
+   /* cName: must not be empty */
+   if( strcmp(propName, "cName") == 0 && ( !szVal || strlen(szVal) == 0 ) )
+   {
+      NSBeep(); return;
+   }
+
+   /* Numeric properties: must be valid integer */
+   if( d->rows[nReal].cType == 'N' )
+   {
+      /* Allow empty (treated as 0) */
+      if( szVal && strlen(szVal) > 0 )
+      {
+         char * endp = NULL;
+         long val = strtol( szVal, &endp, 10 );
+         if( endp == szVal || *endp != 0 ) { NSBeep(); return; }  /* Not a number */
+
+         /* Range checks for specific properties */
+         if( strcmp(propName,"nWidth")==0 || strcmp(propName,"nHeight")==0 )
+         { if( val < 1 || val > 10000 ) { NSBeep(); return; } }
+         else if( strcmp(propName,"nAlphaBlendValue")==0 )
+         { if( val < 0 || val > 255 ) { NSBeep(); return; } }
+         else if( strcmp(propName,"nLeft")==0 || strcmp(propName,"nTop")==0 )
+         { if( val < -5000 || val > 10000 ) { NSBeep(); return; } }
+      }
+   }
+
+   /* Logical: must be .T. or .F. */
+   if( d->rows[nReal].cType == 'L' )
+   {
+      if( strcasecmp(szVal,".T.") != 0 && strcasecmp(szVal,".F.") != 0 &&
+          strcasecmp(szVal,"true") != 0 && strcasecmp(szVal,"false") != 0 )
+      { NSBeep(); return; }
+   }
+
    strncpy( d->rows[nReal].szValue, szVal, sizeof(d->rows[0].szValue) - 1 );
 
    /* Apply value via UI_SetProp */
