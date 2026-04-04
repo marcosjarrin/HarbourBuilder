@@ -193,6 +193,27 @@ static HBFontPickerTarget * s_fontTarget = nil;
    else
    {
       if( d->rows[nReal].bIsCat ) return @"";
+
+      /* Dropdown: parse "index|opt0|opt1|..." and show selected option name */
+      if( d->rows[nReal].cType == 'D' )
+      {
+         const char * raw = d->rows[nReal].szValue;
+         int idx = atoi( raw );
+         const char * p = strchr( raw, '|' );
+         int cur = 0;
+         while( p && *p == '|' ) {
+            p++;
+            const char * end = strchr( p, '|' );
+            if( cur == idx ) {
+               int len = end ? (int)(end - p) : (int)strlen(p);
+               return [[NSString alloc] initWithBytes:p length:len encoding:NSUTF8StringEncoding];
+            }
+            cur++;
+            p = end;
+         }
+         return [NSString stringWithFormat:@"%d", idx];
+      }
+
       return [NSString stringWithUTF8String:d->rows[nReal].szValue];
    }
 }
@@ -261,6 +282,12 @@ static HBFontPickerTarget * s_fontTarget = nil;
       [self openFontPickerForRow:nReal];
       return NO;
    }
+   /* For dropdown properties, show popup menu */
+   if( d->rows[nReal].cType == 'D' && [[col identifier] isEqualToString:@"value"] )
+   {
+      [self openDropdownForRow:nReal inTableView:tableView atRow:row];
+      return NO;
+   }
    return YES;
 }
 
@@ -321,6 +348,69 @@ static HBFontPickerTarget * s_fontTarget = nil;
 
    NSFontPanel * panel = [fm fontPanel:YES];
    [panel orderFront:nil];
+}
+
+- (void)openDropdownForRow:(int)nReal inTableView:(NSTableView *)tv atRow:(NSInteger)row
+{
+   const char * raw = d->rows[nReal].szValue;
+   int curIdx = atoi( raw );
+
+   /* Build menu from "index|opt0|opt1|..." */
+   NSMenu * menu = [[NSMenu alloc] init];
+   const char * p = strchr( raw, '|' );
+   int idx = 0;
+   while( p && *p == '|' ) {
+      p++;
+      const char * end = strchr( p, '|' );
+      int len = end ? (int)(end - p) : (int)strlen(p);
+      NSString * title = [[NSString alloc] initWithBytes:p length:len encoding:NSUTF8StringEncoding];
+      NSMenuItem * item = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
+      [item setTag:idx];
+      if( idx == curIdx ) [item setState:NSControlStateValueOn];
+      [menu addItem:item];
+      idx++;
+      p = end;
+   }
+
+   /* Show popup at cell location */
+   NSRect cellRect = [tv frameOfCellAtColumn:1 row:row];
+   NSPoint pt = NSMakePoint( cellRect.origin.x, cellRect.origin.y );
+
+   /* Use popUpMenuPositioningItem to show dropdown at cell */
+   BOOL selected = [menu popUpMenuPositioningItem:[menu itemAtIndex:curIdx]
+      atLocation:pt inView:tv];
+
+   if( selected )
+   {
+      /* Find which item was selected */
+      for( int i = 0; i < (int)[[menu itemArray] count]; i++ )
+      {
+         NSMenuItem * mi = [[menu itemArray] objectAtIndex:i];
+         if( [mi isHighlighted] || [mi state] == NSControlStateValueOn )
+         {
+            /* Rebuild value string with new index */
+            const char * opts = strchr( raw, '|' );
+            char newVal[512];
+            snprintf( newVal, sizeof(newVal), "%d%s", i, opts ? opts : "" );
+            strncpy( d->rows[nReal].szValue, newVal, sizeof(d->rows[0].szValue) - 1 );
+
+            /* Apply via UI_SetProp */
+            PHB_DYNS pDyn = hb_dynsymFindName( "UI_SETPROP" );
+            if( pDyn ) {
+               hb_vmPushDynSym( pDyn ); hb_vmPushNil();
+               hb_vmPushNumInt( d->hCtrl );
+               hb_vmPushString( d->rows[nReal].szName, strlen(d->rows[nReal].szName) );
+               hb_vmPushInteger( i );
+               hb_vmDo( 3 );
+            }
+            if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) ) {
+               hb_vmPushEvalSym(); hb_vmPush( d->pOnPropChanged ); hb_vmSend( 0 );
+            }
+            [tv reloadData];
+            break;
+         }
+      }
+   }
 }
 
 - (void)tableView:(NSTableView *)tableView willDisplayCell:(id)cell
@@ -687,6 +777,8 @@ static void InsBuildRows( INSDATA * d, PHB_ITEM pArray )
          else if( d->rows[d->nRows].cType == 'C' )
             sprintf( d->rows[d->nRows].szValue, "%u", (unsigned) hb_arrayGetNInt(pRow,2) );
          else if( d->rows[d->nRows].cType == 'F' )
+            strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
+         else if( d->rows[d->nRows].cType == 'D' )
             strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
 
          d->nRows++;

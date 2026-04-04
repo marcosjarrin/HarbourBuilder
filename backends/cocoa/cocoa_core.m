@@ -2548,6 +2548,10 @@ HB_FUNC( UI_GETALLPROPS )
       hb_arraySetC(pRow,3,c); hb_arraySetC(pRow,4,"C"); hb_arrayAdd(pArray,pRow); hb_itemRelease(pRow);
    #define ADD_F(n,v,c) pRow=hb_itemArrayNew(4); hb_arraySetC(pRow,1,n); hb_arraySetC(pRow,2,v); \
       hb_arraySetC(pRow,3,c); hb_arraySetC(pRow,4,"F"); hb_arrayAdd(pArray,pRow); hb_itemRelease(pRow);
+   /* Dropdown: value stored as "index|opt0|opt1|opt2|..." */
+   #define ADD_D(n,v,opts,c) { char _db[512]; snprintf(_db,sizeof(_db),"%d|%s",v,opts); \
+      pRow=hb_itemArrayNew(4); hb_arraySetC(pRow,1,n); hb_arraySetC(pRow,2,_db); \
+      hb_arraySetC(pRow,3,c); hb_arraySetC(pRow,4,"D"); hb_arrayAdd(pArray,pRow); hb_itemRelease(pRow); }
 
    ADD_S("cClassName",p->FClassName,"Info");
    ADD_S("cName",p->FName,"Appearance");
@@ -2565,18 +2569,18 @@ HB_FUNC( UI_GETALLPROPS )
    switch(p->FControlType) {
       case CT_FORM: {
          HBForm * f = (HBForm *)p;
-         ADD_N("nBorderStyle",f->FBorderStyle,"Appearance");
+         ADD_D("nBorderStyle",f->FBorderStyle,"bsNone|bsSingle|bsSizeable|bsDialog|bsToolWindow|bsSizeToolWin","Appearance");
          ADD_N("nBorderIcons",f->FBorderIcons,"Appearance");
          ADD_N("nBorderWidth",f->FBorderWidth,"Appearance");
-         ADD_N("nPosition",f->FPosition,"Position");
-         ADD_N("nWindowState",f->FWindowState,"Appearance");
-         ADD_N("nFormStyle",f->FFormStyle,"Appearance");
+         ADD_D("nPosition",f->FPosition,"poDesigned|poScreenCenter|poDesktopCenter|poMainFormCenter","Position");
+         ADD_D("nWindowState",f->FWindowState,"wsNormal|wsMinimized|wsMaximized","Appearance");
+         ADD_D("nFormStyle",f->FFormStyle,"fsNormal|fsStayOnTop","Appearance");
          ADD_L("lSizable",f->FSizable,"Behavior");
          ADD_L("lAppBar",f->FAppBar,"Behavior");
          ADD_L("lKeyPreview",f->FKeyPreview,"Behavior");
          ADD_L("lAlphaBlend",f->FAlphaBlend,"Appearance");
          ADD_N("nAlphaBlendValue",f->FAlphaBlendValue,"Appearance");
-         ADD_N("nCursor",f->FCursor,"Appearance");
+         ADD_D("nCursor",f->FCursor,"crDefault|crArrow|crCross|crIBeam|crHand|crNo","Appearance");
          ADD_L("lShowHint",f->FShowHint,"Behavior");
          ADD_S("cHint",f->FHint,"Behavior");
          ADD_L("lAutoScroll",f->FAutoScroll,"Behavior");

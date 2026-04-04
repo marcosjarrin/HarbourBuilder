@@ -699,6 +699,66 @@ static void CE_InstallKeyMonitor( CODEEDITOR * ed )
          }
       }
 
+      /* Tab key (keyCode 48) — code snippet expansion */
+      if( !cmd && !shift && keyCode == 48 )
+      {
+         /* Get word before cursor */
+         sptr_t pos = SciMsg0( sv, SCI_GETCURRENTPOS );
+         sptr_t wordStart = SciMsg( sv, SCI_WORDSTARTPOSITION, (uptr_t)pos, 1 );
+         sptr_t wLen = pos - wordStart;
+
+         if( wLen > 0 && wLen < 20 )
+         {
+            char word[20];
+            struct Sci_TextRange tr;
+            tr.chrg.cpMin = (long)wordStart;
+            tr.chrg.cpMax = (long)pos;
+            tr.lpstrText = word;
+            SciMsg( sv, SCI_GETTEXTRANGE, 0, (sptr_t)&tr );
+            word[wLen] = 0;
+
+            /* Match snippet triggers */
+            const char * snippet = NULL;
+            int cursorOff = 0;  /* offset from start of insertion for cursor */
+
+            if( strcasecmp(word, "forn") == 0 ) {
+               snippet = "for i := 1 to 10\n   \nnext";
+               cursorOff = 20;  /* after "   " */
+            } else if( strcasecmp(word, "iff") == 0 ) {
+               snippet = "if \n   \nendif";
+               cursorOff = 3;
+            } else if( strcasecmp(word, "cls") == 0 ) {
+               snippet = "class TMyClass from TForm\n\n   data cName init \"\"\n\n   method New() constructor\n\nendclass\n\nmethod New() class TMyClass\n   ::Super:New()\nreturn self";
+               cursorOff = 6;
+            } else if( strcasecmp(word, "func") == 0 ) {
+               snippet = "function MyFunction()\n\n   \n\nreturn nil";
+               cursorOff = 9;
+            } else if( strcasecmp(word, "proc") == 0 ) {
+               snippet = "procedure MyProcedure()\n\n   \n\nreturn";
+               cursorOff = 10;
+            } else if( strcasecmp(word, "whil") == 0 ) {
+               snippet = "do while .T.\n   \nenddo";
+               cursorOff = 16;
+            } else if( strcasecmp(word, "swit") == 0 ) {
+               snippet = "switch \n   case 1\n      \n   otherwise\n      \nendswitch";
+               cursorOff = 7;
+            } else if( strcasecmp(word, "tryx") == 0 ) {
+               snippet = "begin sequence\n   \nrecover using oErr\n   MsgInfo( oErr:Description )\nend sequence";
+               cursorOff = 18;
+            }
+
+            if( snippet )
+            {
+               /* Replace trigger word with snippet */
+               SciMsg( sv, SCI_SETSEL, (uptr_t)wordStart, pos );
+               SciMsg( sv, SCI_REPLACESEL, 0, (sptr_t) snippet );
+               /* Position cursor */
+               SciMsg( sv, SCI_GOTOPOS, (uptr_t)(wordStart + cursorOff), 0 );
+               return nil;
+            }
+         }
+      }
+
       return event;
    }];
 }
