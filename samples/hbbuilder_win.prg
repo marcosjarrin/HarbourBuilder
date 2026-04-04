@@ -1665,8 +1665,6 @@ static function TBRun()
    W32_ShellExec( 'cmd /c del "' + cBuildDir + '\UserApp.exe" 2>nul' )
    W32_ShellExec( 'cmd /c del "' + cBuildDir + '\*.obj" 2>nul' )
 
-   // Create DPI manifest resource file
-   MemoWrit( cBuildDir + "\app.rc", '1 24 "' + cProjDir + '\resources\app.manifest"' + Chr(10) )
 
    // Show progress dialog (7 steps)
    W32_ProgressOpen( "Building Project...", 7 )
@@ -1814,17 +1812,6 @@ static function TBRun()
       if ! lError; cLog += "    OK" + Chr(10); endif
    endif
 
-   // Step 6b: Compile manifest resource
-   if ! lError
-      if cCompiler == "msvc"
-         cCmd := 'cmd /S /c ""' + cWinKit + '\bin\' + cWinKitVer + '\x86\rc.exe" /fo"' + ;
-                 cBuildDir + '\app.res" "' + cBuildDir + '\app.rc" 2>&1"'
-      else
-         cCmd := cCDir + '\bin\brcc32.exe "' + cBuildDir + '\app.rc" -fo"' + cBuildDir + '\app.res"'
-      endif
-      W32_ShellExec( cCmd )
-   endif
-
    // Step 7: Link
    if ! lError
       W32_ProgressStep( "Linking executable..." )
@@ -1856,7 +1843,6 @@ static function TBRun()
          cRspContent += "user32.lib gdi32.lib comctl32.lib comdlg32.lib shell32.lib" + Chr(10)
          cRspContent += "ole32.lib oleaut32.lib advapi32.lib ws2_32.lib winmm.lib" + Chr(10)
          cRspContent += "msimg32.lib gdiplus.lib ucrt.lib vcruntime.lib msvcrt.lib" + Chr(10)
-         cRspContent += '"' + cBuildDir + '\app.res"' + Chr(10)
          MemoWrit( cRsp, cRspContent )
          cCmd := 'cmd /S /c ""' + cLinker + '" @"' + cRsp + '" 2>&1"'
       else
@@ -1877,8 +1863,7 @@ static function TBRun()
                  " cw32mt.lib import32.lib ws2_32.lib winmm.lib" + ;
                  " user32.lib gdi32.lib comctl32.lib comdlg32.lib shell32.lib" + ;
                  " ole32.lib oleaut32.lib uuid.lib advapi32.lib" + ;
-                 " msimg32.lib gdiplus.lib,," + ;
-                 " " + cBuildDir + "\app.res"
+                 " msimg32.lib gdiplus.lib,,"
       endif
       cOutput := W32_ShellExec( cCmd )
       // Also check if exe was actually created
