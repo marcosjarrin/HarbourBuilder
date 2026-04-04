@@ -2422,10 +2422,365 @@ HB_FUNC( CODEEDITORPARSEERRORS )
 }
 
 /* -----------------------------------------------------------------------
- * Report Designer / Preview — stubs for macOS
- * (Linux uses GTK3 + Cairo; macOS implementation pending)
+ * Report Preview — Core Graphics rendering (macOS port of GTK3/Cairo)
+ * White page with drop shadow, margins, text/rect/line draw commands,
+ * zoom, page navigation.
  * ----------------------------------------------------------------------- */
 
+#define RPT_PRV_MAX_PAGES   100
+#define RPT_PRV_MAX_CMDS    500
+
+typedef struct {
+   int  type;         /* 1=text, 2=rect, 3=line */
+   int  x, y, w, h;
+   int  x2, y2;
+   char text[256];
+   char fontName[64];
+   int  fontSize;
+   int  bold, italic;
+   int  color;
+   int  filled;
+   int  lineWidth;
+} RptDrawCmd;
+
+typedef struct {
+   RptDrawCmd cmds[RPT_PRV_MAX_CMDS];
+   int nCmds;
+} RptPrvPage;
+
+static NSWindow *   s_rptPreview = nil;
+static NSView *     s_rptDrawView = nil;
+static NSTextField * s_rptPageLabel = nil;
+static RptPrvPage   s_rptPrvPages[RPT_PRV_MAX_PAGES];
+static int          s_rptPrvPageCount = 0;
+static int          s_rptPrvCurPage = 0;
+static int          s_rptPreviewZoom = 100;
+static int          s_rptPrvPgW = 210, s_rptPrvPgH = 297;
+static int          s_rptPrvMgL = 15, s_rptPrvMgR = 15;
+static int          s_rptPrvMgT = 15, s_rptPrvMgB = 15;
+
+/* Custom NSView for page rendering */
+@interface HBReportPreviewView : NSView
+@end
+
+@implementation HBReportPreviewView
+
+- (BOOL)isFlipped { return YES; }
+
+- (void)drawRect:(NSRect)dirtyRect
+{
+   (void)dirtyRect;
+   NSRect bounds = [self bounds];
+
+   double ppm = 3.0 * s_rptPreviewZoom / 100.0;
+   int pageW = (int)( s_rptPrvPgW * ppm );
+   int pageH = (int)( s_rptPrvPgH * ppm );
+   int pad = 30;
+   int shadowOff = 4;
+
+   /* Dark background */
+   [[NSColor colorWithCalibratedRed:0.118 green:0.118 blue:0.118 alpha:1] set];
+   NSRectFill( bounds );
+
+   /* Center page */
+   int pageX = ((int)bounds.size.width - pageW) / 2;
+   if( pageX < pad ) pageX = pad;
+   int pageY = pad;
+
+   /* Drop shadow */
+   [[NSColor colorWithCalibratedRed:0 green:0 blue:0 alpha:0.5] set];
+   NSRectFill( NSMakeRect( pageX + shadowOff, pageY + shadowOff, pageW, pageH ) );
+
+   /* White page */
+   [[NSColor whiteColor] set];
+   NSRectFill( NSMakeRect( pageX, pageY, pageW, pageH ) );
+
+   /* Page border */
+   [[NSColor colorWithCalibratedWhite:0.6 alpha:1] set];
+   NSFrameRect( NSMakeRect( pageX, pageY, pageW, pageH ) );
+
+   /* Margin lines — dashed */
+   {
+      CGFloat dashes[] = { 4.0, 4.0 };
+      NSBezierPath * path = [NSBezierPath bezierPath];
+      [path setLineDash:dashes count:2 phase:0];
+      [path setLineWidth:0.5];
+      [[NSColor colorWithCalibratedWhite:0.8 alpha:1] set];
+
+      double mL = pageX + s_rptPrvMgL * ppm;
+      double mR = pageX + pageW - s_rptPrvMgR * ppm;
+      double mT = pageY + s_rptPrvMgT * ppm;
+      double mB = pageY + pageH - s_rptPrvMgB * ppm;
+
+      [path moveToPoint:NSMakePoint(mL, pageY)];
+      [path lineToPoint:NSMakePoint(mL, pageY + pageH)];
+      [path moveToPoint:NSMakePoint(mR, pageY)];
+      [path lineToPoint:NSMakePoint(mR, pageY + pageH)];
+      [path moveToPoint:NSMakePoint(pageX, mT)];
+      [path lineToPoint:NSMakePoint(pageX + pageW, mT)];
+      [path moveToPoint:NSMakePoint(pageX, mB)];
+      [path lineToPoint:NSMakePoint(pageX + pageW, mB)];
+      [path stroke];
+   }
+
+   /* Draw commands for current page */
+   if( s_rptPrvCurPage >= 0 && s_rptPrvCurPage < s_rptPrvPageCount )
+   {
+      RptPrvPage * pg = &s_rptPrvPages[s_rptPrvCurPage];
+      for( int i = 0; i < pg->nCmds; i++ )
+      {
+         RptDrawCmd * cmd = &pg->cmds[i];
+         CGFloat r = ((cmd->color >> 16) & 0xFF) / 255.0;
+         CGFloat g = ((cmd->color >> 8 ) & 0xFF) / 255.0;
+         CGFloat b = ((cmd->color      ) & 0xFF) / 255.0;
+         NSColor * clr = [NSColor colorWithCalibratedRed:r green:g blue:b alpha:1];
+
+         switch( cmd->type )
+         {
+            case 1:  /* Text */
+            {
+               NSString * fontName = cmd->fontName[0] ?
+                  [NSString stringWithUTF8String:cmd->fontName] : @"Helvetica";
+               double fs = cmd->fontSize * ppm / 3.0;
+               if( fs < 6 ) fs = 6;
+               NSFont * font;
+               if( cmd->bold && cmd->italic )
+                  font = [[NSFontManager sharedFontManager]
+                     fontWithFamily:fontName traits:NSBoldFontMask|NSItalicFontMask weight:9 size:fs];
+               else if( cmd->bold )
+                  font = [NSFont boldSystemFontOfSize:fs];
+               else if( cmd->italic )
+                  font = [[NSFontManager sharedFontManager]
+                     fontWithFamily:fontName traits:NSItalicFontMask weight:5 size:fs];
+               else
+                  font = [NSFont fontWithName:fontName size:fs];
+               if( !font ) font = [NSFont systemFontOfSize:fs];
+
+               NSDictionary * attrs = @{
+                  NSFontAttributeName: font,
+                  NSForegroundColorAttributeName: clr
+               };
+               NSString * text = [NSString stringWithUTF8String:cmd->text];
+               [text drawAtPoint:NSMakePoint( pageX + cmd->x * ppm,
+                                              pageY + cmd->y * ppm )
+                  withAttributes:attrs];
+               break;
+            }
+            case 2:  /* Rect */
+            {
+               [clr set];
+               NSRect rect = NSMakeRect( pageX + cmd->x * ppm, pageY + cmd->y * ppm,
+                                         cmd->w * ppm, cmd->h * ppm );
+               if( cmd->filled )
+                  NSRectFill( rect );
+               else
+                  NSFrameRect( rect );
+               break;
+            }
+            case 3:  /* Line */
+            {
+               [clr set];
+               NSBezierPath * lp = [NSBezierPath bezierPath];
+               [lp setLineWidth: cmd->lineWidth > 0 ? cmd->lineWidth : 1];
+               [lp moveToPoint:NSMakePoint( pageX + cmd->x * ppm, pageY + cmd->y * ppm )];
+               [lp lineToPoint:NSMakePoint( pageX + cmd->x2 * ppm, pageY + cmd->y2 * ppm )];
+               [lp stroke];
+               break;
+            }
+         }
+      }
+   }
+
+   /* Set content size for scroll view */
+   [self setFrameSize:NSMakeSize( pageW + pad * 2, pageH + pad * 2 )];
+}
+
+@end
+
+/* Navigation targets */
+@interface HBRptPrvTarget : NSObject
+- (void)firstPage:(id)sender;
+- (void)prevPage:(id)sender;
+- (void)nextPage:(id)sender;
+- (void)lastPage:(id)sender;
+- (void)zoomIn:(id)sender;
+- (void)zoomOut:(id)sender;
+@end
+
+static void rpt_prv_update_label(void)
+{
+   if( s_rptPageLabel )
+      [s_rptPageLabel setStringValue:[NSString stringWithFormat:@"Page %d / %d  (%d%%)",
+         s_rptPrvCurPage + 1, s_rptPrvPageCount > 0 ? s_rptPrvPageCount : 1,
+         s_rptPreviewZoom]];
+}
+
+@implementation HBRptPrvTarget
+- (void)firstPage:(id)s { (void)s; s_rptPrvCurPage = 0; rpt_prv_update_label(); [s_rptDrawView setNeedsDisplay:YES]; }
+- (void)prevPage:(id)s  { (void)s; if(s_rptPrvCurPage>0) s_rptPrvCurPage--; rpt_prv_update_label(); [s_rptDrawView setNeedsDisplay:YES]; }
+- (void)nextPage:(id)s  { (void)s; if(s_rptPrvCurPage<s_rptPrvPageCount-1) s_rptPrvCurPage++; rpt_prv_update_label(); [s_rptDrawView setNeedsDisplay:YES]; }
+- (void)lastPage:(id)s  { (void)s; s_rptPrvCurPage = s_rptPrvPageCount > 0 ? s_rptPrvPageCount-1 : 0; rpt_prv_update_label(); [s_rptDrawView setNeedsDisplay:YES]; }
+- (void)zoomIn:(id)s    { (void)s; if(s_rptPreviewZoom<400) s_rptPreviewZoom+=25; rpt_prv_update_label(); [s_rptDrawView setNeedsDisplay:YES]; }
+- (void)zoomOut:(id)s   { (void)s; if(s_rptPreviewZoom>25) s_rptPreviewZoom-=25; rpt_prv_update_label(); [s_rptDrawView setNeedsDisplay:YES]; }
+@end
+
+static HBRptPrvTarget * s_rptPrvTarget = nil;
+
+/* RPT_PreviewOpen( nPageW, nPageH, nMgL, nMgR, nMgT, nMgB ) */
+HB_FUNC( RPT_PREVIEWOPEN )
+{
+   s_rptPrvPgW = HB_ISNUM(1) ? hb_parni(1) : 210;
+   s_rptPrvPgH = HB_ISNUM(2) ? hb_parni(2) : 297;
+   s_rptPrvMgL = HB_ISNUM(3) ? hb_parni(3) : 15;
+   s_rptPrvMgR = HB_ISNUM(4) ? hb_parni(4) : 15;
+   s_rptPrvMgT = HB_ISNUM(5) ? hb_parni(5) : 15;
+   s_rptPrvMgB = HB_ISNUM(6) ? hb_parni(6) : 15;
+
+   s_rptPrvPageCount = 0;
+   s_rptPrvCurPage = 0;
+   memset( s_rptPrvPages, 0, sizeof(s_rptPrvPages) );
+   s_rptPreviewZoom = 100;
+
+   if( s_rptPreview )
+   {
+      [s_rptPreview makeKeyAndOrderFront:nil];
+      rpt_prv_update_label();
+      return;
+   }
+
+   /* Create preview window */
+   NSRect frame = NSMakeRect( 150, 50, 700, 850 );
+   s_rptPreview = [[NSWindow alloc] initWithContentRect:frame
+      styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
+                NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable
+      backing:NSBackingStoreBuffered defer:NO];
+   [s_rptPreview setTitle:@"Report Preview"];
+   [s_rptPreview setReleasedWhenClosed:NO];
+   [s_rptPreview setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]];
+
+   NSView * cv = [s_rptPreview contentView];
+   CGFloat w = [cv bounds].size.width;
+   CGFloat h = [cv bounds].size.height;
+   CGFloat tbH = 36;
+
+   /* Toolbar: navigation + zoom */
+   s_rptPrvTarget = [[HBRptPrvTarget alloc] init];
+
+   NSButton * b1 = [NSButton buttonWithTitle:@"|<" target:s_rptPrvTarget action:@selector(firstPage:)];
+   NSButton * b2 = [NSButton buttonWithTitle:@"<"  target:s_rptPrvTarget action:@selector(prevPage:)];
+   NSButton * b3 = [NSButton buttonWithTitle:@">"  target:s_rptPrvTarget action:@selector(nextPage:)];
+   NSButton * b4 = [NSButton buttonWithTitle:@">|" target:s_rptPrvTarget action:@selector(lastPage:)];
+   NSButton * b5 = [NSButton buttonWithTitle:@"-"  target:s_rptPrvTarget action:@selector(zoomOut:)];
+   NSButton * b6 = [NSButton buttonWithTitle:@"+"  target:s_rptPrvTarget action:@selector(zoomIn:)];
+
+   int bx = 5;
+   for( NSButton * btn in @[b1, b2, b3, b4, b5, b6] ) {
+      [btn setFrame:NSMakeRect(bx, h - tbH + 4, 40, 28)];
+      [btn setAutoresizingMask:NSViewMinYMargin];
+      [cv addSubview:btn];
+      bx += 44;
+   }
+
+   s_rptPageLabel = [NSTextField labelWithString:@"Page 1 / 1  (100%)"];
+   [s_rptPageLabel setFrame:NSMakeRect(bx + 10, h - tbH + 8, 200, 20)];
+   [s_rptPageLabel setTextColor:[NSColor colorWithCalibratedWhite:0.7 alpha:1]];
+   [s_rptPageLabel setAutoresizingMask:NSViewMinYMargin];
+   [cv addSubview:s_rptPageLabel];
+
+   /* Scroll view with custom draw view */
+   NSScrollView * sv = [[NSScrollView alloc] initWithFrame:
+      NSMakeRect( 0, 0, w, h - tbH )];
+   [sv setHasVerticalScroller:YES];
+   [sv setHasHorizontalScroller:YES];
+   [sv setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+
+   s_rptDrawView = [[HBReportPreviewView alloc] initWithFrame:NSMakeRect(0, 0, 800, 1200)];
+   [sv setDocumentView:s_rptDrawView];
+   [cv addSubview:sv];
+
+   [s_rptPreview makeKeyAndOrderFront:nil];
+   rpt_prv_update_label();
+}
+
+HB_FUNC( RPT_PREVIEWCLOSE )
+{
+   if( s_rptPreview ) [s_rptPreview orderOut:nil];
+}
+
+HB_FUNC( RPT_PREVIEWADDPAGE )
+{
+   if( s_rptPrvPageCount < RPT_PRV_MAX_PAGES )
+   {
+      s_rptPrvPages[s_rptPrvPageCount].nCmds = 0;
+      s_rptPrvPageCount++;
+      s_rptPrvCurPage = s_rptPrvPageCount - 1;
+   }
+}
+
+HB_FUNC( RPT_PREVIEWDRAWTEXT )
+{
+   int pg = s_rptPrvPageCount - 1;
+   if( pg < 0 || pg >= RPT_PRV_MAX_PAGES ) return;
+   RptPrvPage * page = &s_rptPrvPages[pg];
+   if( page->nCmds >= RPT_PRV_MAX_CMDS ) return;
+
+   RptDrawCmd * cmd = &page->cmds[page->nCmds++];
+   memset( cmd, 0, sizeof(*cmd) );
+   cmd->type = 1;
+   if( HB_ISCHAR(1) ) strncpy( cmd->text, hb_parc(1), 255 );
+   cmd->x = HB_ISNUM(2) ? hb_parni(2) : 0;
+   cmd->y = HB_ISNUM(3) ? hb_parni(3) : 0;
+   if( HB_ISCHAR(4) ) strncpy( cmd->fontName, hb_parc(4), 63 );
+   cmd->fontSize = HB_ISNUM(5) ? hb_parni(5) : 12;
+   cmd->bold   = HB_ISLOG(6) ? hb_parl(6) : 0;
+   cmd->italic = HB_ISLOG(7) ? hb_parl(7) : 0;
+   cmd->color  = HB_ISNUM(8) ? hb_parni(8) : 0;
+}
+
+HB_FUNC( RPT_PREVIEWDRAWRECT )
+{
+   int pg = s_rptPrvPageCount - 1;
+   if( pg < 0 || pg >= RPT_PRV_MAX_PAGES ) return;
+   RptPrvPage * page = &s_rptPrvPages[pg];
+   if( page->nCmds >= RPT_PRV_MAX_CMDS ) return;
+
+   RptDrawCmd * cmd = &page->cmds[page->nCmds++];
+   memset( cmd, 0, sizeof(*cmd) );
+   cmd->type = 2;
+   cmd->x = HB_ISNUM(1) ? hb_parni(1) : 0;
+   cmd->y = HB_ISNUM(2) ? hb_parni(2) : 0;
+   cmd->w = HB_ISNUM(3) ? hb_parni(3) : 10;
+   cmd->h = HB_ISNUM(4) ? hb_parni(4) : 10;
+   cmd->color  = HB_ISNUM(5) ? hb_parni(5) : 0;
+   cmd->filled = HB_ISLOG(6) ? hb_parl(6) : 0;
+}
+
+HB_FUNC( RPT_PREVIEWDRAWLINE )
+{
+   int pg = s_rptPrvPageCount - 1;
+   if( pg < 0 || pg >= RPT_PRV_MAX_PAGES ) return;
+   RptPrvPage * page = &s_rptPrvPages[pg];
+   if( page->nCmds >= RPT_PRV_MAX_CMDS ) return;
+
+   RptDrawCmd * cmd = &page->cmds[page->nCmds++];
+   memset( cmd, 0, sizeof(*cmd) );
+   cmd->type = 3;
+   cmd->x  = HB_ISNUM(1) ? hb_parni(1) : 0;
+   cmd->y  = HB_ISNUM(2) ? hb_parni(2) : 0;
+   cmd->x2 = HB_ISNUM(3) ? hb_parni(3) : 0;
+   cmd->y2 = HB_ISNUM(4) ? hb_parni(4) : 0;
+   cmd->color     = HB_ISNUM(5) ? hb_parni(5) : 0;
+   cmd->lineWidth = HB_ISNUM(6) ? hb_parni(6) : 1;
+}
+
+HB_FUNC( RPT_PREVIEWRENDER )
+{
+   if( s_rptDrawView )
+      [s_rptDrawView setNeedsDisplay:YES];
+   rpt_prv_update_label();
+}
+
+/* Report Designer — stubs (visual designer not yet ported to macOS) */
 HB_FUNC( RPT_DESIGNEROPEN )  {}
 HB_FUNC( RPT_DESIGNERCLOSE ) {}
 HB_FUNC( RPT_SETREPORT )     {}
@@ -2436,12 +2791,5 @@ HB_FUNC( RPT_GETBANDPROPS )  { hb_reta(0); }
 HB_FUNC( RPT_GETFIELDPROPS ) { hb_reta(0); }
 HB_FUNC( RPT_SETBANDPROP )   {}
 HB_FUNC( RPT_SETFIELDPROP )  {}
-HB_FUNC( RPT_PREVIEWOPEN )   {}
-HB_FUNC( RPT_PREVIEWCLOSE )  {}
-HB_FUNC( RPT_PREVIEWADDPAGE )   {}
-HB_FUNC( RPT_PREVIEWDRAWTEXT )  {}
-HB_FUNC( RPT_PREVIEWDRAWRECT )  {}
-HB_FUNC( RPT_PREVIEWDRAWLINE )  {}
-HB_FUNC( RPT_PREVIEWRENDER )    {}
 
 } /* extern "C" */
