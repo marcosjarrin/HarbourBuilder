@@ -124,10 +124,22 @@ return nil
 - Also supports **LM Studio** (OpenAI-compatible API)
 - Future: inline code completion (Copilot-style)
 
-### 🐛 Integrated Debugger
-- Debugger panel with 5 tabs: Watch, Locals, Call Stack, Breakpoints, Output
+### 🐛 Integrated Debugger (runs inside the IDE)
+- **In-process debugging** — user code executes inside the IDE's Harbour VM via `.hrb` bytecode
+- Harbour VM hook (`hb_dbg_SetEntry`) intercepts every source line
+- Execution pauses at breakpoints or step commands while the IDE stays responsive
+- **Professional debug toolbar**: ▶ Run, ⏸ Pause, ↓ Step Into, → Step Over, ■ Stop
+- **5 dockable tabs** (bottom, Lazarus/C++Builder style):
+  - **Watch** — evaluate expressions in the current scope
+  - **Locals** — auto-populated with local variable Name, Value, Type (via `hb_dbg_vmVarLGet`)
+  - **Call Stack** — full stack trace with Level, Function, Module, Line
+  - **Breakpoints** — list with File, Line, Enabled status
+  - **Output** — real-time debug log (pause points, session start/end)
+- **Compile to .hrb**: `harbour -gh -b` produces portable bytecode with debug info
+- **Load and execute**: `hb_hrbRun()` runs user code in the IDE's own VM
+- **GTK event loop during pause**: `gtk_main_iteration()` keeps UI responsive while debugger waits
 - Toggle/Clear breakpoints from Run menu
-- Variable inspection with Name, Value, Type columns
+- Dark themed with monospace fonts and resizable columns
 
 ### 🌙 Dark Mode (all platforms)
 - Windows: dark title bars via DwmSetWindowAttribute
@@ -169,9 +181,29 @@ Application Code (.prg)
     → Harbour OOP (classes.prg — thin ACCESS/ASSIGN wrappers)
       → HB_FUNC Bridge (identical interface on all platforms)
         → Native Backend
-           ├── Win32 API (C++ — CreateWindowEx, GDI)
+           ├── Win32 API (C++ — CreateWindowEx, GDI, Scintilla)
            ├── Cocoa/AppKit (Objective-C — NSView, NSButton)
-           └── GTK3 (C — GtkWidget, GtkFixed, Cairo)
+           └── GTK3 (C — GtkWidget, GtkFixed, Scintilla, Cairo)
+```
+
+### Debugger Architecture
+```
+Run > Debug:
+  user.prg ──harbour -gh -b──→ user.hrb (bytecode + debug info)
+                                   │
+  IDE VM ─── hb_hrbRun() ─────────┘
+    │
+    ├─ hb_dbg_SetEntry(hook) ──→ VM calls hook on every line
+    │                               │
+    │                          ┌────┴────────────────────┐
+    │                          │ Update Locals/Call Stack │
+    │                          │ Highlight current line   │
+    │                          │ while(paused)            │
+    │                          │   gtk_main_iteration()   │
+    │                          │ ← Step/Go/Stop button    │
+    │                          └──────────────────────────┘
+    │
+    └─ User code continues...
 ```
 
 ### Performance
