@@ -3715,3 +3715,87 @@ HB_FUNC( UI_FORMALIGNSELECTED )
       [(NSView *)pForm->FOverlayView setNeedsDisplay:YES];
 }
 
+/* ======================================================================
+ * Form Designer: Undo/Redo history
+ * Stores snapshots of all control states before each operation.
+ * ====================================================================== */
+
+#define UNDO_MAX_STEPS  50
+#define UNDO_MAX_CTRLS  MAX_CHILDREN
+
+typedef struct {
+   int nType;
+   int nLeft, nTop, nWidth, nHeight;
+   char szName[32];
+   char szText[128];
+} UNDO_CTRL;
+
+typedef struct {
+   UNDO_CTRL ctrls[UNDO_MAX_CTRLS];
+   int nCount;
+} UNDO_SNAPSHOT;
+
+static UNDO_SNAPSHOT s_undoStack[UNDO_MAX_STEPS];
+static int s_undoPos = -1;
+static int s_undoCount = 0;
+
+static void UndoPushSnapshot( HBForm * pForm )
+{
+   if( !pForm ) return;
+   s_undoPos++;
+   if( s_undoPos >= UNDO_MAX_STEPS ) s_undoPos = 0;
+   if( s_undoCount < UNDO_MAX_STEPS ) s_undoCount++;
+
+   UNDO_SNAPSHOT * snap = &s_undoStack[s_undoPos];
+   snap->nCount = pForm->FChildCount;
+   for( int i = 0; i < pForm->FChildCount && i < UNDO_MAX_CTRLS; i++ )
+   {
+      HBControl * c = pForm->FChildren[i];
+      snap->ctrls[i].nType   = c->FControlType;
+      snap->ctrls[i].nLeft   = c->FLeft;
+      snap->ctrls[i].nTop    = c->FTop;
+      snap->ctrls[i].nWidth  = c->FWidth;
+      snap->ctrls[i].nHeight = c->FHeight;
+      strncpy( snap->ctrls[i].szName, c->FName, 31 );
+      strncpy( snap->ctrls[i].szText, c->FText, 127 );
+   }
+}
+
+static void UndoRestoreSnapshot( HBForm * pForm, UNDO_SNAPSHOT * snap )
+{
+   if( !pForm || !snap ) return;
+   int n = snap->nCount < pForm->FChildCount ? snap->nCount : pForm->FChildCount;
+   for( int i = 0; i < n; i++ )
+   {
+      HBControl * c = pForm->FChildren[i];
+      c->FLeft   = snap->ctrls[i].nLeft;
+      c->FTop    = snap->ctrls[i].nTop;
+      c->FWidth  = snap->ctrls[i].nWidth;
+      c->FHeight = snap->ctrls[i].nHeight;
+      if( c->FView )
+         [(NSView *)c->FView setFrame:NSMakeRect( c->FLeft, c->FTop + pForm->FClientTop,
+                                                   c->FWidth, c->FHeight )];
+   }
+   [pForm clearSelection];
+   if( pForm->FOverlayView )
+      [(NSView *)pForm->FOverlayView setNeedsDisplay:YES];
+}
+
+/* UI_FormUndoPush( hForm ) — save state before operation */
+HB_FUNC( UI_FORMUNDOPUSH )
+{
+   HBForm * pForm = (__bridge HBForm *)(void *)(HB_PTRUINT) hb_parnint(1);
+   UndoPushSnapshot( pForm );
+}
+
+/* UI_FormUndo( hForm ) — restore previous state */
+HB_FUNC( UI_FORMUNDO )
+{
+   HBForm * pForm = (__bridge HBForm *)(void *)(HB_PTRUINT) hb_parnint(1);
+   if( !pForm || s_undoCount <= 0 ) return;
+   s_undoPos--;
+   if( s_undoPos < 0 ) s_undoPos = UNDO_MAX_STEPS - 1;
+   s_undoCount--;
+   UndoRestoreSnapshot( pForm, &s_undoStack[s_undoPos] );
+}
+

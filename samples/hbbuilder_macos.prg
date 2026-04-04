@@ -84,6 +84,7 @@ function Main()
    DEFINE POPUP oEdit PROMPT "Edit" OF oIDE
    MENUITEM "Undo"  OF oEdit ACTION CodeEditorUndo( hCodeEditor )  ACCEL "z"
    MENUITEM "Redo"  OF oEdit ACTION CodeEditorRedo( hCodeEditor )  ACCEL "y"
+   MENUITEM "Undo Design"  OF oEdit ACTION UndoDesign()
    MENUSEPARATOR OF oEdit
    MENUITEM "Cut"   OF oEdit ACTION CodeEditorCut( hCodeEditor )   ACCEL "x"
    MENUITEM "Copy"  OF oEdit ACTION CodeEditorCopy( hCodeEditor )  ACCEL "c"
@@ -755,6 +756,7 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
       "PageSetup", "PrintDialog", "ReportViewer", "BarcodePrinter" }
 
    if aCnt == nil; aCnt := Array(50); AFill(aCnt,0); endif
+   UI_FormUndoPush( hForm )
    if nType < 1 .or. nType > Len(aNames) .or. Empty(aNames[nType]); return nil; endif
    aCnt[nType]++
    cName := aNames[nType] + LTrim(Str(aCnt[nType]))
@@ -1561,6 +1563,7 @@ return nil
 
 static function PasteControls()
    if oDesignForm != nil .and. UI_FormGetClipCount() > 0
+      UI_FormUndoPush( oDesignForm:hCpp )
       UI_FormPasteControls( oDesignForm:hCpp )
       SyncDesignerToCode()
    endif
@@ -1570,7 +1573,17 @@ return nil
 
 static function AlignControls( nMode )
    if oDesignForm != nil
+      UI_FormUndoPush( oDesignForm:hCpp )
       UI_FormAlignSelected( oDesignForm:hCpp, nMode )
+      SyncDesignerToCode()
+   endif
+return nil
+
+// === Undo Design ===
+
+static function UndoDesign()
+   if oDesignForm != nil
+      UI_FormUndo( oDesignForm:hCpp )
       SyncDesignerToCode()
    endif
 return nil
