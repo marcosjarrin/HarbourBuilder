@@ -334,8 +334,9 @@ void EnsureNSApp( void )
    PHB_ITEM   FOnSelChange;
    NSView *   FOverlayView;
    HBFlippedView * FContentView;
-   /* Toolbar */
-   HBToolBar * FToolBar;
+   /* Toolbars (up to 4 rows, stacked vertically) */
+   HBToolBar * FToolBars[4];
+   int         FToolBarCount;
    int         FClientTop;
    /* Menu */
    PHB_ITEM    FMenuActions[MAX_MENUITEMS];
@@ -1170,11 +1171,15 @@ void EnsureNSApp( void )
    [palData->btnPanel setFrame:NSMakeRect( rightX, 0, rightW, containerBounds.size.height - segH - 2 )];
    [palData->segmented setFrame:NSMakeRect( rightX + 4, containerBounds.size.height - segH - 1, rightW - 8, segH )];
 
-   if( palData->parentForm && palData->parentForm->FToolBar && palData->parentForm->FToolBar->FView )
-   {
-      NSRect tbFrame = [palData->parentForm->FToolBar->FView frame];
-      tbFrame.size.width = newPos;
-      [palData->parentForm->FToolBar->FView setFrame:tbFrame];
+   /* Resize all toolbars to new splitter position */
+   if( palData->parentForm ) {
+      for( int t = 0; t < palData->parentForm->FToolBarCount; t++ ) {
+         if( palData->parentForm->FToolBars[t] && palData->parentForm->FToolBars[t]->FView ) {
+            NSRect tbFrame = [palData->parentForm->FToolBars[t]->FView frame];
+            tbFrame.size.width = newPos;
+            [palData->parentForm->FToolBars[t]->FView setFrame:tbFrame];
+         }
+      }
    }
 }
 
@@ -1662,7 +1667,8 @@ static HBPaletteTarget * s_palTarget = nil;
       FCenter = YES; FSizable = NO; FAppBar = NO; FModalResult = 0; FRunning = NO; FDesignMode = NO;
       FSelCount = 0; FDragging = NO; FResizing = NO; FResizeHandle = -1;
       FOnSelChange = NULL; FOverlayView = nil; FContentView = nil;
-      FToolBar = nil; FClientTop = 0; FMenuItemCount = 0;
+      memset(FToolBars, 0, sizeof(FToolBars)); FToolBarCount = 0;
+      FClientTop = 0; FMenuItemCount = 0;
       FPendingControlType = -1; FOnComponentDrop = NULL;
       memset( FSelected, 0, sizeof(FSelected) );
       memset( FMenuActions, 0, sizeof(FMenuActions) );
@@ -1892,11 +1898,16 @@ static HBPaletteTarget * s_palTarget = nil;
 
 - (void)createAllChildren
 {
-   /* Toolbar first */
-   if( FToolBar ) {
-      FToolBar->FWidth = FWidth;
-      [FToolBar createViewInParent:FContentView];
-      FClientTop = [FToolBar barHeight];
+   /* Toolbars: stack vertically, accumulate height */
+   FClientTop = 0;
+   for( int t = 0; t < FToolBarCount; t++ )
+   {
+      if( FToolBars[t] ) {
+         FToolBars[t]->FWidth = FWidth;
+         FToolBars[t]->FTop = FClientTop;
+         [FToolBars[t] createViewInParent:FContentView];
+         FClientTop += [FToolBars[t] barHeight];
+      }
    }
 
    /* Component Palette: create tabs + splitter to the right of toolbar */
@@ -1905,9 +1916,13 @@ static HBPaletteTarget * s_palTarget = nil;
       PALDATA * pd = s_palData;
       NSRect contentBounds = [FContentView bounds];
       int tbWidth = 0;
-      if( FToolBar && FToolBar->FView ) {
-         NSRect tbFrame = [FToolBar->FView frame];
-         tbWidth = (int) tbFrame.size.width;
+      /* Use widest toolbar as reference */
+      for( int t = 0; t < FToolBarCount; t++ ) {
+         if( FToolBars[t] && FToolBars[t]->FView ) {
+            NSRect tbFrame = [FToolBars[t]->FView frame];
+            if( (int)tbFrame.size.width > tbWidth )
+               tbWidth = (int) tbFrame.size.width;
+         }
       }
       pd->nSplitPos = tbWidth;
 
@@ -2777,7 +2792,10 @@ HB_FUNC( UI_TOOLBARNEW )
    HBForm * pForm = GetForm(1);
    HBToolBar * p = [[HBToolBar alloc] init];
    KeepAlive( (HBControl *)p );
-   if( pForm ) { pForm->FToolBar = p; p->FCtrlParent = (HBControl *)pForm; }
+   if( pForm && pForm->FToolBarCount < 4 ) {
+      pForm->FToolBars[pForm->FToolBarCount++] = p;
+      p->FCtrlParent = (HBControl *)pForm;
+   }
    hb_retnint( (HB_PTRUINT) p );
 }
 
