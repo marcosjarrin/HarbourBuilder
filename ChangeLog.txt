@@ -1,6 +1,74 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-03 (Session 5: Linux IDE Panels, Dialogs, Dark Mode)
+--------------------------------------------------------------
+
+LINUX: 6 native GTK3 panels/dialogs replacing MsgInfo() placeholders
+
+  DARK MODE:
+  - GTK_SetDarkMode( lEnable ) ... sets gtk-application-prefer-dark-theme
+  - Off by default, toggle from Tools > Dark Mode menu
+  - ToggleDarkMode() in hbbuilder_linux.prg with static lDark state
+
+  DEBUGGER PANEL (GTK_DebugPanel):
+  - Floating utility window, 400x300, singleton pattern (hide on close)
+  - GtkNotebook with 5 tabs:
+    * Watch ......... 3-column TreeView (Name/Value/Type)
+    * Locals ........ 3-column TreeView with sample data (oForm, nCount, cName)
+    * Call Stack .... 2-column TreeView (Level/Location)
+    * Breakpoints .. 3-column TreeView (File/Line/Enabled)
+    * Output ........ read-only monospace GtkTextView
+  - Menu: View > Debugger (was MsgInfo placeholder)
+
+  AI ASSISTANT PANEL (GTK_AIAssistantPanel):
+  - Floating utility window, 420x550, singleton pattern
+  - Model selector ComboBox: codellama, llama3, deepseek-coder, mistral, phi3, gemma2
+  - Chat output: read-only GtkTextView, monospace, dark theme, word wrap
+  - Input entry with Send button + Enter key binding
+  - Clear button to reset chat
+  - Ollama integration via curl to localhost:11434/api/generate
+  - JSON response parsing via python3
+  - Status bar: Ready/Sending/Error + model + endpoint
+  - Menu: Tools > AI Assistant (was MsgInfo placeholder)
+
+  PROJECT INSPECTOR (GTK_ProjectInspector):
+  - Floating utility window, 250x400, singleton pattern
+  - GtkTreeStore with parent/child hierarchy from Harbour array
+  - Items starting with 2 spaces become children of previous parent
+  - All nodes auto-expanded on open
+  - Rebuilds tree when called with new array
+  - Menu: View > Project Inspector (was MsgInfo placeholder)
+
+  EDITOR COLORS DIALOG (GTK_EditorSettingsDialog):
+  - Modal GtkDialog, 480x500
+  - Font name entry + size spinner (default: Monospace 14)
+  - 9 GtkColorButton rows:
+    Background, Text, Keywords, Commands, Comments,
+    Strings, Preprocessor, Numbers, Selection
+  - Default colors: VS Code Dark+ theme
+  - Preset buttons: Dark, Light, Monokai, Solarized
+  - Live preview with sample Harbour code
+  - OK/Cancel buttons
+  - Menu: Tools > Editor Colors (was MsgInfo placeholder)
+
+  PROJECT OPTIONS DIALOG (GTK_ProjectOptionsDialog):
+  - Modal GtkDialog, 520x440
+  - GtkNotebook with 4 tabs:
+    * Harbour ...... directory, compiler flags, warnings checkbox, debug checkbox
+    * C Compiler ... directory, flags, optimization checkbox
+    * Linker ....... flags, libraries (multiline text)
+    * Directories .. project dir, output dir, include paths, library paths
+  - Accepts 10 string parameters for defaults
+  - OK/Cancel buttons
+  - Menu: Project > Options (was MsgInfo placeholder)
+
+  FILES MODIFIED:
+  - backends/gtk3/gtk3_core.c .... +580 lines (6 new HB_FUNC functions)
+  - samples/hbbuilder_linux.prg .. replaced 5 MsgInfo stubs with native calls,
+                                    added ToggleDarkMode(), Dark Mode menu item
+
+
 2026-04-03 (Session 4: Linux Scintilla Integration)
 ----------------------------------------------------
 
