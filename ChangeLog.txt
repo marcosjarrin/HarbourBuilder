@@ -73,6 +73,110 @@ SAMPLE PROJECTS (samples/projects/database/):
 BUILD: added -lhbsqlit3 -lsddsqlt3 -lrddsql -lsqlite3 to linker.
 
 
+2026-04-04 (Session 6: macOS Scintilla + Full IDE Parity + Lazarus Features)
+------------------------------------------------------------------------------
+
+macOS: Complete Scintilla 5.5.3 + Lexilla 5.4.0 integration, in-process
+debugger, professional IDE features, and full platform parity.
+
+  SCINTILLA CODE EDITOR (replaces NSTextView):
+  - Compiled from source as static libraries (libscintilla.a + liblexilla.a)
+  - New cocoa_editor.mm (Objective-C++) separate from cocoa_core.m
+  - C++ lexer via Lexilla CreateLexer("cpp") for Harbour syntax
+  - VS Code Dark+ colour scheme, Menlo 15pt font
+  - Line numbers (48px), code folding (16px, box style), indentation guides
+  - Harbour-aware folding: function/class/if/for/while/switch/begin/#pragma
+
+  KEYBOARD SHORTCUTS (NSEvent local monitor):
+  - Cmd+/ toggle comment, Cmd+Shift+D duplicate, Cmd+Shift+K delete line
+  - Cmd+L select line, Cmd+G goto line (dialog), Cmd+Space auto-complete
+  - F12 go-to-definition (function/procedure/method/class)
+  - Cmd+0..9 toggle bookmarks, Cmd+Shift+0..9 jump to bookmark
+
+  EDITOR FEATURES:
+  - Bracket matching: (), [], {} highlighted yellow; bad brackets red
+  - Bookmarks with arrow markers in margin
+  - Code snippets (Tab expansion): forn, iff, cls, func, proc, whil, swit, tryx
+  - Auto-indent on Enter (SCN_CHARADDED)
+  - Auto-complete popup (150+ Harbour keywords/functions)
+  - Status bar: Ln/Col/INS/OVR/Lines/Chars/UTF-8 (SCN_UPDATEUI)
+
+  BUILD ERROR PARSING (Messages Panel):
+  - NSTableView at bottom of editor: File | Line | Type | Message
+  - Click error row → jumps to line + red background marker
+  - Parses Harbour errors: file.prg(123) Error/Warning
+  - Parses clang errors: file.c:123:45: error/warning
+  - TBRun integration: clear/parse/display at each build step
+
+  IN-PROCESS DEBUGGER (.hrb bytecode):
+  - State machine: IDLE → STEPPING → PAUSED → RUNNING/STEPOVER → STOPPED
+  - hb_dbg_SetEntry() VM hook on every source line
+  - NSRunLoop event processing during pause (UI responsive)
+  - IDE_DebugGetLocals: variable inspection via hb_dbg_vmVarLGet
+  - Professional panel: toolbar (Run/Pause/Step/Over/Stop) + 5 tabs
+    (Watch/Locals/Call Stack/Breakpoints/Output)
+  - TBDebugRun: harbour -gh -b → .hrb → IDE_DebugStart
+
+  FORM DESIGNER IMPROVEMENTS:
+  - Copy/Paste controls (UI_FormCopySelected/PasteControls, +16px offset)
+  - Align/Distribute (8 modes): Left/Right/Top/Bottom/CenterH/CenterV/SpaceH/SpaceV
+  - Format menu with all alignment options
+
+  INSPECTOR IMPROVEMENTS:
+  - Dropdown editors for enum properties (NSMenu popup):
+    BorderStyle, Position, WindowState, FormStyle, Cursor
+
+  IDE PANELS (5 native Cocoa, replacing MsgInfo stubs):
+  - Debugger: toolbar + 5-tab NSTabView with NSTableView data sources
+  - AI Assistant: Ollama chat, 6 models, async HTTP
+  - Project Inspector: NSOutlineView
+  - Editor Colors: 4 presets (Dark/Light/Monokai/Solarized) live-applied
+  - Project Options: 4-tab dialog (Harbour/Compiler/Linker/Directories)
+
+  TOOLBAR:
+  - Multi-toolbar support (up to 4 rows, stacked vertically)
+  - Row 1: New/Open/Save | Cut/Copy/Paste | Undo/Redo | Run (toolbar.bmp)
+  - Row 2: Run/Debug | Step/Over/Go/Stop (toolbar_debug.bmp)
+  - Compact 20x20 icons, 28x28 buttons
+
+  MENU/TOOLBAR COMPLETION:
+  - All menu items functional (zero MsgInfo stubs)
+  - All toolbar buttons functional
+  - Clipboard: Undo/Redo/Cut/Copy/Paste via Scintilla API
+  - Save As, Add/Remove from Project, Install/New Component
+  - Debug Step Into/Over with smart state check (IDE_DebugGetState)
+  - Dark mode app-wide (NSAppearanceNameDarkAqua)
+
+  INCREMENTAL BUILD (build_mac.sh):
+  - needs_rebuild() checks file timestamps
+  - Only recompiles changed sources (.prg/.m/.mm)
+  - Second build runs instantly (0 compilations)
+  - Added -lhbsqlit3 -lsqlite3 for database support
+
+  DATABASE VERIFIED ON macOS:
+  - DBF: create, insert 5 records, read, structure — PASS
+  - SQLite: create table, transactions, queries, LastInsertId — PASS
+  - build_test_mac.sh for database examples
+
+  TEST SUITES:
+  - tests/test_save_load.prg: 12 tests (MemoWrit/Read, .hbp format,
+    form code gen, save/load cycle, path spaces, large file, unicode)
+
+  FILES ADDED:
+  - backends/cocoa/cocoa_editor.mm .... Scintilla editor (Obj-C++)
+  - resources/scintilla_src/ .......... Scintilla + Lexilla source
+  - tests/test_save_load.prg .......... 12 save/load tests
+  - tests/build_test_save_load.sh ..... Test build script
+  - samples/projects/database/build_test_mac.sh . DB example build
+
+  FILES MODIFIED:
+  - backends/cocoa/cocoa_core.m ....... multi-toolbar, copy/paste, align,
+                                        dropdown editors, removed NSTextView
+  - backends/cocoa/cocoa_inspector.m .. dropdown 'D' type for enums
+  - samples/build_mac.sh .............. incremental build, Scintilla linking
+  - samples/hbbuilder_macos.prg ....... all features wired, 0 stubs
+
+
 2026-04-03 (Session 5: Linux full IDE + Debugger Engine + Windows parity)
 --------------------------------------------------------------------------
 

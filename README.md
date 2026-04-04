@@ -71,6 +71,8 @@ return nil
 - WYSIWYG form designer with dot grid and snap
 - Drag & drop from component palette
 - Selection handles with rubber band multi-select
+- **Copy/Paste controls** (Cmd/Ctrl+C/V with +16px offset)
+- **Align & Distribute** (Format menu: Left/Right/Top/Bottom, Center, Space Evenly)
 - Real-time two-way tools: design ↔ code sync
 
 ### 📦 109 Components in 14 Tabs
@@ -93,6 +95,7 @@ return nil
 ### 🔍 Object Inspector
 - Properties tab with categorized grid (Appearance, Position, Behavior, Data)
 - Events tab with **dynamic event list per control type** (UI_GETALLEVENTS)
+- **Dropdown editors** for enum properties (BorderStyle, Position, WindowState, FormStyle, Cursor)
 - Double-click event → auto-generate handler code
 - Color picker, font picker, inline editing
 - ComboBox selector for all form controls
@@ -113,8 +116,13 @@ return nil
 - **Ctrl+Shift+K / Cmd+Shift+K** Delete line
 - **Ctrl+L / Cmd+L** Select line
 - **Ctrl+G / Cmd+G** Go to line
+- **F12** Go to definition (function/procedure/method/class)
+- **Bracket matching** — `()`, `[]`, `{}` highlighted yellow, bad brackets red
+- **Bookmarks** — Cmd/Ctrl+0..9 toggle, Cmd/Ctrl+Shift+0..9 jump
+- **Code snippets** — Tab expansion: `forn`, `iff`, `cls`, `func`, `proc`, `whil`, `swit`, `tryx`
 - Auto-indent on Enter (preserves previous line indentation)
 - Tabbed editor (Project1.prg + Form tabs)
+- **Build messages panel** — clickable errors, jump to line, red markers
 - Status bar: Line, Column, INS/OVR, line count, char count, UTF-8
 
 ### 🤖 Built-in AI Assistant
@@ -159,7 +167,9 @@ return nil
 - Project Options dialog (Harbour / C Compiler / Linker / Directories)
 - Editor Colors dialog with presets (Dark, Light, Monokai, Solarized)
 - Full clipboard: **Cut / Copy / Paste / Undo / Redo** via Scintilla
-- Build & Run with F9
+- **Incremental build** — only recompiles changed files (timestamp-based)
+- Build & Run with F9, **Debug** with in-process .hrb execution
+- **Database verified**: DBF (native RDD) + SQLite (hbsqlit3) working on all platforms
 
 ### 🗄️ Database Components (tested and verified)
 
