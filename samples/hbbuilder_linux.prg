@@ -1119,18 +1119,61 @@ static function TBRun()
 
    local cBuildDir, cOutput, cLog, i, lError
    local cHbDir, cHbBin, cHbInc, cHbLib, cProjDir
-   local cAllPrg, cCmd
+   local cAllPrg, cCmd, cAllCode, nHash
+   static nLastHash := 0
 
    SaveActiveFormCode()
 
    cBuildDir := "/tmp/hbbuilder_build"
+
+   // Quick check: if nothing changed since last successful build, just run
+   cAllCode := CodeEditorGetTabText( hCodeEditor, 1 )
+   for i := 1 to Len( aForms )
+      cAllCode += aForms[i][3]
+   next
+   nHash := Len( cAllCode )
+   for i := 1 to Min( Len( cAllCode ), 5000 )
+      nHash := nHash + Asc( SubStr( cAllCode, i, 1 ) ) * i
+   next
+   if nHash == nLastHash .and. nLastHash != 0 .and. File( cBuildDir + "/UserApp" )
+      GTK_ShellExec( cBuildDir + "/UserApp 2>/tmp/userapp_debug.log &" )
+      return nil
+   endif
    cHbDir   := GetEnv( "HOME" ) + "/harbour"
-   cHbBin   := cHbDir + "/bin/linux/gcc"
    cHbInc   := cHbDir + "/include"
-   cHbLib   := cHbDir + "/lib/linux/gcc"
    cProjDir := GetEnv( "HOME" ) + "/harbourbuilder"
    cLog     := ""
    lError   := .F.
+
+   // Auto-download and build Harbour if not installed
+   if ! File( cHbDir + "/bin/harbour" ) .and. ! File( cHbDir + "/bin/linux/gcc/harbour" )
+      GTK_ProgressOpen( "HbBuilder Setup - Installing Harbour Compiler", 3 )
+      GTK_ProgressStep( "Downloading Harbour compiler from GitHub..." )
+      GTK_ShellExec( "rm -rf /tmp/harbour-src" )
+      GTK_ShellExec( "git clone --depth 1 https://github.com/harbour/core.git /tmp/harbour-src 2>&1" )
+      GTK_ProgressStep( "Building Harbour compiler (this may take a few minutes)..." )
+      GTK_ShellExec( "cd /tmp/harbour-src && HB_INSTALL_PREFIX=" + cHbDir + ;
+         " make -j$(nproc) install 2>&1" )
+      GTK_ProgressStep( "Verifying installation..." )
+      GTK_ProgressClose()
+      if ! File( cHbDir + "/bin/linux/gcc/harbour" ) .and. ! File( cHbDir + "/bin/harbour" )
+         GTK_BuildErrorDialog( "Setup Failed", ;
+            "Could not build Harbour compiler." + Chr(10) + ;
+            "Please install manually:" + Chr(10) + ;
+            "  git clone https://github.com/harbour/core /tmp/harbour-src" + Chr(10) + ;
+            "  cd /tmp/harbour-src && HB_INSTALL_PREFIX=" + cHbDir + " make install" )
+         return nil
+      endif
+   endif
+
+   // Detect Harbour directory layout
+   if File( cHbDir + "/bin/linux/gcc/harbour" )
+      cHbBin := cHbDir + "/bin/linux/gcc"
+      cHbLib := cHbDir + "/lib/linux/gcc"
+   else
+      cHbBin := cHbDir + "/bin"
+      cHbLib := cHbDir + "/lib"
+   endif
 
    GTK_ShellExec( "mkdir -p " + cBuildDir )
 
@@ -1249,6 +1292,7 @@ static function TBRun()
    if lError
       GTK_BuildErrorDialog( "Build Failed", cLog )
    else
+      nLastHash := nHash
       cLog += Chr(10) + "Build succeeded. Running..." + Chr(10)
       GTK_ShellExec( cBuildDir + "/UserApp 2>/tmp/userapp_debug.log &" )
    endif

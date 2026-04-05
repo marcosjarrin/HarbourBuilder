@@ -48,7 +48,19 @@ HarbourBuilder - Cross-platform visual IDE for Harbour
   - All menus have icons: File, Edit, Search, View, Project, Run, Format, Tools, Help
   - 59 menu icon PNGs from Lazarus IDE icon set
 
+  AUTO-SETUP:
+  - Auto-download and build Harbour if not found in ~/harbour
+  - Progress dialog during download (git clone) and compilation (make)
+  - Error dialog with manual install instructions on failure
+  - Auto-detect Harbour layout (bin/linux/gcc/ vs bin/)
+  - build_gtk.sh also auto-detects Harbour layout
+
+  SMART REBUILD:
+  - Hash-based skip: if code unchanged and UserApp exists, run directly
+  - nLastHash persists across Run clicks within same session
+
   IDE INTEGRATION (hbbuilder_linux.prg):
+  - Non-visual controls show dashed blue border + 4 corner dots always (no click needed)
   - Edit menu: Form Undo, Copy Controls, Paste Controls
   - Format menu: Tab Order...
   - Toolbar Row 1: New, Open, Save | Cut, Copy, Paste | Undo, Redo | Run (matches Windows)

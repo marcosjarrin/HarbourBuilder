@@ -12,11 +12,20 @@
 
 set -e
 
-# Harbour paths - adjust these for your system
+# Harbour paths - auto-detect layout
 HBDIR="${HBDIR:-$HOME/harbour}"
-HBBIN="$HBDIR/bin/linux/gcc"
 HBINC="$HBDIR/include"
-HBLIB="$HBDIR/lib/linux/gcc"
+if [ -f "$HBDIR/bin/linux/gcc/harbour" ]; then
+   HBBIN="$HBDIR/bin/linux/gcc"
+   HBLIB="$HBDIR/lib/linux/gcc"
+elif [ -f "$HBDIR/bin/harbour" ]; then
+   HBBIN="$HBDIR/bin"
+   HBLIB="$HBDIR/lib"
+else
+   echo "ERROR: Harbour compiler not found in $HBDIR"
+   echo "  Run the IDE first - it will auto-download and build Harbour."
+   exit 1
+fi
 
 PROJDIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROG="${1:-hbbuilder_linux}"

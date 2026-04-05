@@ -654,6 +654,36 @@ static gboolean on_overlay_draw( GtkWidget * widget, cairo_t * cr, gpointer data
       cairo_fill( cr );
    }
 
+   /* Draw 4 corner dots on ALL non-visual controls (always visible, not just selected) */
+   for( int nv = 0; nv < form->base.FChildCount; nv++ )
+   {
+      HBControl * c = form->base.FChildren[nv];
+      if( !IsNonVisualControl( c->FControlType ) ) continue;
+      int l = c->FLeft, t = c->FTop, w = c->FWidth, h = c->FHeight;
+
+      /* Dashed blue border */
+      cairo_set_source_rgb( cr, 0.0, 0.47, 0.84 );
+      double nvDash[] = { 4.0, 2.0 };
+      cairo_set_dash( cr, nvDash, 2, 0 );
+      cairo_set_line_width( cr, 1.0 );
+      cairo_rectangle( cr, l - 1, t - 1, w + 2, h + 2 );
+      cairo_stroke( cr );
+      cairo_set_dash( cr, NULL, 0, 0 );
+
+      int cx[4], cy[4];
+      cx[0]=l-3; cy[0]=t-3; cx[1]=l+w-3; cy[1]=t-3;
+      cx[2]=l+w-3; cy[2]=t+h-3; cx[3]=l-3; cy[3]=t+h-3;
+      for( int j = 0; j < 4; j++ )
+      {
+         cairo_set_source_rgb( cr, 1.0, 1.0, 1.0 );
+         cairo_rectangle( cr, cx[j], cy[j], 7, 7 );
+         cairo_fill( cr );
+         cairo_set_source_rgb( cr, 0.5, 0.5, 0.5 );
+         cairo_rectangle( cr, cx[j], cy[j], 7, 7 );
+         cairo_stroke( cr );
+      }
+   }
+
    /* Draw selection handles */
    for( int i = 0; i < form->FSelCount; i++ )
    {
@@ -669,7 +699,7 @@ static gboolean on_overlay_draw( GtkWidget * widget, cairo_t * cr, gpointer data
       cairo_stroke( cr );
       cairo_set_dash( cr, NULL, 0, 0 );
 
-      /* 8 resize handles (skip for non-visual controls) */
+      /* 8 resize handles (visual controls only, non-visual dots drawn above) */
       if( ! IsNonVisualControl( ctrl->FControlType ) )
       {
          int px = l, py = t, pw = w, ph = h;
@@ -3137,8 +3167,9 @@ static void on_palette_btn_clicked( GtkButton * button, gpointer data )
    {
       if( IsNonVisualControl( nType ) )
       {
-         /* Non-visual: place immediately at next free slot (bottom of form) */
-         int nL = 8, nT = 8;
+         /* Non-visual: place at bottom-left of form, advancing right */
+         int formH = targetForm->base.FHeight;
+         int nL = 8, nT = formH - 36;
          /* Find a free position: scan existing non-visual children */
          for( int i = 0; i < targetForm->base.FChildCount; i++ )
          {
@@ -3152,7 +3183,7 @@ static void on_palette_btn_clicked( GtkButton * button, gpointer data )
                   if( nL + 28 > targetForm->base.FWidth )
                   {
                      nL = 8;
-                     nT += 36;
+                     nT -= 36;
                   }
                }
             }
