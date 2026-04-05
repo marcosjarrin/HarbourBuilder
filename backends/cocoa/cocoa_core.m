@@ -4700,14 +4700,24 @@ HB_FUNC( UI_WEBSERVERSTOP )
  * ====================================================================== */
 
 /* UI_MenuSetBitmapByPos( hForm, nPopupIdx, nItemIdx, cBmpPath ) */
+/* UI_MenuSetBitmapByPos( hPopup, nPos, cPngPath ) */
 HB_FUNC( UI_MENUSETBITMAPBYPOS )
 {
-   /* On macOS, menu item images are set via NSMenuItem setImage: */
-   /* This is a stub - full implementation needs access to the NSMenu hierarchy */
-   (void) hb_parnint(1);
-   (void) hb_parni(2);
-   (void) hb_parni(3);
-   (void) hb_parc(4);
+   NSMenu * popup = (__bridge NSMenu *)(void *)(HB_PTRUINT) hb_parnint(1);
+   int nPos = hb_parni(2);
+   const char * szPath = hb_parc(3);
+   if( !popup || !szPath ) return;
+   if( nPos < 0 || nPos >= (int)[popup numberOfItems] ) return;
+
+   NSMenuItem * item = [popup itemAtIndex:nPos];
+   if( !item || [item isSeparatorItem] ) return;
+
+   NSString * path = [NSString stringWithUTF8String:szPath];
+   NSImage * img = [[NSImage alloc] initWithContentsOfFile:path];
+   if( img ) {
+      [img setSize:NSMakeSize(16, 16)];
+      [item setImage:img];
+   }
 }
 
 /* UI_StackToolBars( hForm ) - Arrange toolbar rows vertically */
