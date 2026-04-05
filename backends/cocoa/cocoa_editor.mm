@@ -1698,6 +1698,161 @@ HB_FUNC( MAC_GITCLEARMESSAGE )
 }
 
 /* -----------------------------------------------------------------------
+ * Build Error + Progress dialogs
+ * ----------------------------------------------------------------------- */
+
+/* Build Error + Progress dialogs */
+static NSWindow * s_errDialog = nil;
+static NSTableView * s_errTable = nil;
+static NSMutableArray * s_errData = nil;
+
+static NSWindow * s_progressWin = nil;
+static NSProgressIndicator * s_progressBar = nil;
+static NSTextField * s_progressLbl = nil;
+
+@interface HBErrorTableSource : NSObject <NSTableViewDataSource>
+@end
+@implementation HBErrorTableSource
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)tv {
+    return s_errData ? (NSInteger)[s_errData count] : 0;
+}
+- (id)tableView:(NSTableView *)tv objectValueForTableColumn:(NSTableColumn *)col row:(NSInteger)row {
+    if( !s_errData || row < 0 || row >= (NSInteger)[s_errData count] ) return @"";
+    NSArray * entry = [s_errData objectAtIndex:row];
+    if( [[col identifier] isEqualToString:@"file"] )
+        return [entry count] > 0 ? [entry objectAtIndex:0] : @"";
+    else if( [[col identifier] isEqualToString:@"line"] )
+        return [entry count] > 1 ? [entry objectAtIndex:1] : @"";
+    return [entry count] > 2 ? [entry objectAtIndex:2] : @"";
+}
+@end
+static HBErrorTableSource * s_errDS = nil;
+
+/* MAC_BuildErrorDialog( aErrors ) — array of { cFile, cLine, cMessage } */
+HB_FUNC( MAC_BUILDERRORDIALOG )
+{
+   PHB_ITEM pArr = hb_param(1, HB_IT_ARRAY);
+   if( !pArr ) return;
+
+   if( !s_errData ) s_errData = [[NSMutableArray alloc] init];
+   [s_errData removeAllObjects];
+   if( !s_errDS ) s_errDS = [[HBErrorTableSource alloc] init];
+
+   int n = (int)hb_arrayLen(pArr);
+   for( int i = 1; i <= n; i++ ) {
+      PHB_ITEM pEntry = hb_arrayGetItemPtr(pArr, i);
+      if( HB_IS_ARRAY(pEntry) && hb_arrayLen(pEntry) >= 3 ) {
+         NSString * f = [NSString stringWithUTF8String:hb_arrayGetCPtr(pEntry, 1)];
+         NSString * l = [NSString stringWithUTF8String:hb_arrayGetCPtr(pEntry, 2)];
+         NSString * m = [NSString stringWithUTF8String:hb_arrayGetCPtr(pEntry, 3)];
+         [s_errData addObject:@[f, l, m]];
+      }
+   }
+
+   if( s_errDialog ) {
+      [s_errTable reloadData];
+      [s_errDialog makeKeyAndOrderFront:nil];
+      return;
+   }
+
+   NSRect frame = NSMakeRect(200, 200, 700, 400);
+   s_errDialog = [[NSWindow alloc] initWithContentRect:frame
+      styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
+      backing:NSBackingStoreBuffered defer:NO];
+   [s_errDialog setTitle:@"Build Errors"];
+   [s_errDialog setReleasedWhenClosed:NO];
+   [s_errDialog setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]];
+
+   NSView * cv = [s_errDialog contentView];
+   CGFloat w = [cv bounds].size.width, h = [cv bounds].size.height;
+
+   NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(10, 10, w-20, h-20)];
+   [sv setHasVerticalScroller:YES];
+   [sv setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+   [sv setBorderType:NSBezelBorder];
+
+   s_errTable = [[NSTableView alloc] initWithFrame:NSMakeRect(0, 0, w-20, h-20)];
+   NSTableColumn * cFile = [[NSTableColumn alloc] initWithIdentifier:@"file"];
+   [cFile setWidth:180]; [[cFile headerCell] setStringValue:@"File"];
+   NSTableColumn * cLine = [[NSTableColumn alloc] initWithIdentifier:@"line"];
+   [cLine setWidth:60]; [[cLine headerCell] setStringValue:@"Line"];
+   NSTableColumn * cMsg = [[NSTableColumn alloc] initWithIdentifier:@"message"];
+   [cMsg setWidth:420]; [[cMsg headerCell] setStringValue:@"Error"];
+   [s_errTable addTableColumn:cFile];
+   [s_errTable addTableColumn:cLine];
+   [s_errTable addTableColumn:cMsg];
+   [s_errTable setDataSource:s_errDS];
+   [s_errTable setUsesAlternatingRowBackgroundColors:YES];
+   [sv setDocumentView:s_errTable];
+   [cv addSubview:sv];
+
+   [s_errTable reloadData];
+   [s_errDialog makeKeyAndOrderFront:nil];
+}
+
+/* -----------------------------------------------------------------------
+ * Progress Dialog
+ * ----------------------------------------------------------------------- */
+
+/* MAC_ProgressOpen( cTitle, nMax ) */
+HB_FUNC( MAC_PROGRESSOPEN )
+{
+   const char * title = HB_ISCHAR(1) ? hb_parc(1) : "Working...";
+   double nMax = HB_ISNUM(2) ? hb_parnd(2) : 100.0;
+
+   if( s_progressWin ) {
+      [s_progressWin makeKeyAndOrderFront:nil];
+      return;
+   }
+
+   NSRect frame = NSMakeRect(400, 400, 360, 100);
+   s_progressWin = [[NSWindow alloc] initWithContentRect:frame
+      styleMask:NSWindowStyleMaskTitled
+      backing:NSBackingStoreBuffered defer:NO];
+   [s_progressWin setTitle:[NSString stringWithUTF8String:title]];
+   [s_progressWin setReleasedWhenClosed:NO];
+   [s_progressWin setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]];
+
+   NSView * cv = [s_progressWin contentView];
+
+   s_progressLbl = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 55, 320, 20)];
+   [s_progressLbl setStringValue:@""];
+   [s_progressLbl setEditable:NO]; [s_progressLbl setBezeled:NO]; [s_progressLbl setDrawsBackground:NO];
+   [s_progressLbl setTextColor:[NSColor colorWithCalibratedRed:0.83 green:0.83 blue:0.83 alpha:1]];
+   [cv addSubview:s_progressLbl];
+
+   s_progressBar = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(20, 25, 320, 20)];
+   [s_progressBar setStyle:NSProgressIndicatorStyleBar];
+   [s_progressBar setIndeterminate:NO];
+   [s_progressBar setMinValue:0.0];
+   [s_progressBar setMaxValue:nMax];
+   [s_progressBar setDoubleValue:0.0];
+   [cv addSubview:s_progressBar];
+
+   [s_progressWin center];
+   [s_progressWin makeKeyAndOrderFront:nil];
+}
+
+/* MAC_ProgressStep( nValue, [cMessage] ) */
+HB_FUNC( MAC_PROGRESSSTEP )
+{
+   if( s_progressBar ) [s_progressBar setDoubleValue:hb_parnd(1)];
+   if( s_progressLbl && HB_ISCHAR(2) )
+      [s_progressLbl setStringValue:[NSString stringWithUTF8String:hb_parc(2)]];
+}
+
+/* MAC_ProgressClose() */
+HB_FUNC( MAC_PROGRESSCLOSE )
+{
+   if( s_progressWin ) {
+      [s_progressWin orderOut:nil];
+      s_progressWin = nil;
+      s_progressBar = nil;
+      s_progressLbl = nil;
+   }
+}
+
+/* -----------------------------------------------------------------------
  * Editor Colors Dialog — modal dialog to configure Scintilla colors
  * ----------------------------------------------------------------------- */
 
