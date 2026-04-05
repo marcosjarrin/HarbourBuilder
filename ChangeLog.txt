@@ -38,8 +38,16 @@ HarbourBuilder - Cross-platform visual IDE for Harbour
   - UI_TCPCONNECT, UI_TCPSEND, UI_TCPRECV, UI_TCPCLOSE
   - UI_HTTPGET, UI_HTTPPOST, UI_WEBSERVERSTART, UI_WEBSERVERSTOP
 
+  NON-VISUAL COMPONENTS (matching Windows/C++Builder):
+  - Auto-drop: click in palette drops immediately, no click on form needed
+  - Shows palette icon image (from palette.bmp), not text
+  - Fixed 32x32, movable with mouse, no resize allowed
+  - Auto-layout in 40px grid at bottom of form (8 columns)
+
+  INSPECTOR:
+  - Combo shows "oForm1 AS TForm1", "oButton1 AS TButton" (matching Windows)
+
   OTHER:
-  - UI_DROPNONVISUAL: non-visual component icons on form
   - UI_MENUSETBITMAPBYPOS, UI_STACKTOOLBARS (stubs)
   - SETDPIAWARE stub (macOS handles Retina natively)
   - Toolbar row 2 matches Windows (Debug, Step, Over, Go, Stop, Exit)

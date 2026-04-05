@@ -1300,7 +1300,93 @@ void EnsureNSApp( void )
 
    /* Set pending drop mode on the design form (not the IDE bar) */
    HBForm * targetForm = s_designForm;
-   if( targetForm && targetForm->FDesignMode ) {
+   if( !targetForm || !targetForm->FDesignMode ) return;
+
+   /* Check if non-visual component (auto-drop, no click needed) */
+   int isNonVisual = 0;
+   if( ctrlType == CT_TIMER || ctrlType == CT_PAINTBOX ) isNonVisual = 1;
+   if( ctrlType >= CT_OPENDIALOG && ctrlType <= CT_REPLACEDIALOG ) isNonVisual = 1;
+   if( ctrlType >= CT_OPENAI && ctrlType <= CT_TRANSFORMER ) isNonVisual = 1;
+   if( ctrlType >= CT_DBFTABLE && ctrlType <= CT_MONGODB ) isNonVisual = 1;
+   if( ctrlType >= CT_THREAD && ctrlType <= CT_CHANNEL ) isNonVisual = 1;
+   if( ctrlType >= CT_WEBSERVER && ctrlType <= CT_UDPSOCKET ) isNonVisual = 1;
+   if( ctrlType >= CT_PREPROCESSOR && ctrlType <= CT_SCHEDULER ) isNonVisual = 1;
+   if( ctrlType >= CT_PRINTER && ctrlType <= CT_BARCODEPRINTER ) isNonVisual = 1;
+   if( ctrlType >= 110 ) isNonVisual = 1; /* Whisper, Embeddings, Connectivity, Git */
+
+   if( isNonVisual )
+   {
+      /* Auto-drop: create non-visual component icon at bottom of form */
+      int nNV = 0;
+      for( int ci = 0; ci < targetForm->FChildCount; ci++ )
+         if( targetForm->FChildren[ci]->FWidth == 32 &&
+             targetForm->FChildren[ci]->FHeight == 32 )
+            nNV++;
+      int nx = 8 + (nNV % 8) * 40;
+      int ny = targetForm->FHeight - 80 + (nNV / 8) * 40;
+      if( ny < 40 ) ny = 40;
+
+      HBControl * ctrl = [[HBControl alloc] init];
+      ctrl->FControlType = ctrlType;
+      ctrl->FLeft = nx;
+      ctrl->FTop = ny;
+      ctrl->FWidth = 32;
+      ctrl->FHeight = 32;
+      strncpy( ctrl->FClassName, t->btns[btnIdx].szTooltip, sizeof(ctrl->FClassName) - 1 );
+
+      [targetForm addChild:ctrl];
+
+      /* Create the view: palette icon image (or text fallback) */
+      if( targetForm->FContentView ) {
+         int imgIdx = ctrlType;
+         BOOL hasImage = ( palData->palImages && imgIdx > 0 &&
+                           imgIdx <= (int)[palData->palImages count] );
+         if( hasImage ) {
+            NSImageView * iv = [[NSImageView alloc] initWithFrame:
+               NSMakeRect( nx, ny + targetForm->FClientTop, 32, 32 )];
+            [iv setImage:palData->palImages[imgIdx - 1]];
+            [iv setImageScaling:NSImageScaleProportionallyUpOrDown];
+            [iv setEditable:NO];
+            ctrl->FView = (NSView *)iv;
+            [targetForm->FContentView addSubview:iv];
+         } else {
+            NSTextField * lbl = [[NSTextField alloc] initWithFrame:
+               NSMakeRect( nx, ny + targetForm->FClientTop, 32, 32 )];
+            [lbl setStringValue:[NSString stringWithUTF8String:t->btns[btnIdx].szText]];
+            [lbl setEditable:NO]; [lbl setBezeled:YES];
+            [lbl setAlignment:NSTextAlignmentCenter];
+            [lbl setFont:[NSFont systemFontOfSize:9]];
+            [lbl setDrawsBackground:YES];
+            ctrl->FView = (NSView *)lbl;
+            [targetForm->FContentView addSubview:lbl];
+         }
+      }
+
+      /* Select the new control */
+      targetForm->FSelCount = 1;
+      targetForm->FSelected[0] = ctrl;
+
+      /* Fire OnComponentDrop callback */
+      if( targetForm->FOnComponentDrop &&
+          HB_IS_BLOCK( targetForm->FOnComponentDrop ) )
+      {
+         hb_vmPushEvalSym();
+         hb_vmPush( targetForm->FOnComponentDrop );
+         hb_vmPushNumInt( (HB_PTRUINT) targetForm );
+         hb_vmPushInteger( ctrlType );
+         hb_vmPushInteger( nx );
+         hb_vmPushInteger( ny );
+         hb_vmPushInteger( 32 );
+         hb_vmPushInteger( 32 );
+         hb_vmSend( 6 );
+      }
+
+      if( targetForm->FOverlayView )
+         [targetForm->FOverlayView setNeedsDisplay:YES];
+   }
+   else
+   {
+      /* Visual control: set pending, wait for click on form */
       targetForm->FPendingControlType = ctrlType;
       [[NSCursor crosshairCursor] set];
    }
@@ -1390,8 +1476,17 @@ static HBPaletteTarget * s_palTarget = nil;
 
    int nHandle = [form hitTestHandle:pt];
    if( nHandle >= 0 ) {
-      form->FResizing = YES; form->FResizeHandle = nHandle;
-      form->FDragStartX = (int)pt.x; form->FDragStartY = (int)pt.y;
+      /* Block resize for non-visual components (32x32 fixed) */
+      if( form->FSelCount == 1 &&
+          form->FSelected[0]->FWidth == 32 && form->FSelected[0]->FHeight == 32 )
+      {
+         /* Start drag instead of resize */
+         form->FDragging = YES;
+         form->FDragStartX = (int)pt.x; form->FDragStartY = (int)pt.y;
+      } else {
+         form->FResizing = YES; form->FResizeHandle = nHandle;
+         form->FDragStartX = (int)pt.x; form->FDragStartY = (int)pt.y;
+      }
       return;
    }
 
