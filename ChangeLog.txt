@@ -1,7 +1,55 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
-2026-04-05 (Session 10: macOS Parity Update)
+2026-04-05 (Session 10b: Linux GTK3 Parity with macOS/Windows)
+
+  PHASE A - macOS PARITY:
+  - Form designer Undo/Redo (UI_FORMUNDOPUSH, UI_FORMUNDO)
+  - Copy/Paste controls (UI_FORMCOPYSELECTED, UI_FORMPASTECONTROLS, UI_FORMGETCLIPCOUNT)
+  - CodeEditorShowFindBar exposed as HB_FUNC
+  - Tab Order dialog (UI_FORMTABORDERDIALOG) with Move Up/Down and reorder
+
+  PHASE B - ADDITIONAL CONTROLS (Win32 parity):
+  - RadioButton (UI_RADIOBUTTONNEW) with Checked, GroupName
+  - BitBtn (UI_BITBTNNEW) with Glyph, Layout, Spacing
+  - Image (UI_IMAGENEW) with Picture, Stretch, Center, Proportional
+  - Shape (UI_SHAPENEW) with Shape type, PenColor, PenWidth, BrushColor
+  - Bevel (UI_BEVELNEW) with BevelStyle, BevelShape
+  - RichEdit (UI_RICHEDITNEW) with WordWrap, ScrollBars
+  - ListView (UI_LISTVIEWNEW, UI_LISTVIEWADDCOLUMN) with ViewStyle, GridLines
+  - Browse data grid (UI_BROWSENEW, UI_BROWSEADDCOL) with columns, RowHeight
+
+  BUILD SYSTEM:
+  - Progress dialog (GTK_ProgressOpen/Step/Close) during project build
+  - Build error dialog (GTK_BuildErrorDialog) with selectable/copyable text
+  - build_gtk.sh installs binary + Scintilla libs to bin/
+  - SETDPIAWARE stub for GTK3 (shared classes.prg compatibility)
+  - SQLite3 libs (-lhbsqlit3 -lsddsqlt3 -lrddsql -lsqlite3) in user project linking
+  - Fixed cProjDir path (harbourbuilder instead of hbcpp)
+
+  NON-VISUAL COMPONENTS:
+  - Non-visual controls (Timer, Dialogs, DB, AI, Threading, Internet, ERP, Printing)
+    appear as 28x28 palette icon on the form, movable but not resizable
+  - Auto-drop: click palette icon -> component placed directly (no rubber band)
+  - Palette icon cache (s_paletteIcons[]) for rendering on form
+  - IsNonVisualControl() helper for design mode behavior
+
+  MENU ICONS:
+  - UI_MenuSetBitmapByPos() — 16x16 PNG icons on menu items (GTK3)
+  - All menus have icons: File, Edit, Search, View, Project, Run, Format, Tools, Help
+  - 59 menu icon PNGs from Lazarus IDE icon set
+
+  IDE INTEGRATION (hbbuilder_linux.prg):
+  - Edit menu: Form Undo, Copy Controls, Paste Controls
+  - Format menu: Tab Order...
+  - Toolbar Row 1: New, Open, Save | Cut, Copy, Paste | Undo, Redo | Run (matches Windows)
+  - Toolbar Row 2: Debug | Step, Over, Go, Stop | Exit (matches Windows)
+  - Toolbar/palette splitter at 308px for button visibility
+  - Form designer always resizable in design mode
+  - Inspector width +20px for better readability
+  - All new controls registered in inspector (GetAllProps/SetProp)
+
+2026-04-05 (Session 10a: macOS Parity Update)
 
   macOS IDE brought to full feature parity with Windows (217 vs 162 HB_FUNC).
 
