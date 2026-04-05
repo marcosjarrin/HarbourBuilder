@@ -2268,6 +2268,33 @@ HB_FUNC( UI_GROUPBOXNEW )
    if( pForm ) [pForm addChild:p]; RetCtrl( p );
 }
 
+HB_FUNC( UI_IMAGENEW )
+{
+   HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
+   p->FControlType = CT_IMAGE;
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) [pForm addChild:p]; RetCtrl( p );
+}
+
+HB_FUNC( UI_SHAPENEW )
+{
+   HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
+   p->FControlType = CT_SHAPE;
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) [pForm addChild:p]; RetCtrl( p );
+}
+
+HB_FUNC( UI_BEVELNEW )
+{
+   HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
+   p->FControlType = CT_BEVEL;
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) [pForm addChild:p]; RetCtrl( p );
+}
+
 /* --- Property access --- */
 
 HB_FUNC( UI_SETPROP )
