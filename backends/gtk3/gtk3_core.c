@@ -3476,6 +3476,10 @@ typedef struct {
    int            bReplaceVisible;
    /* Status bar */
    GtkWidget *    statusBar;
+   /* Message/Error panel */
+   GtkWidget *    msgPanel;      /* GtkScrolledWindow containing msgTree */
+   GtkWidget *    msgTree;       /* GtkTreeView for messages */
+   GtkListStore * msgStore;      /* columns: type, line, col, message, file */
 } CODEEDITOR;
 
 /* Save current Scintilla text to the active tab's buffer */
@@ -3719,6 +3723,25 @@ static void CE_ShowFindBar( CODEEDITOR * ed, int bShow, int bReplace )
    } else {
       gtk_widget_hide( ed->findBar );
       gtk_widget_grab_focus( ed->sciWidget );
+   }
+}
+
+static void on_msg_row_activated( GtkTreeView * tv, GtkTreePath * path,
+   GtkTreeViewColumn * col, gpointer data )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)data;
+   GtkTreeIter iter;
+
+   if( !ed || !ed->sciWidget ) return;
+   if( !gtk_tree_model_get_iter( GTK_TREE_MODEL(ed->msgStore), &iter, path ) ) return;
+
+   gchar * sLine = NULL;
+   gtk_tree_model_get( GTK_TREE_MODEL(ed->msgStore), &iter, 1, &sLine, -1 );
+   if( sLine ) {
+      int nLine = atoi( sLine ) - 1;  /* Scintilla is 0-based */
+      if( nLine >= 0 )
+         SciMsg( ed->sciWidget, 2024 /* SCI_GOTOLINE */, nLine, 0 );
+      g_free( sLine );
    }
 }
 
@@ -4008,6 +4031,45 @@ HB_FUNC( CODEEDITORCREATE )
       ed->bFindVisible = 0;
       ed->bReplaceVisible = 0;
    }
+
+      /* --- Messages/Error panel --- */
+      {
+         GtkWidget * msgScroll = gtk_scrolled_window_new( NULL, NULL );
+         gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW(msgScroll),
+            GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
+         gtk_widget_set_size_request( msgScroll, -1, 120 );
+
+         ed->msgStore = gtk_list_store_new( 5,
+            G_TYPE_STRING,  /* 0: type (Error/Warning/Info) */
+            G_TYPE_STRING,  /* 1: line */
+            G_TYPE_STRING,  /* 2: col */
+            G_TYPE_STRING,  /* 3: message */
+            G_TYPE_STRING   /* 4: file */
+         );
+
+         ed->msgTree = gtk_tree_view_new_with_model( GTK_TREE_MODEL(ed->msgStore) );
+         g_object_unref( ed->msgStore );
+
+         GtkCellRenderer * ren = gtk_cell_renderer_text_new();
+         gtk_tree_view_append_column( GTK_TREE_VIEW(ed->msgTree),
+            gtk_tree_view_column_new_with_attributes( "Type", ren, "text", 0, NULL ) );
+         gtk_tree_view_append_column( GTK_TREE_VIEW(ed->msgTree),
+            gtk_tree_view_column_new_with_attributes( "Line", ren, "text", 1, NULL ) );
+         gtk_tree_view_append_column( GTK_TREE_VIEW(ed->msgTree),
+            gtk_tree_view_column_new_with_attributes( "Message", ren, "text", 3, NULL ) );
+         gtk_tree_view_append_column( GTK_TREE_VIEW(ed->msgTree),
+            gtk_tree_view_column_new_with_attributes( "File", ren, "text", 4, NULL ) );
+
+         gtk_container_add( GTK_CONTAINER(msgScroll), ed->msgTree );
+         gtk_box_pack_start( GTK_BOX(vbox), msgScroll, FALSE, FALSE, 0 );
+         ed->msgPanel = msgScroll;
+
+         g_signal_connect( ed->msgTree, "row-activated",
+            G_CALLBACK(on_msg_row_activated), ed );
+
+         gtk_widget_show_all( msgScroll );
+         gtk_widget_hide( msgScroll );  /* hidden by default */
+      }
 
    /* Status bar at bottom */
    ed->statusBar = gtk_label_new( "  Ln 1, Col 1      INS      0 lines      0 chars      UTF-8" );
@@ -4833,6 +4895,122 @@ HB_FUNC( CODEEDITORSHOWFINDBAR )
    CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
    int bReplace = HB_ISLOG(2) ? hb_parl(2) : 0;
    if( ed ) CE_ShowFindBar( ed, 1, bReplace );
+}
+
+/* CodeEditorClearMessages( hEditor ) */
+HB_FUNC( CODEEDITORCLEARMESSAGES )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed || !ed->msgStore ) return;
+   gtk_list_store_clear( ed->msgStore );
+   if( ed->msgPanel )
+      gtk_widget_hide( ed->msgPanel );
+}
+
+/* CodeEditorAddMessage( hEditor, cFile, nLine, cType, cMessage ) */
+HB_FUNC( CODEEDITORADDMESSAGE )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed || !ed->msgStore ) return;
+
+   const char * file = HB_ISCHAR(2) ? hb_parc(2) : "";
+   int nLine = HB_ISNUM(3) ? hb_parni(3) : 0;
+   const char * type = HB_ISCHAR(4) ? hb_parc(4) : "";
+   const char * msg  = HB_ISCHAR(5) ? hb_parc(5) : "";
+
+   char sLine[16];
+   snprintf( sLine, sizeof(sLine), "%d", nLine );
+
+   GtkTreeIter iter;
+   gtk_list_store_append( ed->msgStore, &iter );
+   gtk_list_store_set( ed->msgStore, &iter,
+      0, type, 1, sLine, 2, "", 3, msg, 4, file, -1 );
+
+   if( ed->msgPanel )
+      gtk_widget_show( ed->msgPanel );
+}
+
+/* CodeEditorParseErrors( hEditor, cOutput ) — parse Harbour + gcc error output */
+HB_FUNC( CODEEDITORPARSEERRORS )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed || !ed->msgStore || !HB_ISCHAR(2) ) return;
+
+   const char * output = hb_parc(2);
+   int nErrors = 0;
+
+   const char * p = output;
+   while( *p )
+   {
+      const char * eol = p;
+      while( *eol && *eol != '\n' ) eol++;
+
+      int lineLen = (int)(eol - p);
+      if( lineLen > 0 && lineLen < 1024 )
+      {
+         char line[1024];
+         memcpy( line, p, lineLen );
+         line[lineLen] = 0;
+
+         /* Pattern 1: Harbour — "file.prg(123) Error E0020  description" */
+         char * paren = strchr( line, '(' );
+         if( paren && strstr( line, "Error" ) )
+         {
+            *paren = 0;
+            int nLine = atoi( paren + 1 );
+            char * desc = strstr( paren + 1, "Error" );
+            if( desc ) {
+               GtkTreeIter iter;
+               char sLine[16]; snprintf( sLine, sizeof(sLine), "%d", nLine );
+               gtk_list_store_append( ed->msgStore, &iter );
+               gtk_list_store_set( ed->msgStore, &iter,
+                  0, "Error", 1, sLine, 2, "", 3, desc, 4, line, -1 );
+               nErrors++;
+            }
+         }
+         /* Pattern 1b: Harbour Warning */
+         else if( paren && strstr( line, "Warning" ) )
+         {
+            *paren = 0;
+            int nLine = atoi( paren + 1 );
+            char * desc = strstr( paren + 1, "Warning" );
+            if( desc ) {
+               GtkTreeIter iter;
+               char sLine[16]; snprintf( sLine, sizeof(sLine), "%d", nLine );
+               gtk_list_store_append( ed->msgStore, &iter );
+               gtk_list_store_set( ed->msgStore, &iter,
+                  0, "Warning", 1, sLine, 2, "", 3, desc, 4, line, -1 );
+            }
+         }
+         /* Pattern 2: gcc/clang — "file.c:123:45: error: description" */
+         else if( strstr( line, ": error:" ) || strstr( line, ": warning:" ) )
+         {
+            char * colon1 = strchr( line, ':' );
+            if( colon1 ) {
+               *colon1 = 0;
+               int nLine = atoi( colon1 + 1 );
+               char * typeStr = strstr( colon1 + 1, "error:" );
+               if( !typeStr ) typeStr = strstr( colon1 + 1, "warning:" );
+               if( typeStr ) {
+                  const char * tName = ( typeStr[0] == 'e' ) ? "Error" : "Warning";
+                  GtkTreeIter iter;
+                  char sLine[16]; snprintf( sLine, sizeof(sLine), "%d", nLine );
+                  gtk_list_store_append( ed->msgStore, &iter );
+                  gtk_list_store_set( ed->msgStore, &iter,
+                     0, tName, 1, sLine, 2, "", 3, typeStr, 4, line, -1 );
+                  nErrors++;
+               }
+            }
+         }
+      }
+
+      p = ( *eol == '\n' ) ? eol + 1 : eol;
+   }
+
+   if( nErrors > 0 && ed->msgPanel )
+      gtk_widget_show( ed->msgPanel );
+
+   hb_retni( nErrors );
 }
 
 /* ======================================================================
