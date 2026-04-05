@@ -7350,3 +7350,89 @@ HB_FUNC( RPT_PREVIEWRENDER )
    rpt_prv_redraw();
 }
 
+/* ======================================================================
+ * Undo/Redo stack for form designer
+ * ====================================================================== */
+
+#define UNDO_MAX_STEPS  50
+#define UNDO_MAX_CTRLS  MAX_CHILDREN
+
+typedef struct {
+   int nType;
+   int nLeft, nTop, nWidth, nHeight;
+   char szName[32];
+   char szText[128];
+} UNDO_CTRL;
+
+typedef struct {
+   UNDO_CTRL ctrls[UNDO_MAX_CTRLS];
+   int nCount;
+} UNDO_SNAPSHOT;
+
+static UNDO_SNAPSHOT s_undoStack[UNDO_MAX_STEPS];
+static int s_undoPos = -1;
+static int s_undoCount = 0;
+
+static void UndoPushSnapshot( HBForm * pForm )
+{
+   if( !pForm ) return;
+   s_undoPos++;
+   if( s_undoPos >= UNDO_MAX_STEPS ) s_undoPos = 0;
+   if( s_undoCount < UNDO_MAX_STEPS ) s_undoCount++;
+
+   UNDO_SNAPSHOT * snap = &s_undoStack[s_undoPos];
+   snap->nCount = pForm->base.FChildCount;
+   for( int i = 0; i < pForm->base.FChildCount && i < UNDO_MAX_CTRLS; i++ )
+   {
+      HBControl * c = pForm->base.FChildren[i];
+      snap->ctrls[i].nType   = c->FControlType;
+      snap->ctrls[i].nLeft   = c->FLeft;
+      snap->ctrls[i].nTop    = c->FTop;
+      snap->ctrls[i].nWidth  = c->FWidth;
+      snap->ctrls[i].nHeight = c->FHeight;
+      strncpy( snap->ctrls[i].szName, c->FName, 31 );
+      strncpy( snap->ctrls[i].szText, c->FText, 127 );
+   }
+}
+
+static void UndoRestoreSnapshot( HBForm * pForm, UNDO_SNAPSHOT * snap )
+{
+   if( !pForm || !snap ) return;
+   int n = snap->nCount < pForm->base.FChildCount ? snap->nCount : pForm->base.FChildCount;
+   for( int i = 0; i < n; i++ )
+   {
+      HBControl * c = pForm->base.FChildren[i];
+      c->FLeft   = snap->ctrls[i].nLeft;
+      c->FTop    = snap->ctrls[i].nTop;
+      c->FWidth  = snap->ctrls[i].nWidth;
+      c->FHeight = snap->ctrls[i].nHeight;
+      /* Update the GTK widget position/size */
+      if( c->FWidget && pForm->FFixed )
+      {
+         gtk_fixed_move( GTK_FIXED(pForm->FFixed), c->FWidget, c->FLeft, c->FTop );
+         gtk_widget_set_size_request( c->FWidget, c->FWidth, c->FHeight );
+      }
+   }
+   /* Redraw selection handles */
+   if( pForm->FOverlay )
+      gtk_widget_queue_draw( pForm->FOverlay );
+}
+
+/* UI_FormUndoPush( hForm ) — save state before operation */
+HB_FUNC( UI_FORMUNDOPUSH )
+{
+   HBForm * pForm = GetForm(1);
+   UndoPushSnapshot( pForm );
+}
+
+/* UI_FormUndo( hForm ) — restore previous state */
+HB_FUNC( UI_FORMUNDO )
+{
+   HBForm * pForm = GetForm(1);
+   if( !pForm || s_undoCount <= 0 ) return;
+   s_undoCount--;
+   s_undoPos--;
+   if( s_undoPos < 0 ) s_undoPos = UNDO_MAX_STEPS - 1;
+   UndoRestoreSnapshot( pForm, &s_undoStack[s_undoPos] );
+}
+

@@ -85,6 +85,8 @@ function Main()
    MENUITEM "Cut"   OF oEdit ACTION CodeEditorCut( hCodeEditor )   ACCEL "x"
    MENUITEM "Copy"  OF oEdit ACTION CodeEditorCopy( hCodeEditor )  ACCEL "c"
    MENUITEM "Paste" OF oEdit ACTION CodeEditorPaste( hCodeEditor ) ACCEL "v"
+   MENUSEPARATOR OF oEdit
+   MENUITEM "Form Undo"  OF oEdit ACTION FormUndo()
 
    DEFINE POPUP oSearch PROMPT "Search" OF oIDE
    MENUITEM "Find..."        OF oSearch ACTION CodeEditorFind( hCodeEditor )          ACCEL "f"
@@ -689,6 +691,9 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
 
    local cName, nCount, hCtrl
    static aCnt := nil
+
+   // Push undo before adding control
+   UI_FormUndoPush( hForm )
    static aNames := { ;
       "Label", "Edit", "Button", "CheckBox", "ComboBox", "GroupBox", ;
       "ListBox", "RadioButton", "", "", "", "BitBtn", "SpeedButton", ;
@@ -1407,6 +1412,7 @@ return nil
 
 static function AlignControls( nMode )
    if oDesignForm != nil
+      UI_FormUndoPush( oDesignForm:hCpp )
       UI_FormAlignSelected( oDesignForm:hCpp, nMode )
       SyncDesignerToCode()
    endif
@@ -1453,6 +1459,14 @@ static function ShowAbout()
 
    GTK_AboutDialog( "About HbBuilder", cMsg, "../resources/harbour_logo.png" )
 
+return nil
+
+static function FormUndo()
+   if oDesignForm != nil
+      UI_FormUndo( oDesignForm:hCpp )
+      InspectorRefresh( oDesignForm:hCpp )
+      SyncDesignerToCode()
+   endif
 return nil
 
 // === Report Designer ===
