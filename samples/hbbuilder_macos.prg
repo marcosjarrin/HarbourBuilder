@@ -1178,7 +1178,8 @@ static function TBRun()
 
    local cBuildDir, cOutput, cLog, i, lError, nErrors
    local cHbDir, cHbBin, cHbInc, cHbLib, cProjDir
-   local cAllPrg, cCmd
+   local cAllPrg, cCmd, cAllCode, nHash
+   static nLastHash := 0
 
    SaveActiveFormCode()
 
@@ -1191,13 +1192,28 @@ static function TBRun()
    cLog     := ""
    lError   := .F.
 
+   // Quick check: if nothing changed since last successful build, just run
+   cAllCode := CodeEditorGetTabText( hCodeEditor, 1 )
+   for i := 1 to Len( aForms )
+      cAllCode += aForms[i][3]
+   next
+   nHash := Len( cAllCode )
+   for i := 1 to Min( Len( cAllCode ), 5000 )
+      nHash := nHash + Asc( SubStr( cAllCode, i, 1 ) ) * i
+   next
+   if nHash == nLastHash .and. nLastHash != 0 .and. ;
+      File( cBuildDir + "/UserApp.app/Contents/MacOS/UserApp" )
+      MAC_ShellExec( "open " + cBuildDir + "/UserApp.app" )
+      return nil
+   endif
+
    MAC_ShellExec( "mkdir -p " + cBuildDir )
 
-   // Clear messages panel
-   CodeEditorClearMessages( hCodeEditor )
-   CodeEditorAddMessage( hCodeEditor, "", 0, "Info", "Build started..." )
+   // Show progress dialog (7 steps)
+   MAC_ProgressOpen( "Building Project...", 7 )
 
    // Step 1: Save files
+   MAC_ProgressStep( 1, "Saving project files..." )
    cLog += "[1] Saving project files..." + Chr(10)
    MemoWrit( cBuildDir + "/Project1.prg", CodeEditorGetTabText( hCodeEditor, 1 ) )
    for i := 1 to Len( aForms )
@@ -1208,6 +1224,7 @@ static function TBRun()
    MAC_ShellExec( "cp " + cProjDir + "/harbour/hbbuilder.ch " + cBuildDir + "/" )
 
    // Step 2: Assemble main.prg
+   MAC_ProgressStep( 2, "Assembling main.prg..." )
    cLog += "[2] Building main.prg..." + Chr(10)
    cAllPrg := '#include "hbbuilder.ch"' + Chr(10)
    cAllPrg += "REQUEST HB_GT_GUI_DEFAULT" + Chr(10) + Chr(10)
@@ -1220,6 +1237,7 @@ static function TBRun()
 
    // Step 3: Compile user code with Harbour
    if ! lError
+      MAC_ProgressStep( 3, "Compiling Harbour code..." )
       cLog += "[3] Compiling main.prg..." + Chr(10)
       cCmd := cHbBin + "/harbour " + cBuildDir + "/main.prg -n -w -q" + ;
               " -I" + cHbInc + " -I" + cBuildDir + ;
@@ -1228,15 +1246,14 @@ static function TBRun()
       if "Error" $ cOutput
          cLog += "    FAILED:" + Chr(10) + cOutput + Chr(10)
          lError := .T.
-         CodeEditorParseErrors( hCodeEditor, cOutput )
       else
          cLog += "    OK" + Chr(10)
-         CodeEditorAddMessage( hCodeEditor, "", 0, "OK", "[3] Harbour compilation OK" )
       endif
    endif
 
    // Step 4: Compile framework
    if ! lError
+      MAC_ProgressStep( 4, "Compiling framework..." )
       cLog += "[4] Compiling framework..." + Chr(10)
       cCmd := cHbBin + "/harbour " + cBuildDir + "/classes.prg -n -w -q" + ;
               " -I" + cHbInc + " -I" + cBuildDir + ;
@@ -1247,6 +1264,7 @@ static function TBRun()
 
    // Step 5: Compile C
    if ! lError
+      MAC_ProgressStep( 5, "Compiling C sources..." )
       cLog += "[5] Compiling C sources..." + Chr(10)
       cCmd := "clang -c -O2 -Wno-unused-value -I" + cHbInc + ;
               " " + cBuildDir + "/main.c -o " + cBuildDir + "/main.o 2>&1"
@@ -1254,9 +1272,8 @@ static function TBRun()
       if ! Empty( cOutput ) .and. "error" $ Lower( cOutput )
          cLog += "    FAILED:" + Chr(10) + cOutput + Chr(10)
          lError := .T.
-         CodeEditorParseErrors( hCodeEditor, cOutput )
       else
-         CodeEditorAddMessage( hCodeEditor, "", 0, "OK", "[5] C compilation OK" )
+         cLog += "    OK" + Chr(10)
       endif
       cCmd := "clang -c -O2 -Wno-unused-value -I" + cHbInc + ;
               " " + cBuildDir + "/classes.c -o " + cBuildDir + "/classes.o 2>&1"
@@ -1264,12 +1281,20 @@ static function TBRun()
       cLog += "    OK" + Chr(10)
    endif
 
-   // Step 6: Compile Cocoa backend + GT dummy
+   // Step 6: Compile Cocoa backend + editor + GT dummy
    if ! lError
+      MAC_ProgressStep( 6, "Compiling Cocoa backend..." )
       cLog += "[6] Compiling Cocoa backend..." + Chr(10)
       cCmd := "clang -c -O2 -fobjc-arc -I" + cHbInc + ;
               " " + cProjDir + "/backends/cocoa/cocoa_core.m" + ;
               " -o " + cBuildDir + "/cocoa_core.o 2>&1"
+      MAC_ShellExec( cCmd )
+      cCmd := "clang++ -c -O2 -std=c++17 -fobjc-arc -I" + cHbInc + ;
+              " -I" + cProjDir + "/resources/scintilla_src/scintilla/include" + ;
+              " -I" + cProjDir + "/resources/scintilla_src/scintilla/cocoa" + ;
+              " -I" + cProjDir + "/resources/scintilla_src/lexilla/include" + ;
+              " " + cProjDir + "/backends/cocoa/cocoa_editor.mm" + ;
+              " -o " + cBuildDir + "/cocoa_editor.o 2>&1"
       MAC_ShellExec( cCmd )
       cCmd := "clang -c -O2 -I" + cHbInc + ;
               " " + cHbDir + "/src/rtl/gtgui/gtgui.c" + ;
@@ -1284,38 +1309,49 @@ static function TBRun()
 
    // Step 7: Link
    if ! lError
+      MAC_ProgressStep( 7, "Linking executable..." )
       cLog += "[7] Linking..." + Chr(10)
       cCmd := "clang++ -o " + cBuildDir + "/UserApp" + ;
               " " + cBuildDir + "/main.o" + ;
               " " + cBuildDir + "/classes.o" + ;
               " " + cBuildDir + "/cocoa_core.o" + ;
+              " " + cBuildDir + "/cocoa_editor.o" + ;
               " " + cBuildDir + "/gtgui.o" + ;
               " " + cBuildDir + "/gt_dummy.o" + ;
+              " " + cProjDir + "/resources/scintilla_src/build/libscintilla.a" + ;
+              " " + cProjDir + "/resources/scintilla_src/build/liblexilla.a" + ;
               " -L" + cHbLib + ;
               " -lhbvm -lhbrtl -lhbcommon -lhbcpage -lhblang" + ;
               " -lhbmacro -lhbpp -lhbrdd -lhbcplr -lhbdebug" + ;
-              " -lhbct -lhbextern" + ;
+              " -lhbct -lhbextern -lhbsqlit3" + ;
               " -lrddntx -lrddnsx -lrddcdx -lrddfpt" + ;
               " -lhbhsx -lhbsix -lhbusrrdd" + ;
               " -lgtcgi -lgtstd" + ;
-              " -framework Cocoa -framework UniformTypeIdentifiers" + ;
-              " -lm -lpthread 2>&1"
+              " -framework Cocoa -framework UniformTypeIdentifiers -framework QuartzCore" + ;
+              " -lm -lpthread -lc++ -lsqlite3 2>&1"
       cOutput := MAC_ShellExec( cCmd )
       if "error" $ Lower( cOutput )
          cLog += "    FAILED:" + Chr(10) + cOutput + Chr(10)
          lError := .T.
-         CodeEditorParseErrors( hCodeEditor, cOutput )
       else
          cLog += "    OK" + Chr(10)
-         CodeEditorAddMessage( hCodeEditor, "", 0, "OK", "[7] Linking OK" )
       endif
    endif
 
+   // Write full build log
+   MemoWrit( cBuildDir + "/build_trace.log", cLog )
+
+   // Close progress dialog
+   MAC_ProgressClose()
+
    // Result
    if lError
-      CodeEditorAddMessage( hCodeEditor, "", 0, "Error", "BUILD FAILED - see errors above" )
+      MAC_BuildErrorDialog( "Build Failed", cLog )
+   elseif ! File( cBuildDir + "/UserApp" )
+      cLog += Chr(10) + "ERROR: UserApp was not created." + Chr(10)
+      MAC_BuildErrorDialog( "Build Failed", cLog )
    else
-      cLog += Chr(10) + "Build succeeded. Running..." + Chr(10)
+      nLastHash := nHash
       // Create .app bundle and launch (macOS needs bundle for GUI app)
       MAC_ShellExec( "mkdir -p " + cBuildDir + "/UserApp.app/Contents/MacOS" )
       MAC_ShellExec( "cp " + cBuildDir + "/UserApp " + cBuildDir + "/UserApp.app/Contents/MacOS/" )
@@ -1324,11 +1360,8 @@ static function TBRun()
          '<plist version="1.0"><dict>' + Chr(10) + ;
          '<key>CFBundleExecutable</key><string>UserApp</string>' + Chr(10) + ;
          '</dict></plist>' + Chr(10) )
-      CodeEditorAddMessage( hCodeEditor, "", 0, "OK", "Build succeeded. Running UserApp..." )
       MAC_ShellExec( "open " + cBuildDir + "/UserApp.app" )
    endif
-
-return nil
 
 return nil
 

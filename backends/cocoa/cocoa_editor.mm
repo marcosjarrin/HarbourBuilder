@@ -1703,90 +1703,88 @@ HB_FUNC( MAC_GITCLEARMESSAGE )
 
 /* Build Error + Progress dialogs */
 static NSWindow * s_errDialog = nil;
-static NSTableView * s_errTable = nil;
-static NSMutableArray * s_errData = nil;
+static NSTextView * s_errTextView = nil;
 
 static NSWindow * s_progressWin = nil;
 static NSProgressIndicator * s_progressBar = nil;
 static NSTextField * s_progressLbl = nil;
 
-@interface HBErrorTableSource : NSObject <NSTableViewDataSource>
+/* Target for Copy to Clipboard button */
+@interface HBErrCopyTarget : NSObject
+- (void)copyLog:(id)sender;
+- (void)closeDialog:(id)sender;
 @end
-@implementation HBErrorTableSource
-- (NSInteger)numberOfRowsInTableView:(NSTableView *)tv {
-    return s_errData ? (NSInteger)[s_errData count] : 0;
+@implementation HBErrCopyTarget
+- (void)copyLog:(id)sender {
+   if( s_errTextView ) {
+      NSString * text = [[s_errTextView textStorage] string];
+      NSPasteboard * pb = [NSPasteboard generalPasteboard];
+      [pb clearContents];
+      [pb setString:text forType:NSPasteboardTypeString];
+   }
 }
-- (id)tableView:(NSTableView *)tv objectValueForTableColumn:(NSTableColumn *)col row:(NSInteger)row {
-    if( !s_errData || row < 0 || row >= (NSInteger)[s_errData count] ) return @"";
-    NSArray * entry = [s_errData objectAtIndex:row];
-    if( [[col identifier] isEqualToString:@"file"] )
-        return [entry count] > 0 ? [entry objectAtIndex:0] : @"";
-    else if( [[col identifier] isEqualToString:@"line"] )
-        return [entry count] > 1 ? [entry objectAtIndex:1] : @"";
-    return [entry count] > 2 ? [entry objectAtIndex:2] : @"";
+- (void)closeDialog:(id)sender {
+   if( s_errDialog ) [s_errDialog orderOut:nil];
 }
 @end
-static HBErrorTableSource * s_errDS = nil;
+static HBErrCopyTarget * s_errCopyTarget = nil;
 
-/* MAC_BuildErrorDialog( aErrors ) — array of { cFile, cLine, cMessage } */
+/* MAC_BuildErrorDialog( cTitle, cLog ) — show build log in scrollable monospaced text */
 HB_FUNC( MAC_BUILDERRORDIALOG )
 {
-   PHB_ITEM pArr = hb_param(1, HB_IT_ARRAY);
-   if( !pArr ) return;
+   const char * cTitle = HB_ISCHAR(1) ? hb_parc(1) : "Build Error";
+   const char * cLog   = HB_ISCHAR(2) ? hb_parc(2) : "";
 
-   if( !s_errData ) s_errData = [[NSMutableArray alloc] init];
-   [s_errData removeAllObjects];
-   if( !s_errDS ) s_errDS = [[HBErrorTableSource alloc] init];
-
-   int n = (int)hb_arrayLen(pArr);
-   for( int i = 1; i <= n; i++ ) {
-      PHB_ITEM pEntry = hb_arrayGetItemPtr(pArr, i);
-      if( HB_IS_ARRAY(pEntry) && hb_arrayLen(pEntry) >= 3 ) {
-         NSString * f = [NSString stringWithUTF8String:hb_arrayGetCPtr(pEntry, 1)];
-         NSString * l = [NSString stringWithUTF8String:hb_arrayGetCPtr(pEntry, 2)];
-         NSString * m = [NSString stringWithUTF8String:hb_arrayGetCPtr(pEntry, 3)];
-         [s_errData addObject:@[f, l, m]];
-      }
-   }
+   if( !s_errCopyTarget ) s_errCopyTarget = [[HBErrCopyTarget alloc] init];
 
    if( s_errDialog ) {
-      [s_errTable reloadData];
+      [s_errDialog setTitle:[NSString stringWithUTF8String:cTitle]];
+      [s_errTextView setString:[NSString stringWithUTF8String:cLog]];
       [s_errDialog makeKeyAndOrderFront:nil];
       return;
    }
 
-   NSRect frame = NSMakeRect(200, 200, 700, 400);
+   NSRect frame = NSMakeRect(200, 200, 620, 400);
    s_errDialog = [[NSWindow alloc] initWithContentRect:frame
       styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
       backing:NSBackingStoreBuffered defer:NO];
-   [s_errDialog setTitle:@"Build Errors"];
+   [s_errDialog setTitle:[NSString stringWithUTF8String:cTitle]];
    [s_errDialog setReleasedWhenClosed:NO];
    [s_errDialog setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]];
 
    NSView * cv = [s_errDialog contentView];
    CGFloat w = [cv bounds].size.width, h = [cv bounds].size.height;
 
-   NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(10, 10, w-20, h-20)];
+   /* Scrollable text view with build log (read-only, selectable, monospaced) */
+   NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(8, 48, w-16, h-56)];
    [sv setHasVerticalScroller:YES];
+   [sv setHasHorizontalScroller:YES];
    [sv setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
    [sv setBorderType:NSBezelBorder];
 
-   s_errTable = [[NSTableView alloc] initWithFrame:NSMakeRect(0, 0, w-20, h-20)];
-   NSTableColumn * cFile = [[NSTableColumn alloc] initWithIdentifier:@"file"];
-   [cFile setWidth:180]; [[cFile headerCell] setStringValue:@"File"];
-   NSTableColumn * cLine = [[NSTableColumn alloc] initWithIdentifier:@"line"];
-   [cLine setWidth:60]; [[cLine headerCell] setStringValue:@"Line"];
-   NSTableColumn * cMsg = [[NSTableColumn alloc] initWithIdentifier:@"message"];
-   [cMsg setWidth:420]; [[cMsg headerCell] setStringValue:@"Error"];
-   [s_errTable addTableColumn:cFile];
-   [s_errTable addTableColumn:cLine];
-   [s_errTable addTableColumn:cMsg];
-   [s_errTable setDataSource:s_errDS];
-   [s_errTable setUsesAlternatingRowBackgroundColors:YES];
-   [sv setDocumentView:s_errTable];
+   s_errTextView = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, w-16, h-56)];
+   [s_errTextView setEditable:NO];
+   [s_errTextView setSelectable:YES];
+   [s_errTextView setFont:[NSFont monospacedSystemFontOfSize:13 weight:NSFontWeightRegular]];
+   [s_errTextView setBackgroundColor:[NSColor colorWithCalibratedRed:0.12 green:0.12 blue:0.12 alpha:1]];
+   [s_errTextView setTextColor:[NSColor colorWithCalibratedRed:0.83 green:0.83 blue:0.83 alpha:1]];
+   [s_errTextView setString:[NSString stringWithUTF8String:cLog]];
+   [sv setDocumentView:s_errTextView];
    [cv addSubview:sv];
 
-   [s_errTable reloadData];
+   /* Copy to Clipboard button */
+   NSButton * copyBtn = [NSButton buttonWithTitle:@"Copy to Clipboard" target:s_errCopyTarget action:@selector(copyLog:)];
+   [copyBtn setFrame:NSMakeRect(w/2 - 150, 8, 140, 30)];
+   [copyBtn setAutoresizingMask:NSViewMinXMargin | NSViewMaxXMargin | NSViewMaxYMargin];
+   [cv addSubview:copyBtn];
+
+   /* Close button */
+   NSButton * closeBtn = [NSButton buttonWithTitle:@"Close" target:s_errCopyTarget action:@selector(closeDialog:)];
+   [closeBtn setFrame:NSMakeRect(w/2 + 10, 8, 140, 30)];
+   [closeBtn setAutoresizingMask:NSViewMinXMargin | NSViewMaxXMargin | NSViewMaxYMargin];
+   [cv addSubview:closeBtn];
+
+   [s_errDialog center];
    [s_errDialog makeKeyAndOrderFront:nil];
 }
 

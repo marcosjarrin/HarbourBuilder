@@ -1,6 +1,51 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-05 (Session 10: macOS Parity Update)
+
+  macOS IDE brought to full feature parity with Windows (217 vs 162 HB_FUNC).
+
+  NEW NATIVE CONTROLS (10 constructors):
+  - UI_IMAGENEW, UI_SHAPENEW, UI_BEVELNEW
+  - UI_LISTBOXNEW, UI_RADIOBUTTONNEW, UI_PROGRESSBARNEW
+  - UI_TREEVIEWNEW, UI_LISTVIEWNEW, UI_BITBTNNEW, UI_RICHEDITNEW
+
+  TBROWSE DATA GRID (7 functions):
+  - NSTableView-based grid with columns, cell data, footer, events
+  - UI_BROWSENEW, UI_BROWSEADDCOL, UI_BROWSESETCELL, UI_BROWSEGETCELL
+  - UI_BROWSESETFOOTER, UI_BROWSEREFRESH, UI_BROWSEONEVENT
+
+  GIT INTEGRATION (10 functions + panel UI):
+  - GIT_EXEC, GIT_ISREPO, GIT_STATUS, GIT_LOG, GIT_DIFF
+  - GIT_CURRENTBRANCH, GIT_BRANCHLIST, GIT_REMOTELIST, GIT_STASHLIST, GIT_BLAME
+  - MAC_GITPANEL: Source Control window with branch, changes list, commit message
+  - MAC_GITSETBRANCH, MAC_GITSETCHANGES, MAC_GITGETMESSAGE, MAC_GITCLEARMESSAGE
+
+  BUILD SYSTEM (matching Windows):
+  - Progress dialog with 7-step bar and status text
+  - Build Error dialog: monospaced log, Copy to Clipboard + Close buttons
+  - Smart rebuild: hash-based skip when code unchanged
+  - Full link chain: cocoa_core + cocoa_editor + Scintilla + SQLite3
+  - Removed editor message panel dependency for build output
+
+  THREADING (13 functions):
+  - UI_THREADSTART, UI_THREADWAIT, UI_THREADSLEEP (usleep)
+  - UI_MUTEXCREATE/LOCK/UNLOCK/DESTROY (pthread_mutex)
+  - UI_CRITICALSECTIONCREATE/ENTER/LEAVE/DESTROY (recursive mutex)
+  - UI_ATOMICINCREMENT, UI_ATOMICDECREMENT (__sync builtins)
+
+  NETWORKING (8 functions - placeholders matching Windows):
+  - UI_TCPCONNECT, UI_TCPSEND, UI_TCPRECV, UI_TCPCLOSE
+  - UI_HTTPGET, UI_HTTPPOST, UI_WEBSERVERSTART, UI_WEBSERVERSTOP
+
+  OTHER:
+  - UI_DROPNONVISUAL: non-visual component icons on form
+  - UI_MENUSETBITMAPBYPOS, UI_STACKTOOLBARS (stubs)
+  - SETDPIAWARE stub (macOS handles Retina natively)
+  - Toolbar row 2 matches Windows (Debug, Step, Over, Go, Stop, Exit)
+  - Palette splitter moved +62px right for better layout
+  - Suppress AppKit cursor warnings on modern macOS
+
 2026-04-05 (Session 9: Windows IDE Polish + MSVC + Form Size Fix)
 
   MULTI-COMPILER SUPPORT:
