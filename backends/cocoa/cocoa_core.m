@@ -2563,6 +2563,41 @@ HB_FUNC( UI_BROWSEONEVENT )
    }
 }
 
+/* UI_DropNonVisual( hForm, nType, cName, [cIconPath] ) - place non-visual component icon */
+HB_FUNC( UI_DROPNONVISUAL )
+{
+   HBForm * form = GetForm(1);
+   int nType = hb_parni(2);
+   const char * cName = hb_parc(3);
+   if( !form || !cName ) return;
+
+   /* Find next available position (grid of 40x40, bottom area of form) */
+   int nExisting = 0;
+   for( int i = 0; i < form->FChildCount; i++ )
+   {
+      if( form->FChildren[i]->FControlType >= CT_TIMER )
+         nExisting++;
+   }
+   int col = nExisting % 8;
+   int row = nExisting / 8;
+   int x = 8 + col * 40;
+   int y = form->FHeight - 80 + row * 40;
+   if( y < 40 ) y = 40;
+
+   /* Create a generic control with the non-visual type */
+   HBControl * ctrl = [[HBControl alloc] init];
+   ctrl->FControlType = nType;
+   ctrl->FLeft = x;
+   ctrl->FTop = y;
+   ctrl->FWidth = 32;
+   ctrl->FHeight = 32;
+   strncpy( ctrl->FName, cName, sizeof(ctrl->FName) - 1 );
+   strncpy( ctrl->FText, cName, sizeof(ctrl->FText) - 1 );
+
+   [form addChild:ctrl];
+   RetCtrl( ctrl );
+}
+
 /* --- Property access --- */
 
 HB_FUNC( UI_SETPROP )
@@ -4145,6 +4180,252 @@ HB_FUNC( UI_FORMTABORDERDIALOG )
    NSModalResponse resp = [alert runModal];
    (void)resp;
    /* TODO: implement Move Up/Down with repeated dialog */
+}
+
+/* --- Git integration --- */
+static char * GitExec( const char * szArgs, const char * szWorkDir )
+{
+    char cmd[1024];
+    snprintf( cmd, sizeof(cmd), "cd \"%s\" && git %s 2>&1", szWorkDir, szArgs );
+
+    FILE * fp = popen( cmd, "r" );
+    if( !fp ) return NULL;
+
+    size_t bufSize = 4096, total = 0;
+    char * buf = (char *) malloc( bufSize );
+    buf[0] = 0;
+
+    while( !feof(fp) )
+    {
+        size_t n = fread( buf + total, 1, bufSize - total - 1, fp );
+        total += n;
+        if( total >= bufSize - 256 ) {
+            bufSize *= 2;
+            buf = (char *) realloc( buf, bufSize );
+        }
+    }
+    buf[total] = 0;
+    pclose( fp );
+    return buf;
+}
+
+/* GIT_Exec( cArgs, [cWorkDir] ) -> cOutput */
+HB_FUNC( GIT_EXEC )
+{
+   const char * szArgs = hb_parc(1);
+   const char * szDir  = HB_ISCHAR(2) ? hb_parc(2) : ".";
+   if( !szArgs ) { hb_retc(""); return; }
+   char * pOut = GitExec( szArgs, szDir );
+   if( pOut ) { hb_retc( pOut ); free( pOut ); }
+   else hb_retc( "" );
+}
+
+/* GIT_IsRepo( [cWorkDir] ) -> lIsGitRepo */
+HB_FUNC( GIT_ISREPO )
+{
+   const char * szDir = HB_ISCHAR(1) ? hb_parc(1) : ".";
+   char * pOut = GitExec( "rev-parse --is-inside-work-tree", szDir );
+   if( pOut ) { hb_retl( strstr(pOut, "true") != NULL ); free( pOut ); }
+   else hb_retl( HB_FALSE );
+}
+
+/* GIT_CurrentBranch( [cWorkDir] ) -> cBranchName */
+HB_FUNC( GIT_CURRENTBRANCH )
+{
+   const char * szDir = HB_ISCHAR(1) ? hb_parc(1) : ".";
+   char * pOut = GitExec( "rev-parse --abbrev-ref HEAD", szDir );
+   if( pOut ) {
+      int len = (int)strlen(pOut);
+      while( len > 0 && (pOut[len-1] == '\n' || pOut[len-1] == '\r') ) pOut[--len] = 0;
+      hb_retc( pOut ); free( pOut );
+   } else hb_retc( "" );
+}
+
+/* GIT_Status( [cWorkDir] ) -> { { cStatus, cFile }, ... } */
+HB_FUNC( GIT_STATUS )
+{
+   const char * szDir = HB_ISCHAR(1) ? hb_parc(1) : ".";
+   char * pOut = GitExec( "status --porcelain", szDir );
+   PHB_ITEM pArray = hb_itemArrayNew( 0 );
+   if( pOut ) {
+      char * p = pOut;
+      while( *p ) {
+         char * eol = strchr( p, '\n' );
+         if( !eol ) eol = p + strlen(p);
+         if( eol - p >= 4 ) {
+            PHB_ITEM pEntry = hb_itemArrayNew( 2 );
+            char status[4] = { p[0], p[1], 0 };
+            char file[512];
+            int fLen = (int)(eol - p - 3);
+            if( fLen > 511 ) fLen = 511;
+            strncpy( file, p + 3, fLen ); file[fLen] = 0;
+            hb_arraySetC( pEntry, 1, status );
+            hb_arraySetC( pEntry, 2, file );
+            hb_arrayAdd( pArray, pEntry );
+            hb_itemRelease( pEntry );
+         }
+         p = ( *eol ) ? eol + 1 : eol;
+      }
+      free( pOut );
+   }
+   hb_itemReturnRelease( pArray );
+}
+
+/* GIT_Log( [nCount], [cWorkDir] ) -> { { cHash, cAuthor, cDate, cMessage }, ... } */
+HB_FUNC( GIT_LOG )
+{
+   int nCount = HB_ISNUM(1) ? hb_parni(1) : 20;
+   const char * szDir = HB_ISCHAR(2) ? hb_parc(2) : ".";
+   char args[256];
+   snprintf( args, sizeof(args), "log --oneline --format=%%H|%%an|%%ar|%%s -n %d", nCount );
+   char * pOut = GitExec( args, szDir );
+   PHB_ITEM pArray = hb_itemArrayNew( 0 );
+   if( pOut ) {
+      char * p = pOut;
+      while( *p ) {
+         char * eol = strchr( p, '\n' );
+         if( !eol ) eol = p + strlen(p);
+         if( eol > p ) {
+            char line[1024];
+            int len = (int)(eol - p);
+            if( len > 1023 ) len = 1023;
+            strncpy( line, p, len ); line[len] = 0;
+            char * f1 = line;
+            char * f2 = strchr(f1,'|'); if(f2) *f2++ = 0; else f2 = (char*)"";
+            char * f3 = strchr(f2,'|'); if(f3) *f3++ = 0; else f3 = (char*)"";
+            char * f4 = strchr(f3,'|'); if(f4) *f4++ = 0; else f4 = (char*)"";
+            PHB_ITEM pEntry = hb_itemArrayNew( 4 );
+            hb_arraySetC( pEntry, 1, f1 );
+            hb_arraySetC( pEntry, 2, f2 );
+            hb_arraySetC( pEntry, 3, f3 );
+            hb_arraySetC( pEntry, 4, f4 );
+            hb_arrayAdd( pArray, pEntry );
+            hb_itemRelease( pEntry );
+         }
+         p = ( *eol ) ? eol + 1 : eol;
+      }
+      free( pOut );
+   }
+   hb_itemReturnRelease( pArray );
+}
+
+/* GIT_Diff( [cFile], [cWorkDir] ) -> cDiffText */
+HB_FUNC( GIT_DIFF )
+{
+   const char * szFile = HB_ISCHAR(1) ? hb_parc(1) : "";
+   const char * szDir  = HB_ISCHAR(2) ? hb_parc(2) : ".";
+   char args[512];
+   if( szFile[0] ) snprintf( args, sizeof(args), "diff -- \"%s\"", szFile );
+   else snprintf( args, sizeof(args), "diff" );
+   char * pOut = GitExec( args, szDir );
+   if( pOut ) { hb_retc( pOut ); free( pOut ); }
+   else hb_retc( "" );
+}
+
+/* GIT_BranchList( [cWorkDir] ) -> { { cName, lCurrent }, ... } */
+HB_FUNC( GIT_BRANCHLIST )
+{
+   const char * szDir = HB_ISCHAR(1) ? hb_parc(1) : ".";
+   char * pOut = GitExec( "branch --no-color", szDir );
+   PHB_ITEM pArray = hb_itemArrayNew( 0 );
+   if( pOut ) {
+      char * p = pOut;
+      while( *p ) {
+         char * eol = strchr( p, '\n' );
+         if( !eol ) eol = p + strlen(p);
+         if( eol - p >= 2 ) {
+            PHB_ITEM pEntry = hb_itemArrayNew( 2 );
+            int isCurrent = ( p[0] == '*' ) ? 1 : 0;
+            char name[256]; char * start = p + 2;
+            int nLen = (int)(eol - start);
+            if( nLen > 255 ) nLen = 255;
+            strncpy( name, start, nLen ); name[nLen] = 0;
+            while( nLen > 0 && name[nLen-1] == ' ' ) name[--nLen] = 0;
+            hb_arraySetC( pEntry, 1, name );
+            hb_arraySetL( pEntry, 2, isCurrent ? HB_TRUE : HB_FALSE );
+            hb_arrayAdd( pArray, pEntry );
+            hb_itemRelease( pEntry );
+         }
+         p = ( *eol ) ? eol + 1 : eol;
+      }
+      free( pOut );
+   }
+   hb_itemReturnRelease( pArray );
+}
+
+/* GIT_RemoteList( [cWorkDir] ) -> { { cName, cUrl }, ... } */
+HB_FUNC( GIT_REMOTELIST )
+{
+   const char * szDir = HB_ISCHAR(1) ? hb_parc(1) : ".";
+   char * pOut = GitExec( "remote -v", szDir );
+   PHB_ITEM pArray = hb_itemArrayNew( 0 );
+   if( pOut ) {
+      char * p = pOut;
+      while( *p ) {
+         char * eol = strchr( p, '\n' );
+         if( !eol ) eol = p + strlen(p);
+         if( eol > p && strstr( p, "(fetch)" ) ) {
+            char line[512];
+            int len = (int)(eol - p);
+            if( len > 511 ) len = 511;
+            strncpy( line, p, len ); line[len] = 0;
+            char * tab = strchr( line, '\t' );
+            if( tab ) {
+               *tab = 0; char * url = tab + 1;
+               char * sp = strstr( url, " (fetch)" );
+               if( sp ) *sp = 0;
+               PHB_ITEM pEntry = hb_itemArrayNew( 2 );
+               hb_arraySetC( pEntry, 1, line );
+               hb_arraySetC( pEntry, 2, url );
+               hb_arrayAdd( pArray, pEntry );
+               hb_itemRelease( pEntry );
+            }
+         }
+         p = ( *eol ) ? eol + 1 : eol;
+      }
+      free( pOut );
+   }
+   hb_itemReturnRelease( pArray );
+}
+
+/* GIT_StashList( [cWorkDir] ) -> { cStashEntry, ... } */
+HB_FUNC( GIT_STASHLIST )
+{
+   const char * szDir = HB_ISCHAR(1) ? hb_parc(1) : ".";
+   char * pOut = GitExec( "stash list", szDir );
+   PHB_ITEM pArray = hb_itemArrayNew( 0 );
+   if( pOut ) {
+      char * p = pOut;
+      while( *p ) {
+         char * eol = strchr( p, '\n' );
+         if( !eol ) eol = p + strlen(p);
+         if( eol > p ) {
+            char line[512];
+            int len = (int)(eol - p);
+            if( len > 511 ) len = 511;
+            strncpy( line, p, len ); line[len] = 0;
+            PHB_ITEM pStr = hb_itemPutC( NULL, line );
+            hb_arrayAdd( pArray, pStr );
+            hb_itemRelease( pStr );
+         }
+         p = ( *eol ) ? eol + 1 : eol;
+      }
+      free( pOut );
+   }
+   hb_itemReturnRelease( pArray );
+}
+
+/* GIT_Blame( cFile, [cWorkDir] ) -> cBlameOutput */
+HB_FUNC( GIT_BLAME )
+{
+   const char * szFile = hb_parc(1);
+   const char * szDir  = HB_ISCHAR(2) ? hb_parc(2) : ".";
+   if( !szFile ) { hb_retc(""); return; }
+   char args[512];
+   snprintf( args, sizeof(args), "blame --date=short \"%s\"", szFile );
+   char * pOut = GitExec( args, szDir );
+   if( pOut ) { hb_retc( pOut ); free( pOut ); }
+   else hb_retc( "" );
 }
 
 /* --- DPI stub (macOS handles Retina natively) --- */
