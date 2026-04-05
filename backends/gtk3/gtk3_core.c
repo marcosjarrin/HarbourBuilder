@@ -252,6 +252,64 @@ struct _HBComboBox {
    int  FItemCount;
 };
 
+typedef struct { HBControl base; int FChecked; char FGroupName[32]; } HBRadioButton;
+
+typedef struct {
+   HBControl base;
+   char FGlyph[256];
+   int  FLayout;     /* 0=left, 1=right, 2=top, 3=bottom */
+   int  FSpacing;
+} HBBitBtn;
+
+typedef struct {
+   HBControl base;
+   char FPicture[256];
+   int  FStretch;
+   int  FCenter;
+   int  FProportional;
+} HBImage;
+
+typedef struct {
+   HBControl base;
+   int  FShape;       /* 0=rect, 1=circle, 2=rounded, 3=ellipse */
+   int  FPenColor;
+   int  FPenWidth;
+   int  FBrushColor;
+} HBShape;
+
+typedef struct {
+   HBControl base;
+   int  FBevelStyle;   /* 0=raised, 1=lowered */
+   int  FBevelShape;   /* 0=box, 1=frame, 2=topLine, 3=bottomLine */
+} HBBevel;
+
+typedef struct {
+   HBControl base;
+   int  FReadOnly;
+   int  FWordWrap;
+   int  FScrollBars;  /* 0=none, 1=horiz, 2=vert, 3=both */
+} HBRichEdit;
+
+typedef struct {
+   HBControl base;
+   int  FViewStyle;    /* 0=icon, 1=smallIcon, 2=list, 3=report */
+   int  FGridLines;
+   int  FColumnCount;
+   char FColumns[16][64];
+   int  FColumnWidths[16];
+} HBListView;
+
+typedef struct {
+   HBControl base;
+   int  FReadOnly;
+   int  FGridLines;
+   int  FRowHeight;
+   int  FColumnCount;
+   char FColumns[16][64];
+   int  FColumnWidths[16];
+   char FColumnTypes[16];  /* S=string, N=number, L=logical, D=date */
+} HBBrowse;
+
 #define MAX_TOOLBTNS  64
 #define TOOLBAR_BTN_ID_BASE 100
 #define MENU_ID_BASE        1000
@@ -2003,6 +2061,159 @@ HB_FUNC( UI_GROUPBOXNEW )
    RetCtrl( &p->base );
 }
 
+HB_FUNC( UI_RADIOBUTTONNEW )
+{
+   HBForm * pForm = GetForm(1);
+   HBRadioButton * p = (HBRadioButton *) calloc( 1, sizeof(HBRadioButton) );
+   HBControl_Init( &p->base );
+   strcpy( p->base.FClassName, "TRadioButton" );
+   p->base.FControlType = CT_RADIO; p->base.FWidth = 150; p->base.FHeight = 19;
+   p->FChecked = 0; memset( p->FGroupName, 0, sizeof(p->FGroupName) );
+   if( HB_ISCHAR(2) ) HBControl_SetText( &p->base, hb_parc(2) );
+   if( HB_ISNUM(3) ) p->base.FLeft = hb_parni(3);   if( HB_ISNUM(4) ) p->base.FTop = hb_parni(4);
+   if( HB_ISNUM(5) ) p->base.FWidth = hb_parni(5);  if( HB_ISNUM(6) ) p->base.FHeight = hb_parni(6);
+   if( pForm ) HBControl_AddChild( &pForm->base, &p->base );
+   KeepAlive( &p->base );
+   RetCtrl( &p->base );
+}
+
+HB_FUNC( UI_BITBTNNEW )
+{
+   HBForm * pForm = GetForm(1);
+   HBBitBtn * p = (HBBitBtn *) calloc( 1, sizeof(HBBitBtn) );
+   HBControl_Init( &p->base );
+   strcpy( p->base.FClassName, "TBitBtn" );
+   p->base.FControlType = CT_BITBTN; p->base.FWidth = 88; p->base.FHeight = 26;
+   p->FLayout = 0; p->FSpacing = 4; memset( p->FGlyph, 0, sizeof(p->FGlyph) );
+   if( HB_ISCHAR(2) ) HBControl_SetText( &p->base, hb_parc(2) );
+   if( HB_ISNUM(3) ) p->base.FLeft = hb_parni(3);   if( HB_ISNUM(4) ) p->base.FTop = hb_parni(4);
+   if( HB_ISNUM(5) ) p->base.FWidth = hb_parni(5);  if( HB_ISNUM(6) ) p->base.FHeight = hb_parni(6);
+   if( pForm ) HBControl_AddChild( &pForm->base, &p->base );
+   KeepAlive( &p->base );
+   RetCtrl( &p->base );
+}
+
+HB_FUNC( UI_IMAGENEW )
+{
+   HBForm * pForm = GetForm(1);
+   HBImage * p = (HBImage *) calloc( 1, sizeof(HBImage) );
+   HBControl_Init( &p->base );
+   strcpy( p->base.FClassName, "TImage" );
+   p->base.FControlType = CT_IMAGE; p->base.FWidth = 100; p->base.FHeight = 100;
+   p->FStretch = 0; p->FCenter = 0; p->FProportional = 0;
+   memset( p->FPicture, 0, sizeof(p->FPicture) );
+   if( HB_ISNUM(2) ) p->base.FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->base.FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->base.FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->base.FHeight = hb_parni(5);
+   if( pForm ) HBControl_AddChild( &pForm->base, &p->base );
+   KeepAlive( &p->base );
+   RetCtrl( &p->base );
+}
+
+HB_FUNC( UI_SHAPENEW )
+{
+   HBForm * pForm = GetForm(1);
+   HBShape * p = (HBShape *) calloc( 1, sizeof(HBShape) );
+   HBControl_Init( &p->base );
+   strcpy( p->base.FClassName, "TShape" );
+   p->base.FControlType = CT_SHAPE; p->base.FWidth = 65; p->base.FHeight = 65;
+   p->FShape = 0; p->FPenColor = 0; p->FPenWidth = 1; p->FBrushColor = 0xFFFFFF;
+   if( HB_ISNUM(2) ) p->base.FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->base.FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->base.FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->base.FHeight = hb_parni(5);
+   if( pForm ) HBControl_AddChild( &pForm->base, &p->base );
+   KeepAlive( &p->base );
+   RetCtrl( &p->base );
+}
+
+HB_FUNC( UI_BEVELNEW )
+{
+   HBForm * pForm = GetForm(1);
+   HBBevel * p = (HBBevel *) calloc( 1, sizeof(HBBevel) );
+   HBControl_Init( &p->base );
+   strcpy( p->base.FClassName, "TBevel" );
+   p->base.FControlType = CT_BEVEL; p->base.FWidth = 200; p->base.FHeight = 50;
+   p->FBevelStyle = 1; p->FBevelShape = 0; p->base.FTabStop = 0;
+   if( HB_ISNUM(2) ) p->base.FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->base.FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->base.FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->base.FHeight = hb_parni(5);
+   if( pForm ) HBControl_AddChild( &pForm->base, &p->base );
+   KeepAlive( &p->base );
+   RetCtrl( &p->base );
+}
+
+HB_FUNC( UI_RICHEDITNEW )
+{
+   HBForm * pForm = GetForm(1);
+   HBRichEdit * p = (HBRichEdit *) calloc( 1, sizeof(HBRichEdit) );
+   HBControl_Init( &p->base );
+   strcpy( p->base.FClassName, "TRichEdit" );
+   p->base.FControlType = CT_RICHEDIT; p->base.FWidth = 200; p->base.FHeight = 100;
+   p->FReadOnly = 0; p->FWordWrap = 1; p->FScrollBars = 3;
+   if( HB_ISNUM(2) ) p->base.FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->base.FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->base.FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->base.FHeight = hb_parni(5);
+   if( pForm ) HBControl_AddChild( &pForm->base, &p->base );
+   KeepAlive( &p->base );
+   RetCtrl( &p->base );
+}
+
+HB_FUNC( UI_LISTVIEWNEW )
+{
+   HBForm * pForm = GetForm(1);
+   HBListView * p = (HBListView *) calloc( 1, sizeof(HBListView) );
+   HBControl_Init( &p->base );
+   strcpy( p->base.FClassName, "TListView" );
+   p->base.FControlType = CT_LISTVIEW; p->base.FWidth = 250; p->base.FHeight = 150;
+   p->FViewStyle = 3; p->FGridLines = 1; p->FColumnCount = 0;
+   memset( p->FColumns, 0, sizeof(p->FColumns) );
+   memset( p->FColumnWidths, 0, sizeof(p->FColumnWidths) );
+   if( HB_ISNUM(2) ) p->base.FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->base.FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->base.FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->base.FHeight = hb_parni(5);
+   if( pForm ) HBControl_AddChild( &pForm->base, &p->base );
+   KeepAlive( &p->base );
+   RetCtrl( &p->base );
+}
+
+HB_FUNC( UI_LISTVIEWADDCOLUMN )
+{
+   HBControl * p = GetCtrl(1);
+   if( !p || p->FControlType != CT_LISTVIEW ) return;
+   HBListView * lv = (HBListView*)p;
+   if( lv->FColumnCount >= 16 ) return;
+   if( HB_ISCHAR(2) )
+      strncpy( lv->FColumns[lv->FColumnCount], hb_parc(2), 63 );
+   lv->FColumnWidths[lv->FColumnCount] = HB_ISNUM(3) ? hb_parni(3) : 100;
+   lv->FColumnCount++;
+}
+
+HB_FUNC( UI_BROWSENEW )
+{
+   HBForm * pForm = GetForm(1);
+   HBBrowse * p = (HBBrowse *) calloc( 1, sizeof(HBBrowse) );
+   HBControl_Init( &p->base );
+   strcpy( p->base.FClassName, "TBrowse" );
+   p->base.FControlType = CT_BROWSE; p->base.FWidth = 300; p->base.FHeight = 200;
+   p->FReadOnly = 0; p->FGridLines = 1; p->FRowHeight = 22; p->FColumnCount = 0;
+   memset( p->FColumns, 0, sizeof(p->FColumns) );
+   memset( p->FColumnWidths, 0, sizeof(p->FColumnWidths) );
+   memset( p->FColumnTypes, 'S', sizeof(p->FColumnTypes) );
+   if( HB_ISNUM(2) ) p->base.FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->base.FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->base.FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->base.FHeight = hb_parni(5);
+   if( pForm ) HBControl_AddChild( &pForm->base, &p->base );
+   KeepAlive( &p->base );
+   RetCtrl( &p->base );
+}
+
+HB_FUNC( UI_BROWSEADDCOL )
+{
+   HBControl * p = GetCtrl(1);
+   if( !p || p->FControlType != CT_BROWSE ) return;
+   HBBrowse * br = (HBBrowse*)p;
+   if( br->FColumnCount >= 16 ) return;
+   if( HB_ISCHAR(2) )
+      strncpy( br->FColumns[br->FColumnCount], hb_parc(2), 63 );
+   br->FColumnWidths[br->FColumnCount] = HB_ISNUM(3) ? hb_parni(3) : 100;
+   br->FColumnTypes[br->FColumnCount] = HB_ISCHAR(4) ? hb_parc(4)[0] : 'S';
+   br->FColumnCount++;
+}
+
 /* --- Property access --- */
 
 HB_FUNC( UI_SETPROP )
@@ -2144,6 +2355,53 @@ HB_FUNC( UI_SETPROP )
       }
       else
          HBControl_ApplyFont( p );
+   }
+   /* RadioButton */
+   else if( strcasecmp( szProp, "cGroupName" ) == 0 && HB_ISCHAR(3) && p->FControlType == CT_RADIO )
+      strncpy( ((HBRadioButton*)p)->FGroupName, hb_parc(3), 31 );
+   /* BitBtn */
+   else if( strcasecmp( szProp, "cGlyph" ) == 0 && HB_ISCHAR(3) && p->FControlType == CT_BITBTN )
+      strncpy( ((HBBitBtn*)p)->FGlyph, hb_parc(3), 255 );
+   else if( strcasecmp( szProp, "nLayout" ) == 0 && HB_ISNUM(3) && p->FControlType == CT_BITBTN )
+      ((HBBitBtn*)p)->FLayout = hb_parni(3);
+   else if( strcasecmp( szProp, "nSpacing" ) == 0 && HB_ISNUM(3) && p->FControlType == CT_BITBTN )
+      ((HBBitBtn*)p)->FSpacing = hb_parni(3);
+   /* Image */
+   else if( strcasecmp( szProp, "cPicture" ) == 0 && HB_ISCHAR(3) && p->FControlType == CT_IMAGE )
+      strncpy( ((HBImage*)p)->FPicture, hb_parc(3), 255 );
+   else if( strcasecmp( szProp, "lStretch" ) == 0 && HB_ISLOG(3) && p->FControlType == CT_IMAGE )
+      ((HBImage*)p)->FStretch = hb_parl(3);
+   else if( strcasecmp( szProp, "lCenter" ) == 0 && HB_ISLOG(3) && p->FControlType == CT_IMAGE )
+      ((HBImage*)p)->FCenter = hb_parl(3);
+   else if( strcasecmp( szProp, "lProportional" ) == 0 && HB_ISLOG(3) && p->FControlType == CT_IMAGE )
+      ((HBImage*)p)->FProportional = hb_parl(3);
+   /* Shape */
+   else if( strcasecmp( szProp, "nShape" ) == 0 && HB_ISNUM(3) && p->FControlType == CT_SHAPE )
+      ((HBShape*)p)->FShape = hb_parni(3);
+   else if( strcasecmp( szProp, "nPenColor" ) == 0 && HB_ISNUM(3) && p->FControlType == CT_SHAPE )
+      ((HBShape*)p)->FPenColor = hb_parni(3);
+   else if( strcasecmp( szProp, "nPenWidth" ) == 0 && HB_ISNUM(3) && p->FControlType == CT_SHAPE )
+      ((HBShape*)p)->FPenWidth = hb_parni(3);
+   else if( strcasecmp( szProp, "nBrushColor" ) == 0 && HB_ISNUM(3) && p->FControlType == CT_SHAPE )
+      ((HBShape*)p)->FBrushColor = hb_parni(3);
+   /* Bevel */
+   else if( strcasecmp( szProp, "nBevelStyle" ) == 0 && HB_ISNUM(3) && p->FControlType == CT_BEVEL )
+      ((HBBevel*)p)->FBevelStyle = hb_parni(3);
+   else if( strcasecmp( szProp, "nBevelShape" ) == 0 && HB_ISNUM(3) && p->FControlType == CT_BEVEL )
+      ((HBBevel*)p)->FBevelShape = hb_parni(3);
+   /* RichEdit */
+   else if( strcasecmp( szProp, "lWordWrap" ) == 0 && HB_ISLOG(3) && p->FControlType == CT_RICHEDIT )
+      ((HBRichEdit*)p)->FWordWrap = hb_parl(3);
+   else if( strcasecmp( szProp, "nScrollBars" ) == 0 && HB_ISNUM(3) && p->FControlType == CT_RICHEDIT )
+      ((HBRichEdit*)p)->FScrollBars = hb_parni(3);
+   /* Browse */
+   else if( strcasecmp( szProp, "nRowHeight" ) == 0 && HB_ISNUM(3) && p->FControlType == CT_BROWSE )
+      ((HBBrowse*)p)->FRowHeight = hb_parni(3);
+   else if( strcasecmp( szProp, "lGridLines" ) == 0 && HB_ISLOG(3) &&
+            ( p->FControlType == CT_BROWSE || p->FControlType == CT_LISTVIEW ) )
+   {
+      if( p->FControlType == CT_BROWSE ) ((HBBrowse*)p)->FGridLines = hb_parl(3);
+      else ((HBListView*)p)->FGridLines = hb_parl(3);
    }
 }
 
@@ -2398,6 +2656,61 @@ HB_FUNC( UI_GETALLPROPS )
       case CT_COMBOBOX:
          ADD_N("nItemIndex",((HBComboBox*)p)->FItemIndex,"Data");
          ADD_N("nItemCount",((HBComboBox*)p)->FItemCount,"Data"); break;
+      case CT_RADIO:
+         ADD_L("lChecked",((HBRadioButton*)p)->FChecked,"Data");
+         ADD_S("cGroupName",((HBRadioButton*)p)->FGroupName,"Behavior");
+         break;
+      case CT_BITBTN: {
+         HBBitBtn * bb = (HBBitBtn*)p;
+         ADD_S("cGlyph",bb->FGlyph,"Appearance");
+         ADD_N("nLayout",bb->FLayout,"Appearance");
+         ADD_N("nSpacing",bb->FSpacing,"Appearance");
+         break;
+      }
+      case CT_IMAGE: {
+         HBImage * img = (HBImage*)p;
+         ADD_S("cPicture",img->FPicture,"Data");
+         ADD_L("lStretch",img->FStretch,"Appearance");
+         ADD_L("lCenter",img->FCenter,"Appearance");
+         ADD_L("lProportional",img->FProportional,"Appearance");
+         break;
+      }
+      case CT_SHAPE: {
+         HBShape * sh = (HBShape*)p;
+         ADD_N("nShape",sh->FShape,"Appearance");
+         ADD_C("nPenColor",sh->FPenColor,"Appearance");
+         ADD_N("nPenWidth",sh->FPenWidth,"Appearance");
+         ADD_C("nBrushColor",sh->FBrushColor,"Appearance");
+         break;
+      }
+      case CT_BEVEL: {
+         HBBevel * bv = (HBBevel*)p;
+         ADD_N("nBevelStyle",bv->FBevelStyle,"Appearance");
+         ADD_N("nBevelShape",bv->FBevelShape,"Appearance");
+         break;
+      }
+      case CT_RICHEDIT: {
+         HBRichEdit * re = (HBRichEdit*)p;
+         ADD_L("lReadOnly",re->FReadOnly,"Behavior");
+         ADD_L("lWordWrap",re->FWordWrap,"Behavior");
+         ADD_N("nScrollBars",re->FScrollBars,"Appearance");
+         break;
+      }
+      case CT_LISTVIEW: {
+         HBListView * lv = (HBListView*)p;
+         ADD_N("nViewStyle",lv->FViewStyle,"Appearance");
+         ADD_L("lGridLines",lv->FGridLines,"Appearance");
+         ADD_N("nColumnCount",lv->FColumnCount,"Data");
+         break;
+      }
+      case CT_BROWSE: {
+         HBBrowse * br = (HBBrowse*)p;
+         ADD_L("lReadOnly",br->FReadOnly,"Behavior");
+         ADD_L("lGridLines",br->FGridLines,"Appearance");
+         ADD_N("nRowHeight",br->FRowHeight,"Appearance");
+         ADD_N("nColumnCount",br->FColumnCount,"Data");
+         break;
+      }
    }
    hb_itemReturnRelease( pArray );
 
