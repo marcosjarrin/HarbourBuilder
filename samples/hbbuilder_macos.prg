@@ -481,15 +481,7 @@ static function CreateDesignForm( nX, nY )
 
    // When form window is selected, switch editor to its tab
    UI_OnEvent( oDesignForm:hCpp, "OnActivate", ;
-      &( "{ || OnDesignFormActivate( " + LTrim( Str( nIdx ) ) + " ) }" ) )
-
-return nil
-
-static function OnDesignFormActivate( nFormIdx )
-
-   if nFormIdx > 0 .and. nFormIdx <= Len( aForms ) .and. nFormIdx != nActiveForm
-      SwitchToForm( nFormIdx )
-   endif
+      { || SwitchToForm( nIdx ) } )
 
 return nil
 
@@ -936,6 +928,11 @@ static function OnEventDblClick( hCtrl, cEvent )
 
    // Build handler name: ComponentName + EventWithoutOn
    cHandler := cName + SubStr( cEvent, 3 )  // skip "On"
+
+   // Switch to the active form's tab before adding/searching code
+   if nActiveForm > 0
+      CodeEditorSelectTab( hCodeEditor, nActiveForm + 1 )
+   endif
 
    // Check if handler already exists in code editor -> jump to it
    if CodeEditorGotoFunction( hCodeEditor, cHandler )

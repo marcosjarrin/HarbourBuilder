@@ -78,6 +78,8 @@
 
 - [x] Nombres de clase legibles: `DbgValStr` para objetos muestra `TApplication` en vez de `{TAPPLICATION}` — proper-case via `Left+Upper+Lower`.
 
-- [x] Design form → editor tab sync: al hacer click en una ventana de diseño, el editor cambia automáticamente al tab del código fuente de ese formulario. `OnActivate` event en `CreateDesignForm()` llama `OnDesignFormActivate(nFormIdx)` → `SwitchToForm()`.
+- [x] Design form → editor tab sync: al hacer click en una ventana de diseño, el editor cambia automáticamente al tab del código fuente de ese formulario. `OnActivate` event en `CreateDesignForm()` llama `SwitchToForm(nIdx)` siempre (sin guard), así funciona aunque el editor esté en otro tab.
+
+- [x] Event handler double-click: al hacer doble click en un evento en el inspector, ahora cambia al tab correcto del formulario activo (`nActiveForm + 1`) antes de buscar/añadir el handler. Antes añadía el código al tab que estuviera seleccionado (ej. Project1 en vez de Form1).
 
 ## Open
