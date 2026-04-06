@@ -1312,7 +1312,6 @@ static function TBDebugRun()
 
    SaveActiveFormCode()
 
-
    cBuildDir := "/tmp/hbbuilder_debug"
    cHbDir   := GetEnv( "HOME" ) + "/harbour"
    cHbInc   := cHbDir + "/include"
@@ -1473,12 +1472,17 @@ static function TBDebugRun()
    if oDesignForm != nil
       UI_FormHide( oDesignForm:hCpp )
    endif
+   GTK_ProcessEvents()
    if oTB2 != nil
       UI_ToolBtnHighlight( oTB2:hCpp, 1, .t. )
    endif
+   GTK_ProcessEvents()
    InspectorOpen()
+   GTK_ProcessEvents()
    INS_SetDebugMode( _InsGetData(), .t. )
+   GTK_ProcessEvents()
    CodeEditorSelectTab( hCodeEditor, 1 )  // switch to Project1.prg
+   GTK_ProcessEvents()
 
    IDE_DebugStart2( cBuildDir + "/DebugApp", ;
       { |cFunc, nLine, cLocals, cStack| OnDebugPause( cFunc, nLine, cLocals, cStack ) } )
@@ -1488,7 +1492,9 @@ static function TBDebugRun()
    if oTB2 != nil
       UI_ToolBtnHighlight( oTB2:hCpp, 1, .f. )
    endif
+   GTK_ProcessEvents()
    INS_SetDebugMode( _InsGetData(), .f. )
+   GTK_ProcessEvents()
    if oDesignForm != nil
       UI_FormBringToFront( oDesignForm:hCpp )
    endif

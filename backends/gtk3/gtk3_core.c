@@ -5546,6 +5546,13 @@ HB_FUNC( CODEEDITORSHOWFINDBAR )
  * ====================================================================== */
 
 /* GTK_ShellExec( cCommand ) --> cOutput */
+/* GTK_ProcessEvents() — flush pending GTK events to keep UI responsive */
+HB_FUNC( GTK_PROCESSEVENTS )
+{
+   while( gtk_events_pending() )
+      gtk_main_iteration_do( FALSE );
+}
+
 HB_FUNC( GTK_SHELLEXEC )
 {
    if( !HB_ISCHAR(1) ) { hb_retc(""); return; }

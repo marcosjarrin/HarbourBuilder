@@ -27,6 +27,8 @@ HarbourBuilder - Cross-platform visual IDE for Harbour
   - Fast debug builds: reuses prebuilt gtk3_core.o + gtk3_inspector.o
   - Replaces old .hrb in-process debugger with proper out-of-process debugging
   - Stubs for UI_MemoNew, UI_ListBoxNew, MAC_RuntimeErrorDialog, MAC_AppTerminate
+  - GTK_ProcessEvents() flushes pending GTK events between UI operations to
+    prevent timing/desync issues (inspector tab switch, form hide, etc.)
 
 2026-04-05 (Session 10f: IDE polish, autocomplete, error handling, form events)
 
