@@ -18,13 +18,15 @@ static void DbgHookC( int nMode, int nLine, const char * szName,
 {
    (void)nIndex; (void)pFrame;
 
-   /* Mode 1 = module name — always track, even during re-entrancy */
-   if( nMode == 1 && szName )
+   /* Mode 1 = module name — only track when NOT in re-entrancy
+    * (otherwise internal debug functions overwrite the user's module name) */
+   if( nMode == 1 && szName && s_nReentrancy == 0 )
    {
       strncpy( s_szModule, szName, sizeof(s_szModule) - 1 );
       s_szModule[sizeof(s_szModule) - 1] = 0;
       return;
    }
+   if( nMode == 1 ) return;
 
    /* Only forward mode 5 (source line) to Harbour */
    if( nMode != 5 ) return;
@@ -34,14 +36,52 @@ static void DbgHookC( int nMode, int nLine, const char * szName,
 
    if( s_pDbgBlock && HB_IS_BLOCK( s_pDbgBlock ) )
    {
+      /* Build module string from s_szModule + current ProcName for accurate function info */
+      char szFull[512];
+      char procBuf[128] = "";
+      hb_procinfo( 0, procBuf, NULL, NULL );
+      const char * procName = procBuf;
+      snprintf( szFull, sizeof(szFull), "%s:%s",
+                s_szModule[0] ? s_szModule : "?",
+                procName ? procName : "?" );
+
+      /* Skip framework T-classes (TForm, TButton, TApplication...) but NOT
+       * user classes (TForm1, TForm2...) which contain digits */
+      if( procName && procName[0] == 'T' && strlen(procName) > 3 )
+      {
+         int hasDigit = 0, k;
+         /* Check chars before ':' (class name part) for digits */
+         for( k = 0; procName[k] && procName[k] != ':'; k++ )
+            if( procName[k] >= '0' && procName[k] <= '9' ) { hasDigit = 1; break; }
+         if( !hasDigit ) return;
+      }
+      if( procName && (
+          strncasecmp(procName, "DBGSTATE", 8) == 0 ||
+          strncasecmp(procName, "DBGHOOK", 7) == 0 ||
+          strncasecmp(procName, "DBGCLIENT", 9) == 0 ||
+          strncasecmp(procName, "BUILDLOCALS", 11) == 0 ||
+          strncasecmp(procName, "BUILDSTACK", 10) == 0 ||
+          strncasecmp(procName, "__DBGINIT", 9) == 0 ||
+          strncasecmp(procName, "SETDPIAWARE", 11) == 0 ||
+          strncasecmp(procName, "APPSHOWERROR", 12) == 0 ||
+          strncasecmp(procName, "VALTOSTR", 8) == 0 ||
+          strncasecmp(procName, "ISFRAMEWORKFUNC", 15) == 0 ||
+          strncasecmp(procName, "DBGVALSTR", 9) == 0 ||
+          strncasecmp(procName, "DBGSEND", 7) == 0 ||
+          strncasecmp(procName, "DBGRECV", 7) == 0 ||
+          strncasecmp(procName, "MSGINFO", 7) == 0 ) )
+         return;
+
       s_nReentrancy++;
 
-      /* Call block with ( nLine, cModule ) */
+      /* Call block with ( nLine, cModule, cProcName ) */
       PHB_ITEM pLine = hb_itemPutNI( NULL, nLine );
-      PHB_ITEM pModule = hb_itemPutC( NULL, s_szModule );
-      hb_itemDo( s_pDbgBlock, 2, pLine, pModule );
+      PHB_ITEM pModule = hb_itemPutC( NULL, szFull );
+      PHB_ITEM pProc = hb_itemPutC( NULL, procName ? procName : "" );
+      hb_itemDo( s_pDbgBlock, 3, pLine, pModule, pProc );
       hb_itemRelease( pLine );
       hb_itemRelease( pModule );
+      hb_itemRelease( pProc );
 
       s_nReentrancy--;
    }

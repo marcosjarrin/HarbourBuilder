@@ -45,4 +45,29 @@
 
 - [x] Inspector modo debug: al pulsar Debug, el inspector cambia a tabs Locals/CallStack/Watch (oculta combo, título "Debugger"). `INS_SetDebugMode()`, `INS_SetDebugLocals()`, `INS_SetDebugStack()` en cocoa_inspector.m. OnDebugPause recibe 4 params (cFunc, nLine, cLocals, cStack) y actualiza inspector + editor. Al terminar debug, vuelve a Properties/Events. Sin diálogo de debugger redundante.
 
+- [x] IDE Dark Mode completo (por defecto, configurable en futuro):
+  - **IDE bar** (ventana superior): `UI_FormSetDarkMode()` aplica `NSAppearanceNameDarkAqua` + fondo 0.18 en window y content view. Se llama después de `Show()` (FWindow debe existir).
+  - **Design form**: dark appearance + fondo 0.18 en `createWindowWithRunLoop` cuando `FDesignMode`. Content view (`HBFormContentView`) también con layer bg 0.18.
+  - **Dot grid**: fondo cambiado de 0.94 (gris claro) a 0.18 (oscuro), puntos de 0.72 a 0.35.
+  - **Inspector**: `NSAppearanceNameDarkAqua`, table bg 0.15, category headers bg 0.20 + text 0.85, rows text 0.82, alternating rows bg 0.18. Guard `respondsToSelector:setTextColor:` para celdas de botón.
+  - **Toolbars**: fondo cambiado de 0.92 a 0.22.
+  - **Editor**: ya era dark (Scintilla dark theme existente).
+  - Para replicar en otros IDEs (Windows/Linux): aplicar los mismos colores de fondo y texto en los equivalentes de cada plataforma.
+
+- [x] Debug button highlight: `UI_ToolBtnHighlight(hToolbar, nBtn, lHighlight)` cambia el layer.backgroundColor del botón a rojo semitransparente cuando activo. Se activa al entrar en debug, se desactiva al salir.
+
+- [x] Debug oculta design form: `UI_FormHide(oDesignForm)` al iniciar debug, `UI_FormBringToFront` al terminar.
+
+- [x] Inspector debug tabs reordenados: tab 0=Call Stack (#:30px, Function:240px), tab 1=Vars (Variable:140px, Value:130px con categorías colapsables PUBLIC/PRIVATE/LOCAL), tab 2=Watch. Headers y anchos se ajustan dinámicamente al cambiar de tab y al entrar/salir de debug mode.
+
+- [x] Variables por scope: `BuildLocals()` en dbgclient.prg usa `__mvDbgInfo(1)` para PUBLIC, `__mvDbgInfo(2)` para PRIVATE, `__dbgVmLocalList(nFrame)` para LOCAL. Envía formato `VARS [PUBLIC] name=val(T) [PRIVATE] ... [LOCAL] ...`. Inspector parsea `[CATEGORY]` como headers colapsables.
+
+- [x] Protocolo inline PAUSE: formato `PAUSE path:FUNC:line|VARS ...|STACK ...` — elimina round-trips GETLOCALS/GETSTACK que causaban desincronización TCP.
+
+- [x] INIT PROCEDURE __DbgInit: `DbgClientStart(19800)` se ejecuta como INIT PROCEDURE en vez de inyectar código en el Project1.prg del usuario. El código del usuario no se modifica (solo se elimina `#include` duplicado).
+
+- [x] Line offset por sección: `aDbgOffsets` guarda `{startLine, name, tabIndex, adjustment}`. Project1.prg usa ajuste +1 (por #include eliminado), Form files +2. Stack lines también convertidos via `DbgFixStackLines()`.
+
+- [x] Framework auto-step: `OnDebugPause` retorna `.F.` para código del framework (nTab==0), el IDE envía STEP automáticamente sin pausar.
+
 ## Open

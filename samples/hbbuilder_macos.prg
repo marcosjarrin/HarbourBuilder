@@ -29,11 +29,12 @@ static cCurrentFile  // Current file path (empty = untitled)
 // Each entry: { cName, oForm, cCode, nFormX, nFormY }
 static aForms        // Array of form entries
 static nActiveForm   // Index of active form (1-based)
-static aDbgOffsets   // Debug line offsets: { {startLine, "tabName", nTabIndex}, ... }
+static aDbgOffsets   // Debug line offsets: { {startLine, "tabName", nTabIndex, nAdj}, ... }
+static oTB2          // Debug toolbar (for highlighting Debug button)
 
 function Main()
 
-   local oTB, oTB2, oFile, oEdit, oSearch, oView, oProject, oRun, oFormat, oComp, oTools, oHelp
+   local oTB, oFile, oEdit, oSearch, oView, oProject, oRun, oFormat, oComp, oTools, oHelp
    local nBarH, nInsW, nEditorX, nEditorW, nEditorH
    local nFormX, nFormY, nInsTop, nEditorTop, nBottomY
    local cIcoDir
@@ -55,11 +56,12 @@ function Main()
 
    UI_FormSetPos( oIDE:hCpp, 0, 0 )
    oIDE:Show()
+   UI_FormSetDarkMode( oIDE:hCpp )
 
    // Inspector: right below IDE window
    nInsTop  := MAC_GetWindowBottom( oIDE:hCpp )
    // Editor: starts below IDE bar + small offset
-   nEditorTop := nInsTop + 60
+   nEditorTop := nInsTop + 80
    nEditorX := nInsW
    nEditorW := nScreenW - nEditorX
    // Both inspector and editor end at same bottom position
@@ -1727,37 +1729,39 @@ static function TBDebugRun()
    // Step 2: Assemble debug_main.prg (tracking line offsets for each section)
    cLog += "[2] Assembling debug_main.prg..." + Chr(10)
 
+   // Header: #include + GT + INIT PROCEDURE to start debug client
    cAllPrg := '#include "hbbuilder.ch"' + Chr(10)
-   cAllPrg += "REQUEST HB_GT_NUL_DEFAULT" + Chr(10) + Chr(10)
-   nCurLine := 3
+   cAllPrg += "REQUEST HB_GT_NUL_DEFAULT" + Chr(10)
+   cAllPrg += "INIT PROCEDURE __DbgInit" + Chr(10)
+   cAllPrg += "   DbgClientStart( 19800 )" + Chr(10)
+   cAllPrg += "return" + Chr(10) + Chr(10)
+   nCurLine := 7
 
    aDbgOffsets := {}
 
-   // Project1.prg
-   AAdd( aDbgOffsets, { nCurLine, "Project1.prg", 1 } )
+   // Project1.prg — #include removed (StrTran leaves empty line, offsets match)
+   AAdd( aDbgOffsets, { nCurLine, "Project1.prg", 1, 1 } )
    cMainPrg := CodeEditorGetTabText( hCodeEditor, 1 )
    cMainPrg := StrTran( cMainPrg, '#include "hbbuilder.ch"', "" )
-   cMainPrg := StrTran( cMainPrg, "oApp:Run()", ;
-      "DbgClientStart( 19800 )" + Chr(10) + "   oApp:Run()" )
    cAllPrg += cMainPrg + Chr(10)
    nCurLine += NumLines( cMainPrg ) + 1
 
    // Form files
    for i := 1 to Len( aForms )
-      AAdd( aDbgOffsets, { nCurLine, aForms[i][1] + ".prg", i + 1 } )
+      AAdd( aDbgOffsets, { nCurLine, aForms[i][1] + ".prg", i + 1, 2 } )
       cSection := MemoRead( cBuildDir + "/" + aForms[i][1] + ".prg" )
       cAllPrg += cSection + Chr(10)
       nCurLine += NumLines( cSection ) + 1
    next
 
    // classes.prg (framework — not in editor)
-   AAdd( aDbgOffsets, { nCurLine, "classes.prg", 0 } )
+   AAdd( aDbgOffsets, { nCurLine, "classes.prg", 0, 0 } )
    cSection := MemoRead( cBuildDir + "/classes.prg" )
    cAllPrg += cSection + Chr(10)
    nCurLine += NumLines( cSection ) + 1
 
    // dbgclient.prg (debug — not in editor)
-   AAdd( aDbgOffsets, { nCurLine, "dbgclient.prg", 0 } )
+   AAdd( aDbgOffsets, { nCurLine, "dbgclient.prg", 0, 0 } )
    cAllPrg += MemoRead( cBuildDir + "/dbgclient.prg" ) + Chr(10)
 
    MemoWrit( cBuildDir + "/debug_main.prg", cAllPrg )
@@ -1861,17 +1865,153 @@ static function TBDebugRun()
       return nil
    endif
 
-   // Step 7: Switch inspector to debug mode and launch
+   // Step 7: Hide design form, highlight Debug button, switch inspector, launch
+   if oDesignForm != nil
+      UI_FormHide( oDesignForm:hCpp )
+   endif
+   if oTB2 != nil
+      UI_ToolBtnHighlight( oTB2:hCpp, 1, .t. )  // highlight Debug button
+   endif
    InspectorOpen()
    INS_SetDebugMode( _InsGetData(), .t. )
+   CodeEditorSelectTab( hCodeEditor, 1 )  // switch to Project1.prg
 
    IDE_DebugStart2( cBuildDir + "/DebugApp", ;
       { |cFunc, nLine, cLocals, cStack| OnDebugPause( cFunc, nLine, cLocals, cStack ) } )
 
-   // Restore inspector to normal mode when debug ends
+   // Restore: unhighlight, show design form, switch inspector back
+   if oTB2 != nil
+      UI_ToolBtnHighlight( oTB2:hCpp, 1, .f. )
+   endif
    INS_SetDebugMode( _InsGetData(), .f. )
+   if oDesignForm != nil
+      UI_FormBringToFront( oDesignForm:hCpp )
+   endif
 
 return nil
+
+// Convert stack line numbers from debug_main.prg to editor tab line numbers
+static function DbgFixStackLines( cStack )
+   local cOut := "STACK", cToken, nPos, nLine, nTabLine, i, nP1, nP2
+
+   // Parse "STACK FUNC(line) FUNC2(line2) ..."
+   cStack := AllTrim( cStack )
+   if Left( cStack, 5 ) == "STACK"; cStack := SubStr( cStack, 6 ); endif
+
+   do while ! Empty( cStack )
+      cStack := LTrim( cStack )
+      nPos := At( " ", cStack )
+      if nPos == 0
+         cToken := cStack
+         cStack := ""
+      else
+         cToken := Left( cStack, nPos - 1 )
+         cStack := SubStr( cStack, nPos + 1 )
+      endif
+
+      // Extract line from "FUNC(line)"
+      nP1 := At( "(", cToken )
+      nP2 := At( ")", cToken )
+      if nP1 > 0 .and. nP2 > nP1
+         nLine := Val( SubStr( cToken, nP1 + 1, nP2 - nP1 - 1 ) )
+         // Convert using offsets
+         nTabLine := nLine
+         if aDbgOffsets != nil
+            for i := Len( aDbgOffsets ) to 1 step -1
+               if nLine >= aDbgOffsets[i][1] .and. aDbgOffsets[i][3] > 0
+                  nTabLine := nLine - aDbgOffsets[i][1] + aDbgOffsets[i][4]
+                  exit
+               endif
+            next
+         endif
+         cOut += " " + Left( cToken, nP1 ) + LTrim( Str( nTabLine ) ) + ")"
+      else
+         cOut += " " + cToken
+      endif
+   enddo
+
+return cOut
+
+// Replace "local1", "local2" etc with real variable names from source
+static function DbgMapLocalNames( cVars, cFunc, nTab )
+   local cCode, aLines, cLine, i, aNames, nPos, cName, cTrim, lInFunc, c
+   local cTag, nP, nEnd
+
+   cCode := CodeEditorGetTabText( hCodeEditor, nTab )
+   if Empty( cCode ); return cVars; endif
+
+   aLines := HB_ATokens( cCode, Chr(10) )
+   aNames := {}
+   lInFunc := .f.
+
+   for i := 1 to Len( aLines )
+      cTrim := Upper( AllTrim( aLines[i] ) )
+      // Look for PROCEDURE/FUNCTION/METHOD matching cFunc
+      if ! lInFunc
+         if ( "PROCEDURE " $ cTrim .or. "FUNCTION " $ cTrim .or. "METHOD " $ cTrim ) .and. ;
+            Upper( cFunc ) $ cTrim
+            lInFunc := .t.
+         endif
+         loop
+      endif
+      // Inside the function — collect local declarations
+      if Left( cTrim, 6 ) == "LOCAL "
+         cLine := AllTrim( SubStr( AllTrim( aLines[i] ), 7 ) )
+         // Parse comma-separated names: "oApp, nVal, cText"
+         do while ! Empty( cLine )
+            // Skip spaces
+            cLine := LTrim( cLine )
+            // Extract name (stop at comma, space, :=, or end)
+            cName := ""
+            nPos := 1
+            do while nPos <= Len( cLine )
+               c := SubStr( cLine, nPos, 1 )
+               if c == "," .or. c == " " .or. c == ":" .or. c == Chr(13) .or. c == Chr(10)
+                  exit
+               endif
+               cName += c
+               nPos++
+            enddo
+            if ! Empty( cName )
+               AAdd( aNames, cName )
+            endif
+            // Skip past comma
+            nPos := At( ",", cLine )
+            if nPos > 0
+               cLine := SubStr( cLine, nPos + 1 )
+            else
+               exit
+            endif
+         enddo
+      elseif ! Empty( cTrim ) .and. Left( cTrim, 2 ) != "//" .and. ;
+             Left( cTrim, 6 ) != "LOCAL " .and. Left( cTrim, 7 ) != "STATIC "
+         // First non-local, non-comment line = end of declarations
+         exit
+      endif
+   next
+
+   // Replace "localN" with real names and remove unmapped extras
+   for i := 1 to Len( aNames )
+      cVars := StrTran( cVars, "local" + LTrim(Str(i)) + "=", aNames[i] + "=" )
+   next
+
+   // Remove any remaining "localN=..." entries (VM internal extras)
+   for i := Len( aNames ) + 1 to 30
+      cTag := " local" + LTrim(Str(i)) + "="
+      nP := At( cTag, cVars )
+      if nP > 0
+         nEnd := At( " ", SubStr( cVars, nP + 1 ) )
+         if nEnd > 0
+            cVars := Left( cVars, nP - 1 ) + SubStr( cVars, nP + nEnd )
+         else
+            cVars := Left( cVars, nP - 1 )
+         endif
+      else
+         exit
+      endif
+   next
+
+return cVars
 
 static function NumLines( cText )
    local n := 1, i
@@ -1893,32 +2033,40 @@ static function OnDebugPause( cFunc, nLine, cLocals, cStack )
       for i := Len( aDbgOffsets ) to 1 step -1
          if nLine >= aDbgOffsets[i][1]
             nTab := aDbgOffsets[i][3]
-            nTabLine := nLine - aDbgOffsets[i][1] + 1
+            nTabLine := nLine - aDbgOffsets[i][1] + aDbgOffsets[i][4]
             exit
          endif
       next
    endif
 
-   // Select the tab and highlight the line
-   if nTab > 0 .and. nTabLine > 0
-      CodeEditorSelectTab( hCodeEditor, nTab )
-      CodeEditorShowDebugLine( hCodeEditor, nTabLine )
-   else
-      CodeEditorShowDebugLine( hCodeEditor, 0 )
+   // Framework code (nTab == 0) — skip, don't pause, don't update inspector
+   if nTab == 0
+      return .f.
    endif
 
-   // Update inspector with locals and call stack
+   // Select the tab and highlight the line
+   if nTabLine > 0
+      CodeEditorSelectTab( hCodeEditor, nTab )
+      CodeEditorShowDebugLine( hCodeEditor, nTabLine )
+   endif
+
+   // Map local index names to real names from source code
+   if cLocals != nil .and. nTab > 0
+      cLocals := DbgMapLocalNames( cLocals, cFunc, nTab )
+   endif
+
+   // Update inspector with locals and call stack (convert line numbers)
    hIns := _InsGetData()
    if hIns != 0
       if cLocals != nil
          INS_SetDebugLocals( hIns, cLocals )
       endif
       if cStack != nil
-         INS_SetDebugStack( hIns, cStack )
+         INS_SetDebugStack( hIns, DbgFixStackLines( cStack ) )
       endif
    endif
 
-return nil
+return .t.  // pause here — user code
 
 // === AI Assistant ===
 

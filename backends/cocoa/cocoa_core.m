@@ -258,14 +258,14 @@ void EnsureNSApp( void )
 - (BOOL)isOpaque { return YES; }
 - (void)drawRect:(NSRect)dirtyRect
 {
-   /* Form background color */
+   /* Form background color (dark theme) */
    NSColor * bg = bgColor ? bgColor :
-      [NSColor colorWithCalibratedRed:0.94 green:0.94 blue:0.94 alpha:1.0];
+      [NSColor colorWithCalibratedRed:0.18 green:0.18 blue:0.18 alpha:1.0];
    [bg setFill];
    NSRectFill( dirtyRect );
 
-   /* Classic C++Builder dot grid */
-   [[NSColor colorWithCalibratedWhite:0.72 alpha:1.0] setFill];
+   /* Classic C++Builder dot grid (lighter dots on dark bg) */
+   [[NSColor colorWithCalibratedWhite:0.35 alpha:1.0] setFill];
    int gridStep = 8;
    int x1 = ((int)dirtyRect.origin.x / gridStep) * gridStep;
    int y1 = ((int)dirtyRect.origin.y / gridStep) * gridStep;
@@ -1074,9 +1074,9 @@ void EnsureNSApp( void )
       Width is sized to fit content, not the parent. */
    NSView * toolbar = [[HBFlippedView alloc] initWithFrame:NSMakeRect( 0, 0, 100, 30 )];
 
-   /* Light gray background */
+   /* Toolbar background — inherits from parent window appearance */
    toolbar.wantsLayer = YES;
-   toolbar.layer.backgroundColor = [[NSColor colorWithCalibratedWhite:0.92 alpha:1.0] CGColor];
+   toolbar.layer.backgroundColor = [[NSColor colorWithCalibratedWhite:0.22 alpha:1.0] CGColor];
 
    int btnW = 24, btnH = 24;
    int xPos = 4;
@@ -2003,6 +2003,10 @@ static HBPaletteTarget * s_palTarget = nil;
    [FWindow setTitle:[NSString stringWithUTF8String:FText]];
    [FWindow setDelegate:self];
    [FWindow setReleasedWhenClosed:NO];
+   if( FDesignMode ) {
+      [FWindow setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]];
+      [FWindow setBackgroundColor:[NSColor colorWithCalibratedWhite:0.18 alpha:1.0]];
+   }
    if( FAppBar ) [FWindow setHasShadow:NO];
 
    /* FormStyle: stay on top */
@@ -2017,6 +2021,10 @@ static HBPaletteTarget * s_palTarget = nil;
    fcv->form = self;
    FContentView = fcv;
    [FContentView setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+   if( FDesignMode ) {
+      FContentView.wantsLayer = YES;
+      FContentView.layer.backgroundColor = [[NSColor colorWithCalibratedWhite:0.18 alpha:1.0] CGColor];
+   }
 
    /* Design-time dot grid (first subview, behind all controls) */
    if( FDesignMode )
@@ -2436,6 +2444,17 @@ HB_FUNC( UI_GETSELECTED )
 }
 
 HB_FUNC( UI_FORMSETDESIGN ) { HBForm * p = GetForm(1); if( p ) [p setDesignMode:hb_parl(2)]; }
+HB_FUNC( UI_FORMSETDARKMODE ) {
+   HBForm * p = GetForm(1);
+   if( p && p->FWindow ) {
+      [p->FWindow setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]];
+      [p->FWindow setBackgroundColor:[NSColor colorWithCalibratedWhite:0.18 alpha:1.0]];
+      if( p->FContentView ) {
+         p->FContentView.wantsLayer = YES;
+         p->FContentView.layer.backgroundColor = [[NSColor colorWithCalibratedWhite:0.18 alpha:1.0] CGColor];
+      }
+   }
+}
 HB_FUNC( UI_FORMRUN )       { HBForm * p = GetForm(1); if( p ) [p run]; }
 HB_FUNC( UI_FORMSHOW )      { HBForm * p = GetForm(1); if( p ) [p showOnly]; }
 HB_FUNC( UI_FORMCLOSE )     { HBForm * p = GetForm(1); if( p ) [p close]; }
@@ -3310,6 +3329,34 @@ HB_FUNC( UI_TOOLBTNONCLICK )
    PHB_ITEM pBlock = hb_param(3, HB_IT_BLOCK);
    if( p && p->FControlType == CT_TOOLBAR && pBlock )
       [p setBtnClick:hb_parni(2) block:pBlock];
+}
+
+/* UI_ToolBtnHighlight( hToolbar, nBtn, lHighlight )
+ * nBtn is 1-based. Sets/clears a colored background on the button. */
+HB_FUNC( UI_TOOLBTNHIGHLIGHT )
+{
+   HBToolBar * p = (__bridge HBToolBar *)(void *)(HB_PTRUINT)hb_parnint(1);
+   int nBtn = hb_parni(2) - 1;
+   BOOL bOn = hb_parl(3);
+   if( !p || p->FControlType != CT_TOOLBAR || !p->FView ) return;
+
+   /* Find the nth NSButton in the toolbar subviews */
+   int idx = 0;
+   for( NSView * sv in [p->FView subviews] )
+   {
+      if( ![sv isKindOfClass:[NSButton class]] ) continue;
+      if( idx == nBtn )
+      {
+         NSButton * btn = (NSButton *)sv;
+         btn.wantsLayer = YES;
+         if( bOn )
+            btn.layer.backgroundColor = [[NSColor colorWithSRGBRed:0.8 green:0.2 blue:0.2 alpha:0.7] CGColor];
+         else
+            btn.layer.backgroundColor = nil;
+         break;
+      }
+      idx++;
+   }
 }
 
 /* SliceBmpStrip - load a BMP strip, slice into 32x32 icons with magenta transparency.

@@ -343,6 +343,10 @@ static void CE_ConfigureScintilla( ScintillaView * sv )
    SciMsg( sv, SCI_MARKERDEFINE, 10, SC_MARK_BACKGROUND );
    SciMsg( sv, 2042, 10, SCIRGB(80,20,20) );  /* SCI_MARKERSETBACK: dark red bg */
 
+   /* Debug execution line marker: visible yellow on dark background (marker 11) */
+   SciMsg( sv, SCI_MARKERDEFINE, 11, SC_MARK_BACKGROUND );
+   SciMsg( sv, 2042, 11, SCIRGB(60,60,0) );  /* SCI_MARKERSETBACK: yellow-brown */
+
    /* Bookmarks: markers 0-9 using circles in margin 1 */
    SciMsg( sv, SCI_SETMARGINTYPEN, 1, SC_MARGIN_SYMBOL );
    SciMsg( sv, SCI_SETMARGINWIDTHN, 1, 16 );
@@ -1685,6 +1689,35 @@ HB_FUNC( CODEEDITORBRINGTOFRONT )
    }
 }
 
+/* CodeEditorShowDebugLine( hEditor, nLine ) — highlight execution line
+ * Clears previous marker, sets marker 11 on nLine, scrolls to it.
+ * nLine is 1-based (Harbour convention). Pass 0 to clear. */
+HB_FUNC( CODEEDITORSHOWDEBUGLINE )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   int nLine = hb_parni(2) - 1;  /* convert to 0-based */
+   if( !ed || !ed->sciView ) return;
+
+   /* Clear all debug markers */
+   SciMsg( ed->sciView, SCI_MARKERDELETEALL, 11, 0 );
+
+   if( nLine >= 0 )
+   {
+      /* Set marker on the line */
+      SciMsg( ed->sciView, SCI_MARKERADD, (uptr_t)nLine, 11 );
+
+      /* Scroll to make line visible and position cursor */
+      SciMsg( ed->sciView, SCI_GOTOLINE, (uptr_t)nLine, 0 );
+      SciMsg( ed->sciView, SCI_SETFIRSTVISIBLELINE,
+              (uptr_t)(nLine > 5 ? nLine - 5 : 0), 0 );
+
+      /* Bring editor to front */
+      if( ed->window ) {
+         [ed->window makeKeyAndOrderFront:nil];
+      }
+   }
+}
+
 HB_FUNC( CODEEDITORDESTROY )
 {
    CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
@@ -2613,6 +2646,8 @@ static NSMutableArray * s_dbgStackData = nil;
 /* Socket debug server */
 static int s_dbgServerFD = -1;
 static int s_dbgClientFD = -1;
+static char s_dbgRecvBuf[8192];
+static int  s_dbgRecvLen = 0;
 
 static int DbgServerStart( int port )
 {
@@ -2666,22 +2701,48 @@ static void DbgServerSend( const char * cmd )
    send( s_dbgClientFD, buf, strlen(buf), 0 );
 }
 
+/* Receive one complete line from the debug client (line-buffered).
+ * Returns length of line (without \n), or -1 on disconnect. */
 static int DbgServerRecv( char * buf, int bufSize )
 {
    if( s_dbgClientFD < 0 ) return -1;
-   fd_set fds; struct timeval tv;
+
    while(1) {
+      /* Check if we already have a complete line in the buffer */
+      for( int i = 0; i < s_dbgRecvLen; i++ )
+      {
+         if( s_dbgRecvBuf[i] == '\n' )
+         {
+            int lineLen = i;
+            /* Strip trailing \r */
+            while( lineLen > 0 && s_dbgRecvBuf[lineLen-1] == '\r' ) lineLen--;
+            if( lineLen >= bufSize ) lineLen = bufSize - 1;
+            memcpy( buf, s_dbgRecvBuf, (size_t)lineLen );
+            buf[lineLen] = 0;
+            /* Remove consumed data from buffer */
+            int consumed = i + 1;
+            s_dbgRecvLen -= consumed;
+            if( s_dbgRecvLen > 0 )
+               memmove( s_dbgRecvBuf, s_dbgRecvBuf + consumed, (size_t)s_dbgRecvLen );
+            return lineLen;
+         }
+      }
+
+      /* No complete line yet — read more data */
+      fd_set fds; struct timeval tv;
       FD_ZERO( &fds );
       FD_SET( s_dbgClientFD, &fds );
       tv.tv_sec = 0; tv.tv_usec = 100000;
       int r = select( s_dbgClientFD + 1, &fds, NULL, NULL, &tv );
       if( r > 0 ) {
-         ssize_t n = recv( s_dbgClientFD, buf, (size_t)(bufSize - 1), 0 );
+         int space = (int)sizeof(s_dbgRecvBuf) - s_dbgRecvLen - 1;
+         if( space <= 0 ) { s_dbgRecvLen = 0; continue; }  /* overflow: reset */
+         ssize_t n = recv( s_dbgClientFD, s_dbgRecvBuf + s_dbgRecvLen, (size_t)space, 0 );
          if( n <= 0 ) return -1;
-         buf[n] = 0;
-         while( n > 0 && (buf[n-1] == '\n' || buf[n-1] == '\r') ) buf[--n] = 0;
-         return (int)n;
+         s_dbgRecvLen += (int)n;
       }
+
+      /* Pump Cocoa events while waiting */
       @autoreleasepool {
          NSEvent * ev = [NSApp nextEventMatchingMask:NSEventMaskAny
             untilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]
@@ -2696,6 +2757,7 @@ static void DbgServerStop(void)
 {
    if( s_dbgClientFD >= 0 ) { close( s_dbgClientFD ); s_dbgClientFD = -1; }
    if( s_dbgServerFD >= 0 ) { close( s_dbgServerFD ); s_dbgServerFD = -1; }
+   s_dbgRecvLen = 0;
 }
 
 /* -----------------------------------------------------------------------
@@ -3069,7 +3131,9 @@ HB_FUNC( IDE_DEBUGSTART2 )
    const char * cExePath = hb_parc(1);
    PHB_ITEM pOnPause = hb_param(2, HB_IT_BLOCK);
 
-   if( !cExePath || s_dbgState != DBG_IDLE ) { hb_retl( HB_FALSE ); return; }
+   setbuf(stderr, NULL);  /* unbuffer stderr for debug traces */
+   fprintf(stderr, "IDE-DBG: IDE_DebugStart2 called exe='%s'\n", cExePath ? cExePath : "(null)");
+   if( !cExePath || s_dbgState != DBG_IDLE ) { fprintf(stderr, "IDE-DBG: rejected (null=%d state=%d)\n", !cExePath, s_dbgState); hb_retl( HB_FALSE ); return; }
 
    if( s_dbgOnPause ) { hb_itemRelease( s_dbgOnPause ); s_dbgOnPause = NULL; }
    if( pOnPause ) s_dbgOnPause = hb_itemNew( pOnPause );
@@ -3084,15 +3148,18 @@ HB_FUNC( IDE_DEBUGSTART2 )
 
    s_dbgState = DBG_STEPPING;
    s_nBreakpoints = 0;
+   fprintf(stderr, "IDE-DBG: server started on 19800\n");
    DbgOutput( "=== Debug session started (socket) ===\n" );
    DbgOutput( "Listening on port 19800...\n" );
 
    /* Launch user executable */
    {
       char cmd[1024];
-      snprintf( cmd, sizeof(cmd), "\"%s\" &", cExePath );
+      snprintf( cmd, sizeof(cmd), "\"%s\" 2>/tmp/hb_debugapp.txt &", cExePath );
+      fprintf(stderr, "IDE-DBG: launching: %s\n", cmd);
       system( cmd );
    }
+   fprintf(stderr, "IDE-DBG: waiting for connection...\n");
    DbgOutput( "Launched debug process. Waiting for connection...\n" );
 
    if( s_dbgStatusLbl )
@@ -3101,30 +3168,35 @@ HB_FUNC( IDE_DEBUGSTART2 )
    /* Accept connection */
    if( DbgServerAccept( 30.0 ) != 0 )
    {
+      fprintf(stderr, "IDE-DBG: accept FAILED\n");
       DbgOutput( "ERROR: Client did not connect within 30s\n" );
       DbgServerStop();
       s_dbgState = DBG_IDLE;
       hb_retl( HB_FALSE );
       return;
    }
+   fprintf(stderr, "IDE-DBG: client connected!\n");
    DbgOutput( "Client connected.\n" );
 
    /* Command loop */
    char recvBuf[4096];
    s_dbgState = DBG_PAUSED;
+   fprintf(stderr, "IDE-DBG: entering command loop\n");
 
    while( s_dbgState != DBG_IDLE && s_dbgState != DBG_STOPPED )
    {
       int n = DbgServerRecv( recvBuf, sizeof(recvBuf) );
+      fprintf(stderr, "IDE-DBG: recv n=%d buf='%.80s'\n", n, n > 0 ? recvBuf : "");
       if( n <= 0 ) {
+         fprintf(stderr, "IDE-DBG: client disconnected\n");
          DbgOutput( "Client disconnected.\n" );
          break;
       }
 
       if( strncmp( recvBuf, "HELLO", 5 ) == 0 )
       {
+         fprintf(stderr, "IDE-DBG: got HELLO, sending STEP\n");
          DbgOutput( recvBuf ); DbgOutput( "\n" );
-         /* Tell client to start stepping */
          DbgServerSend( "STEP" );
          s_dbgState = DBG_PAUSED;
          continue;
@@ -3132,46 +3204,83 @@ HB_FUNC( IDE_DEBUGSTART2 )
 
       if( strncmp( recvBuf, "PAUSE ", 6 ) == 0 )
       {
-         /* Parse module:line */
-         char * colon = strrchr( recvBuf + 6, ':' );
-         if( !colon ) continue;
-         *colon = 0;
-         const char * module = recvBuf + 6;
-         int line = atoi( colon + 1 );
+         /* Format: PAUSE filepath:FUNCNAME:line|LOCALS ...|STACK ...
+          * Split at '|' first to extract locals and stack */
+         char localsStr[4096] = "LOCALS";
+         char stackStr[4096] = "STACK";
 
-         strncpy( s_dbgModule, module, sizeof(s_dbgModule) - 1 );
+         char * pipe1 = strchr( recvBuf, '|' );
+         if( pipe1 ) {
+            *pipe1 = 0;
+            char * pipe2 = strchr( pipe1 + 1, '|' );
+            if( pipe2 ) {
+               *pipe2 = 0;
+               strncpy( localsStr, pipe1 + 1, sizeof(localsStr) - 1 );
+               strncpy( stackStr, pipe2 + 1, sizeof(stackStr) - 1 );
+            } else {
+               strncpy( localsStr, pipe1 + 1, sizeof(localsStr) - 1 );
+            }
+         }
+
+         /* Now parse PAUSE filepath:FUNCNAME:line */
+         char * lastColon = strrchr( recvBuf + 6, ':' );
+         if( !lastColon ) continue;
+         int line = atoi( lastColon + 1 );
+         *lastColon = 0;
+
+         char * funcColon = strrchr( recvBuf + 6, ':' );
+         const char * funcName = "";
+         if( funcColon ) {
+            funcName = funcColon + 1;
+         }
+
          s_dbgLine = line;
+
+         /* In RUNNING mode, skip pause — just send GO immediately
+          * (TODO: check breakpoints here) */
+         if( s_dbgState == DBG_RUNNING )
+         {
+            DbgServerSend( "GO" );
+            continue;
+         }
+
+         /* === STEPPING/PAUSED: show state and wait for user === */
          s_dbgState = DBG_PAUSED;
+
+         /* Call Harbour callback: ( cFuncName, nLine, cLocals, cStack )
+          * Returns .T. if the line is in user code (should pause),
+          * .F. if framework code (auto-step over). */
+         BOOL shouldPause = HB_TRUE;
+         if( s_dbgOnPause && HB_IS_BLOCK( s_dbgOnPause ) )
+         {
+            PHB_ITEM pFunc   = hb_itemPutC( NULL, funcName );
+            PHB_ITEM pLine   = hb_itemPutNI( NULL, line );
+            PHB_ITEM pLocals = hb_itemPutC( NULL, localsStr );
+            PHB_ITEM pStack  = hb_itemPutC( NULL, stackStr );
+            PHB_ITEM pResult = hb_itemDo( s_dbgOnPause, 4, pFunc, pLine, pLocals, pStack );
+            if( pResult && HB_IS_LOGICAL( pResult ) )
+               shouldPause = hb_itemGetL( pResult );
+            else
+               shouldPause = HB_TRUE;  /* default: pause if no clear .F. */
+            hb_itemRelease( pFunc );
+            hb_itemRelease( pLine );
+            hb_itemRelease( pLocals );
+            hb_itemRelease( pStack );
+         }
+
+         /* If framework code, send STEP to continue (client skips framework locally) */
+         if( !shouldPause )
+         {
+            DbgServerSend( "STEP" );
+            s_dbgState = DBG_PAUSED;
+            continue;
+         }
 
          /* Update status */
          if( s_dbgStatusLbl ) {
             char status[512];
-            snprintf(status, sizeof(status), "Paused at %s:%d", module, line);
+            snprintf(status, sizeof(status), "Paused at %s() line %d", funcName, line);
             [s_dbgStatusLbl setStringValue:[NSString stringWithUTF8String:status]];
-         }
-
-         /* Get locals */
-         DbgServerSend( "GETLOCALS" );
-         n = DbgServerRecv( recvBuf, sizeof(recvBuf) );
-         if( n > 0 && strncmp( recvBuf, "LOCALS", 6 ) == 0 ) {
-            DbgOutput( recvBuf ); DbgOutput( "\n" );
-         }
-
-         /* Get stack */
-         DbgServerSend( "GETSTACK" );
-         n = DbgServerRecv( recvBuf, sizeof(recvBuf) );
-         if( n > 0 && strncmp( recvBuf, "STACK", 5 ) == 0 ) {
-            DbgOutput( recvBuf ); DbgOutput( "\n" );
-         }
-
-         /* Call Harbour callback for UI update */
-         if( s_dbgOnPause && HB_IS_BLOCK( s_dbgOnPause ) )
-         {
-            PHB_ITEM pMod  = hb_itemPutC( NULL, module );
-            PHB_ITEM pLine = hb_itemPutNI( NULL, line );
-            hb_itemDo( s_dbgOnPause, 2, pMod, pLine );
-            hb_itemRelease( pMod );
-            hb_itemRelease( pLine );
          }
 
          /* Wait for user action (Step/Go/Stop via debug panel buttons) */
@@ -3185,27 +3294,32 @@ HB_FUNC( IDE_DEBUGSTART2 )
             }
          }
 
-         /* Send command based on state */
+         /* Send command based on new state */
          if( s_dbgState == DBG_STEPPING || s_dbgState == DBG_STEPOVER )
+         {
             DbgServerSend( "STEP" );
+            s_dbgState = DBG_PAUSED;  /* reset for next PAUSE */
+         }
          else if( s_dbgState == DBG_RUNNING )
             DbgServerSend( "GO" );
          else if( s_dbgState == DBG_STOPPED )
             DbgServerSend( "QUIT" );
-
-         /* Reset to paused for next PAUSE message */
-         if( s_dbgState == DBG_STEPPING || s_dbgState == DBG_STEPOVER )
-            s_dbgState = DBG_PAUSED;
       }
    }
 
    /* Cleanup */
    DbgServerSend( "QUIT" );
    DbgServerStop();
+
+   /* Kill any remaining DebugApp process */
+   system( "killall DebugApp 2>/dev/null" );
+
    s_dbgState = DBG_IDLE;
-   DbgOutput( "=== Debug session ended ===\n" );
-   if( s_dbgStatusLbl )
-      [s_dbgStatusLbl setStringValue:@"Ready"];
+   s_dbgRecvLen = 0;
+
+   /* Clear debug line marker in editor */
+   if( s_keyMonitorEd && s_keyMonitorEd->sciView )
+      SciMsg( s_keyMonitorEd->sciView, SCI_MARKERDELETEALL, 11, 0 );
 
    hb_retl( HB_TRUE );
 }

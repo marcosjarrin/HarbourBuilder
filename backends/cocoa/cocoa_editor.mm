@@ -343,9 +343,9 @@ static void CE_ConfigureScintilla( ScintillaView * sv )
    SciMsg( sv, SCI_MARKERDEFINE, 10, SC_MARK_BACKGROUND );
    SciMsg( sv, 2042, 10, SCIRGB(80,20,20) );  /* SCI_MARKERSETBACK: dark red bg */
 
-   /* Debug execution line marker: yellow background (marker 11) */
+   /* Debug execution line marker: visible yellow on dark background (marker 11) */
    SciMsg( sv, SCI_MARKERDEFINE, 11, SC_MARK_BACKGROUND );
-   SciMsg( sv, 2042, 11, SCIRGB(80,80,20) );  /* SCI_MARKERSETBACK: dark yellow */
+   SciMsg( sv, 2042, 11, SCIRGB(60,60,0) );  /* SCI_MARKERSETBACK: yellow-brown */
 
    /* Bookmarks: markers 0-9 using circles in margin 1 */
    SciMsg( sv, SCI_SETMARGINTYPEN, 1, SC_MARGIN_SYMBOL );
@@ -3204,14 +3204,30 @@ HB_FUNC( IDE_DEBUGSTART2 )
 
       if( strncmp( recvBuf, "PAUSE ", 6 ) == 0 )
       {
-         /* Parse: PAUSE filepath:FUNCNAME:line
-          * The module from Harbour -b is "filepath:FUNCNAME" and line is the number */
+         /* Format: PAUSE filepath:FUNCNAME:line|LOCALS ...|STACK ...
+          * Split at '|' first to extract locals and stack */
+         char localsStr[4096] = "LOCALS";
+         char stackStr[4096] = "STACK";
+
+         char * pipe1 = strchr( recvBuf, '|' );
+         if( pipe1 ) {
+            *pipe1 = 0;
+            char * pipe2 = strchr( pipe1 + 1, '|' );
+            if( pipe2 ) {
+               *pipe2 = 0;
+               strncpy( localsStr, pipe1 + 1, sizeof(localsStr) - 1 );
+               strncpy( stackStr, pipe2 + 1, sizeof(stackStr) - 1 );
+            } else {
+               strncpy( localsStr, pipe1 + 1, sizeof(localsStr) - 1 );
+            }
+         }
+
+         /* Now parse PAUSE filepath:FUNCNAME:line */
          char * lastColon = strrchr( recvBuf + 6, ':' );
          if( !lastColon ) continue;
          int line = atoi( lastColon + 1 );
          *lastColon = 0;
 
-         /* Now recvBuf+6 = "filepath:FUNCNAME" — extract function name */
          char * funcColon = strrchr( recvBuf + 6, ':' );
          const char * funcName = "";
          if( funcColon ) {
@@ -3230,7 +3246,35 @@ HB_FUNC( IDE_DEBUGSTART2 )
 
          /* === STEPPING/PAUSED: show state and wait for user === */
          s_dbgState = DBG_PAUSED;
-         fprintf(stderr, "IDE-PAUSE: func=%s line=%d state=%d\n", funcName, line, s_dbgState);
+
+         /* Call Harbour callback: ( cFuncName, nLine, cLocals, cStack )
+          * Returns .T. if the line is in user code (should pause),
+          * .F. if framework code (auto-step over). */
+         BOOL shouldPause = HB_TRUE;
+         if( s_dbgOnPause && HB_IS_BLOCK( s_dbgOnPause ) )
+         {
+            PHB_ITEM pFunc   = hb_itemPutC( NULL, funcName );
+            PHB_ITEM pLine   = hb_itemPutNI( NULL, line );
+            PHB_ITEM pLocals = hb_itemPutC( NULL, localsStr );
+            PHB_ITEM pStack  = hb_itemPutC( NULL, stackStr );
+            PHB_ITEM pResult = hb_itemDo( s_dbgOnPause, 4, pFunc, pLine, pLocals, pStack );
+            if( pResult && HB_IS_LOGICAL( pResult ) )
+               shouldPause = hb_itemGetL( pResult );
+            else
+               shouldPause = HB_TRUE;  /* default: pause if no clear .F. */
+            hb_itemRelease( pFunc );
+            hb_itemRelease( pLine );
+            hb_itemRelease( pLocals );
+            hb_itemRelease( pStack );
+         }
+
+         /* If framework code, send STEP to continue (client skips framework locally) */
+         if( !shouldPause )
+         {
+            DbgServerSend( "STEP" );
+            s_dbgState = DBG_PAUSED;
+            continue;
+         }
 
          /* Update status */
          if( s_dbgStatusLbl ) {
@@ -3239,36 +3283,7 @@ HB_FUNC( IDE_DEBUGSTART2 )
             [s_dbgStatusLbl setStringValue:[NSString stringWithUTF8String:status]];
          }
 
-         /* Get locals */
-         char localsStr[4096] = "LOCALS";
-         DbgServerSend( "GETLOCALS" );
-         n = DbgServerRecv( recvBuf, sizeof(recvBuf) );
-         if( n > 0 && strncmp( recvBuf, "LOCALS", 6 ) == 0 )
-            strncpy( localsStr, recvBuf, sizeof(localsStr) - 1 );
-
-         /* Get stack */
-         char stackStr[4096] = "STACK";
-         DbgServerSend( "GETSTACK" );
-         n = DbgServerRecv( recvBuf, sizeof(recvBuf) );
-         if( n > 0 && strncmp( recvBuf, "STACK", 5 ) == 0 )
-            strncpy( stackStr, recvBuf, sizeof(stackStr) - 1 );
-
-         /* Call Harbour callback: ( cFuncName, nLine, cLocals, cStack ) */
-         if( s_dbgOnPause && HB_IS_BLOCK( s_dbgOnPause ) )
-         {
-            PHB_ITEM pFunc   = hb_itemPutC( NULL, funcName );
-            PHB_ITEM pLine   = hb_itemPutNI( NULL, line );
-            PHB_ITEM pLocals = hb_itemPutC( NULL, localsStr );
-            PHB_ITEM pStack  = hb_itemPutC( NULL, stackStr );
-            hb_itemDo( s_dbgOnPause, 4, pFunc, pLine, pLocals, pStack );
-            hb_itemRelease( pFunc );
-            hb_itemRelease( pLine );
-            hb_itemRelease( pLocals );
-            hb_itemRelease( pStack );
-         }
-
          /* Wait for user action (Step/Go/Stop via debug panel buttons) */
-         fprintf(stderr, "IDE-PAUSE: waiting for user (state=%d)\n", s_dbgState);
          while( s_dbgState == DBG_PAUSED )
          {
             @autoreleasepool {
@@ -3295,10 +3310,12 @@ HB_FUNC( IDE_DEBUGSTART2 )
    /* Cleanup */
    DbgServerSend( "QUIT" );
    DbgServerStop();
+
+   /* Kill any remaining DebugApp process */
+   system( "killall DebugApp 2>/dev/null" );
+
    s_dbgState = DBG_IDLE;
-   DbgOutput( "=== Debug session ended ===\n" );
-   if( s_dbgStatusLbl )
-      [s_dbgStatusLbl setStringValue:@"Ready"];
+   s_dbgRecvLen = 0;
 
    /* Clear debug line marker in editor */
    if( s_keyMonitorEd && s_keyMonitorEd->sciView )

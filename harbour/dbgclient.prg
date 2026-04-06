@@ -8,11 +8,12 @@
 #define DBG_SOCKET    1
 #define DBG_CONNECTED 2
 #define DBG_READY     3
+#define DBG_STEPPING  4
 
 static function DbgState()
    static s_aState := nil
    if s_aState == nil
-      s_aState := { nil, .f., .f. }
+      s_aState := { nil, .f., .f., .t. }  // socket, connected, ready, stepping
    endif
 return s_aState
 
@@ -37,8 +38,8 @@ function DbgClientStart( nPort )
    aS[ DBG_SOCKET ] := hSocket
    aS[ DBG_CONNECTED ] := .t.
 
-   // Install C-level debug hook — block receives ( nLine, cModule )
-   DbgHookInstall( { |nLine, cModule| DbgHook( nLine, cModule ) } )
+   // Install C-level debug hook — block receives ( nLine, cModule, cProcName )
+   DbgHookInstall( { |nLine, cModule, cProc| DbgHook( nLine, cModule, cProc ) } )
 
    // Handshake: send HELLO, wait for STEP
    DbgSend( "HELLO " + ProcFile(2) )
@@ -51,17 +52,21 @@ return .t.
 
 // Called from C hook on each source line — receives ( nLine, cModule )
 
-static function DbgHook( nLine, cModule )
+static function DbgHook( nLine, cModule, cProcName )
 
-   local cCmd, aS := DbgState()
+   local cCmd, cMsg, aS := DbgState()
 
    if ! aS[ DBG_CONNECTED ] .or. ! aS[ DBG_READY ]
       return nil
    endif
 
-   // Send PAUSE and wait for IDE command
-   DbgSend( "PAUSE " + cModule + ":" + LTrim( Str( nLine ) ) )
+   // Build full PAUSE message with locals and stack inline
+   cMsg := "PAUSE " + cModule + ":" + LTrim( Str( nLine ) )
+   cMsg += "|" + BuildLocals( cProcName )
+   cMsg += "|" + BuildStack()
+   DbgSend( cMsg )
 
+   // Wait for single command: STEP, GO, or QUIT
    do while aS[ DBG_CONNECTED ]
       cCmd := DbgRecv()
       if cCmd == nil
@@ -79,57 +84,97 @@ static function DbgHook( nLine, cModule )
       if Left( cCmd, 4 ) == "STEP" .or. Left( cCmd, 2 ) == "GO"
          exit
       endif
-
-      if Left( cCmd, 9 ) == "GETLOCALS"
-         DbgSendLocals()
-      elseif Left( cCmd, 8 ) == "GETSTACK"
-         DbgSendStack()
-      endif
    enddo
 
 return nil
 
-static function DbgSendLocals()
+static function BuildLocals( cTargetFunc )
 
    local i, j, cOut, cName, xVal, cType, aLocals, nFrame
+   local aNames, nCount, nTry, aTest, cUpper
 
-   cOut := "LOCALS"
+   cOut := "VARS"
    nFrame := 0
 
-   // Walk the call stack to find the user's frame
-   for i := 1 to 30
-      cName := ProcName( i )
-      if Empty( cName ); exit; endif
-      if ! ( "DBGSEND" $ Upper(cName) .or. "DBGHOOK" $ Upper(cName) .or. ;
-             "(B)" $ Upper(cName) .or. "DBGCLIENT" $ Upper(cName) )
-         nFrame := i
-         exit
-      endif
-   next
-
-   if nFrame > 0
-      BEGIN SEQUENCE
-         aLocals := __dbgVmLocalList( nFrame )
-         if ValType( aLocals ) == "A"
-            for j := 1 to Len( aLocals )
-               if ValType( aLocals[j] ) != "C"; loop; endif
-               BEGIN SEQUENCE
-                  xVal := __dbgVmVarLGet( nFrame, j )
-               RECOVER
-                  xVal := "?"
-               END SEQUENCE
-               cType := ValType( xVal )
-               cOut += " " + aLocals[j] + "=" + hb_ValToStr( xVal ) + "(" + cType + ")"
-            next
+   // Find user's stack frame — match the exact function name from C hook
+   if ! Empty( cTargetFunc )
+      cUpper := Upper( cTargetFunc )
+      for i := 1 to 20
+         cName := Upper( ProcName( i ) )
+         if Empty( cName ); exit; endif
+         // Exact match or CLASS:METHOD match (ProcName may return "TAPPLICATION:NEW")
+         if cName == cUpper .or. ;
+            ( ":" $ cName .and. SubStr( cName, At( ":", cName ) + 1 ) == cUpper )
+            nFrame := i
+            exit
          endif
-      END SEQUENCE
+      next
    endif
 
-   DbgSend( cOut )
+   // Fallback: first non-debug frame
+   if nFrame == 0
+      for i := 1 to 15
+         cName := ProcName( i )
+         if Empty( cName ); exit; endif
+         if ! ( "BUILD" $ Upper(cName) .or. "DBGHOOK" $ Upper(cName) .or. ;
+                "(B)" $ Upper(cName) .or. "DBGCLIENT" $ Upper(cName) .or. ;
+                "__DBGINIT" $ Upper(cName) )
+            nFrame := i
+            exit
+         endif
+      next
+   endif
 
-return nil
+   // PUBLIC variables
+   BEGIN SEQUENCE
+      nCount := __mvDbgInfo( 1 )  // HB_MV_PUBLIC count
+      if ValType( nCount ) == "N" .and. nCount > 0
+         cOut += " [PUBLIC]"
+         for j := 1 to Min( nCount, 30 )
+            cName := ""
+            xVal := nil
+            __mvDbgInfo( 1, j, @cName, @xVal )  // get public #j
+            if ! Empty( cName )
+               cOut += " " + cName + "=" + DbgValStr( xVal )
+            endif
+         next
+      endif
+   END SEQUENCE
 
-static function DbgSendStack()
+   // PRIVATE variables
+   BEGIN SEQUENCE
+      nCount := __mvDbgInfo( 2 )  // HB_MV_PRIVATE count
+      if ValType( nCount ) == "N" .and. nCount > 0
+         cOut += " [PRIVATE]"
+         for j := 1 to Min( nCount, 30 )
+            cName := ""
+            xVal := nil
+            __mvDbgInfo( 2, j, @cName, @xVal )
+            if ! Empty( cName )
+               cOut += " " + cName + "=" + DbgValStr( xVal )
+            endif
+         next
+      endif
+   END SEQUENCE
+
+   // LOCAL variables
+   OutErr( "PROCLEVEL: " + LTrim(Str(__dbgProcLevel())) + " FRAME: " + LTrim(Str(nFrame)) + Chr(10) )
+   if nFrame > 0 .and. nFrame <= __dbgProcLevel()
+      // __dbgVmLocalList returns local values (not names in this Harbour build)
+      // Send values with index-based names; IDE maps real names from source
+      aLocals := __dbgVmLocalList( nFrame )
+      if ValType( aLocals ) == "A" .and. Len( aLocals ) > 0
+         cOut += " [LOCAL]"
+         for j := 1 to Len( aLocals )
+            xVal := aLocals[j]
+            cOut += " local" + LTrim(Str(j)) + "=" + DbgValStr( xVal )
+         next
+      endif
+   endif
+
+return cOut
+
+static function BuildStack()
 
    local i, cOut, cName
 
@@ -137,17 +182,71 @@ static function DbgSendStack()
    for i := 1 to 25
       cName := ProcName( i )
       if Empty( cName ); exit; endif
-      // Skip internal debug frames
-      if "DBGSEND" $ Upper(cName) .or. "DBGHOOK" $ Upper(cName) .or. ;
+      if "BUILD" $ Upper(cName) .or. "DBGHOOK" $ Upper(cName) .or. ;
          "(B)" $ Upper(cName) .or. "DBGCLIENT" $ Upper(cName)
          loop
       endif
       cOut += " " + cName + "(" + LTrim( Str( ProcLine( i ) ) ) + ")"
    next
 
-   DbgSend( cOut )
+return cOut
 
-return nil
+static function IsFrameworkFunc( cModule )
+   local cFunc, nPos, i, lHasDigit
+   // Extract function name from module string "path:FUNCNAME"
+   nPos := RAt( ":", cModule )
+   if nPos > 0
+      cFunc := Upper( SubStr( cModule, nPos + 1 ) )
+   else
+      cFunc := Upper( cModule )
+   endif
+   // Framework: starts with T without digits (TAPPLICATION, TFORM, TCONTROL...),
+   //   but NOT user classes with digits (TFORM1, TFORM2...)
+   if Left( cFunc, 1 ) == "T" .and. Len( cFunc ) > 3
+      lHasDigit := .f.
+      for i := 1 to Len( cFunc )
+         if SubStr( cFunc, i, 1 ) >= "0" .and. SubStr( cFunc, i, 1 ) <= "9"
+            lHasDigit := .t.
+            exit
+         endif
+      next
+      if ! lHasDigit
+         return .t.
+      endif
+   endif
+   if "DBGSTATE" $ cFunc .or. "DBGHOOK" $ cFunc .or. ;
+      "BUILDLOCALS" $ cFunc .or. "BUILDSTACK" $ cFunc .or. ;
+      "DBGCLIENT" $ cFunc .or. "__DBGINIT" $ cFunc .or. ;
+      "APPSHOWERROR" $ cFunc .or. "VALTOSTR" $ cFunc .or. ;
+      "SETDPIAWARE" $ cFunc .or. "ISFRAMEWORKFUNC" $ cFunc .or. ;
+      "ERRORBLOCK" $ cFunc .or. "ISDEBUGGMODE" $ cFunc
+      return .t.
+   endif
+return .f.
+
+static function DbgValStr( xVal )
+   local cType := ValType( xVal ), cClass
+   do case
+      case xVal == nil;  return "nil"
+      case cType == "O"
+         cClass := xVal:ClassName()
+         // TAPPLICATION → TApplication
+         if Len( cClass ) > 1
+            cClass := Left( cClass, 1 ) + Upper( SubStr( cClass, 2, 1 ) ) + Lower( SubStr( cClass, 3 ) )
+         endif
+         return cClass
+      case cType == "A";  return "{Array(" + LTrim(Str(Len(xVal))) + ")}"
+      case cType == "B";  return "{Block}"
+      case cType == "L";  return If( xVal, ".T.", ".F." )
+      case cType == "N";  return LTrim( Str( xVal ) )
+      case cType == "D";  return DToC( xVal )
+      case cType == "C"
+         if Len( xVal ) > 40
+            return '"' + Left( xVal, 40 ) + '..."'
+         endif
+         return '"' + xVal + '"'
+   endcase
+return hb_ValToStr( xVal )
 
 static function DbgSend( cMsg )
 
