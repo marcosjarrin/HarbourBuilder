@@ -1851,9 +1851,28 @@ return nil
 
 // === Debug Pause Callback (called from C hook) ===
 
-static function OnDebugPause( cModule, nLine )
-   // Socket debugger: status update only — locals/stack come from TCP
-   MAC_DebugSetStatus( "Paused at " + cModule + ":" + LTrim(Str(nLine)) )
+static function OnDebugPause( cFunc, nLine )
+
+   local i, nTab, cTabCode
+
+   // Find which editor tab contains this function and select it
+   nTab := 0
+   if ! Empty( cFunc )
+      for i := 1 to Len( aForms ) + 1
+         cTabCode := CodeEditorGetTabText( hCodeEditor, i )
+         if Upper( cFunc ) $ Upper( cTabCode )
+            nTab := i
+            exit
+         endif
+      next
+   endif
+
+   // Select the tab and highlight the line
+   if nTab > 0
+      CodeEditorSelectTab( hCodeEditor, nTab )
+   endif
+   CodeEditorShowDebugLine( hCodeEditor, nLine )
+
 return nil
 
 // === AI Assistant ===

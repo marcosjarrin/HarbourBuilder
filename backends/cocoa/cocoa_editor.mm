@@ -343,6 +343,10 @@ static void CE_ConfigureScintilla( ScintillaView * sv )
    SciMsg( sv, SCI_MARKERDEFINE, 10, SC_MARK_BACKGROUND );
    SciMsg( sv, 2042, 10, SCIRGB(80,20,20) );  /* SCI_MARKERSETBACK: dark red bg */
 
+   /* Debug execution line marker: yellow background (marker 11) */
+   SciMsg( sv, SCI_MARKERDEFINE, 11, SC_MARK_BACKGROUND );
+   SciMsg( sv, 2042, 11, SCIRGB(80,80,20) );  /* SCI_MARKERSETBACK: dark yellow */
+
    /* Bookmarks: markers 0-9 using circles in margin 1 */
    SciMsg( sv, SCI_SETMARGINTYPEN, 1, SC_MARGIN_SYMBOL );
    SciMsg( sv, SCI_SETMARGINWIDTHN, 1, 16 );
@@ -1682,6 +1686,35 @@ HB_FUNC( CODEEDITORBRINGTOFRONT )
    if( ed && ed->window ) {
       [ed->window makeKeyAndOrderFront:nil];
       [NSApp activateIgnoringOtherApps:YES];
+   }
+}
+
+/* CodeEditorShowDebugLine( hEditor, nLine ) — highlight execution line
+ * Clears previous marker, sets marker 11 on nLine, scrolls to it.
+ * nLine is 1-based (Harbour convention). Pass 0 to clear. */
+HB_FUNC( CODEEDITORSHOWDEBUGLINE )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   int nLine = hb_parni(2) - 1;  /* convert to 0-based */
+   if( !ed || !ed->sciView ) return;
+
+   /* Clear all debug markers */
+   SciMsg( ed->sciView, SCI_MARKERDELETEALL, 11, 0 );
+
+   if( nLine >= 0 )
+   {
+      /* Set marker on the line */
+      SciMsg( ed->sciView, SCI_MARKERADD, (uptr_t)nLine, 11 );
+
+      /* Scroll to make line visible and position cursor */
+      SciMsg( ed->sciView, SCI_GOTOLINE, (uptr_t)nLine, 0 );
+      SciMsg( ed->sciView, SCI_SETFIRSTVISIBLELINE,
+              (uptr_t)(nLine > 5 ? nLine - 5 : 0), 0 );
+
+      /* Bring editor to front */
+      if( ed->window ) {
+         [ed->window makeKeyAndOrderFront:nil];
+      }
    }
 }
 
@@ -3142,31 +3175,33 @@ HB_FUNC( IDE_DEBUGSTART2 )
 
       if( strncmp( recvBuf, "PAUSE ", 6 ) == 0 )
       {
-         fprintf(stderr, "IDE-DBG: got PAUSE '%s'\n", recvBuf);
-         /* Parse module:line */
-         char * colon = strrchr( recvBuf + 6, ':' );
-         if( !colon ) { fprintf(stderr, "IDE-DBG: no colon in PAUSE\n"); continue; }
-         *colon = 0;
-         const char * module = recvBuf + 6;
-         int line = atoi( colon + 1 );
+         /* Parse: PAUSE filepath:FUNCNAME:line
+          * The module from Harbour -b is "filepath:FUNCNAME" and line is the number */
+         char * lastColon = strrchr( recvBuf + 6, ':' );
+         if( !lastColon ) continue;
+         int line = atoi( lastColon + 1 );
+         *lastColon = 0;
 
-         strncpy( s_dbgModule, module, sizeof(s_dbgModule) - 1 );
+         /* Now recvBuf+6 = "filepath:FUNCNAME" — extract function name */
+         char * funcColon = strrchr( recvBuf + 6, ':' );
+         const char * funcName = "";
+         if( funcColon ) {
+            funcName = funcColon + 1;
+         }
+
          s_dbgLine = line;
          s_dbgState = DBG_PAUSED;
 
-         fprintf(stderr, "IDE-DBG: paused at %s:%d\n", module, line);
-
-         /* Update status */
+         /* Update status with function name and line */
          if( s_dbgStatusLbl ) {
             char status[512];
-            snprintf(status, sizeof(status), "Paused at %s:%d", module, line);
+            snprintf(status, sizeof(status), "Paused at %s() line %d", funcName, line);
             [s_dbgStatusLbl setStringValue:[NSString stringWithUTF8String:status]];
          }
 
          /* Get locals */
          DbgServerSend( "GETLOCALS" );
          n = DbgServerRecv( recvBuf, sizeof(recvBuf) );
-         fprintf(stderr, "IDE-DBG: locals recv n=%d\n", n);
          if( n > 0 && strncmp( recvBuf, "LOCALS", 6 ) == 0 ) {
             DbgOutput( recvBuf ); DbgOutput( "\n" );
          }
@@ -3178,13 +3213,14 @@ HB_FUNC( IDE_DEBUGSTART2 )
             DbgOutput( recvBuf ); DbgOutput( "\n" );
          }
 
-         /* Call Harbour callback for UI update */
+         /* Call Harbour callback: ( cFuncName, nLine )
+          * The callback highlights the line in the code editor */
          if( s_dbgOnPause && HB_IS_BLOCK( s_dbgOnPause ) )
          {
-            PHB_ITEM pMod  = hb_itemPutC( NULL, module );
+            PHB_ITEM pFunc = hb_itemPutC( NULL, funcName );
             PHB_ITEM pLine = hb_itemPutNI( NULL, line );
-            hb_itemDo( s_dbgOnPause, 2, pMod, pLine );
-            hb_itemRelease( pMod );
+            hb_itemDo( s_dbgOnPause, 2, pFunc, pLine );
+            hb_itemRelease( pFunc );
             hb_itemRelease( pLine );
          }
 
@@ -3220,6 +3256,10 @@ HB_FUNC( IDE_DEBUGSTART2 )
    DbgOutput( "=== Debug session ended ===\n" );
    if( s_dbgStatusLbl )
       [s_dbgStatusLbl setStringValue:@"Ready"];
+
+   /* Clear debug line marker in editor */
+   if( s_keyMonitorEd && s_keyMonitorEd->sciView )
+      SciMsg( s_keyMonitorEd->sciView, SCI_MARKERDELETEALL, 11, 0 );
 
    hb_retl( HB_TRUE );
 }
