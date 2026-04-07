@@ -1867,10 +1867,7 @@ static function TBRun()
       UI_SetProp( oIDE:hCpp, "cText", "HbBuilder 1.0 - [" + aCI[2] + "]" )
    endif
    if aCI == nil
-      MsgInfo( "No C compiler found!" + Chr(10) + Chr(10) + ;
-               "Use Tools > Select C Compiler, or install:" + Chr(10) + ;
-               "- Visual Studio Build Tools (free)" + Chr(10) + ;
-               "- Embarcadero BCC" )
+      ShowNoCompilerDialog()
       return nil
    endif
 
@@ -2315,10 +2312,7 @@ static function TBDebugRun()
    // Detect compiler
    aCI := GetCompilerInfo()
    if aCI == nil
-      MsgInfo( "No C compiler found!" + Chr(10) + Chr(10) + ;
-               "Use Tools > Select C Compiler, or install:" + Chr(10) + ;
-               "- Visual Studio Build Tools (free)" + Chr(10) + ;
-               "- Embarcadero BCC" )
+      ShowNoCompilerDialog()
       return nil
    endif
 
@@ -2723,6 +2717,25 @@ static function ShowAIAssistant()
    endif
 
    W32_AIAssistantPanel()
+
+return nil
+
+// === C Compiler Not Found Dialog ===
+
+static function ShowNoCompilerDialog()
+
+   if MsgYesNo( "No C/C++ compiler found!" + Chr(10) + Chr(10) + ;
+                "HbBuilder needs a C compiler to build projects." + Chr(10) + ;
+                "You can install one of these (both are free):" + Chr(10) + Chr(10) + ;
+                "  1. Visual Studio Build Tools (recommended)" + Chr(10) + ;
+                "     visualstudio.microsoft.com/downloads" + Chr(10) + ;
+                "     (select 'Desktop development with C++')" + Chr(10) + Chr(10) + ;
+                "  2. Embarcadero C++ Builder / BCC" + Chr(10) + ;
+                "     www.embarcadero.com/free-tools" + Chr(10) + Chr(10) + ;
+                "Open the Visual Studio download page now?", ;
+                "C Compiler Not Found" )
+      W32_ShellExec( 'cmd /c start "" "https://visualstudio.microsoft.com/downloads/"' )
+   endif
 
 return nil
 
