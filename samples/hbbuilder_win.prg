@@ -2754,7 +2754,9 @@ static function EnsureHarbour( cCompiler, aCI )
 
    local cHbDir, cHbSrc, cOutput, cCmd, cCDir
    local cMsvcBase, cWinKit, cWinKitVer
-   local cZipFile, cBatContent, lHasGit, lOk
+   local cZipFile, cBatFile, lHasGit, lOk
+   local cTmp := GetEnv( "TEMP" )
+   local cUserProfile := GetEnv( "USERPROFILE" )
 
    // First try to find an existing Harbour installation
    cHbDir := FindHarbour( cCompiler )
@@ -2762,9 +2764,9 @@ static function EnsureHarbour( cCompiler, aCI )
       return cHbDir
    endif
 
-   // Harbour not found anywhere — offer to download & build
-   cHbDir := "c:\harbour"
-   cHbSrc := "c:\harbour_src"
+   // Install to user profile (no admin needed), source in temp
+   cHbDir := cUserProfile + "\harbour"
+   cHbSrc := cTmp + "\harbour_src"
 
    if ! MsgYesNo( "Harbour compiler not found!" + Chr(10) + ;
                   Chr(10) + ;
@@ -2787,18 +2789,20 @@ static function EnsureHarbour( cCompiler, aCI )
          lHasGit := "git" $ Lower( cOutput ) .and. ! ( "not found" $ Lower( cOutput ) )
       endif
 
+      cBatFile := cTmp + "\hb_download.bat"
+
       if lHasGit
          // Use git clone (faster, shallow)
-         MemoWrit( cHbSrc + "_dl.bat", ;
+         MemoWrit( cBatFile, ;
             "@echo off" + Chr(10) + ;
             'git clone --depth 1 https://github.com/harbour/core.git "' + cHbSrc + '"' + Chr(10) )
-         cOutput := W32_RunBatchWithProgress( cHbSrc + "_dl.bat", ;
+         cOutput := W32_RunBatchWithProgress( cBatFile, ;
             "Downloading Harbour...", ;
             "Cloning harbour/core from GitHub..." )
       else
          // No git — download zip via PowerShell
-         cZipFile := cHbSrc + ".zip"
-         MemoWrit( cHbSrc + "_dl.bat", ;
+         cZipFile := cTmp + "\harbour_src.zip"
+         MemoWrit( cBatFile, ;
             "@echo off" + Chr(10) + ;
             "powershell -NoProfile -Command " + Chr(34) + ;
                "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; " + ;
@@ -2808,12 +2812,12 @@ static function EnsureHarbour( cCompiler, aCI )
             "if not exist " + Chr(34) + cZipFile + Chr(34) + " exit /b 1" + Chr(10) + ;
             "powershell -NoProfile -Command " + Chr(34) + ;
                "Expand-Archive -Path " + Chr(39) + cZipFile + Chr(39) + " " + ;
-               "-DestinationPath " + Chr(39) + cHbSrc + "_tmp" + Chr(39) + " -Force" + ;
+               "-DestinationPath " + Chr(39) + cTmp + "\harbour_tmp" + Chr(39) + " -Force" + ;
             Chr(34) + Chr(10) + ;
-            "move " + Chr(34) + cHbSrc + "_tmp\core-master" + Chr(34) + " " + Chr(34) + cHbSrc + Chr(34) + Chr(10) + ;
-            "rd /s /q " + Chr(34) + cHbSrc + "_tmp" + Chr(34) + " 2>nul" + Chr(10) + ;
+            "move " + Chr(34) + cTmp + "\harbour_tmp\core-master" + Chr(34) + " " + Chr(34) + cHbSrc + Chr(34) + Chr(10) + ;
+            "rd /s /q " + Chr(34) + cTmp + "\harbour_tmp" + Chr(34) + " 2>nul" + Chr(10) + ;
             "del " + Chr(34) + cZipFile + Chr(34) + " 2>nul" + Chr(10) )
-         cOutput := W32_RunBatchWithProgress( cHbSrc + "_dl.bat", ;
+         cOutput := W32_RunBatchWithProgress( cBatFile, ;
             "Downloading Harbour...", ;
             "Downloading harbour/core.zip from GitHub..." )
       endif
