@@ -570,10 +570,9 @@ static void on_button_clicked( GtkWidget * widget, gpointer data )
       else if( p->FCancel ) frm->FModalResult = 2;
       if( p->FDefault || p->FCancel )
       {
-         frm->FRunning = 0;
+         /* Destroy triggers on_window_destroy which checks FRunning
+          * to decide whether to quit the gtk_main loop */
          if( frm->FWindow ) gtk_widget_destroy( frm->FWindow );
-         frm->FWindow = NULL;
-         /* FRunning = 0 stops the manual event loop */
       }
    }
 }
@@ -1766,9 +1765,12 @@ static gboolean on_window_configure( GtkWidget * widget, GdkEventConfigure * eve
 static void on_window_destroy( GtkWidget * widget, gpointer data )
 {
    HBForm * form = (HBForm *)data;
+   int wasRunning = form->FRunning;
    form->FRunning = 0;
    form->FWindow = NULL;
-   gtk_main_quit();
+   /* Only quit the main loop if this form owned one (Run or ShowModal) */
+   if( wasRunning )
+      gtk_main_quit();
 }
 
 static void HBForm_CreateAllChildren( HBForm * form )
@@ -1947,6 +1949,8 @@ static void HBForm_Run( HBForm * form )
 
    if( form->FCenter )
       gtk_window_set_position( GTK_WINDOW(form->FWindow), GTK_WIN_POS_CENTER );
+   else
+      gtk_window_move( GTK_WINDOW(form->FWindow), form->base.FLeft, form->base.FTop );
 
    gtk_widget_show( form->FWindow );
 
@@ -2027,17 +2031,86 @@ static void HBForm_Show( HBForm * form )
    if( form->FDesignMode && form->FOverlay )
       gtk_widget_grab_focus( form->FOverlay );
 
+   /* No gtk_main() - shares the main window's loop, so FRunning stays 0 */
+}
+
+/* ShowModal() - create, show as modal, block until closed, return FModalResult */
+static int HBForm_ShowModal( HBForm * form )
+{
+   EnsureGTK();
+
+   form->FWindow = gtk_window_new( GTK_WINDOW_TOPLEVEL );
+   gtk_window_set_title( GTK_WINDOW(form->FWindow), form->base.FText );
+   gtk_window_set_default_size( GTK_WINDOW(form->FWindow), form->base.FWidth, form->base.FHeight );
+   gtk_window_set_resizable( GTK_WINDOW(form->FWindow),
+      (form->FDesignMode || (form->FSizable && !form->FAppBar)) ? TRUE : FALSE );
+   gtk_window_set_modal( GTK_WINDOW(form->FWindow), TRUE );
+   /* Set transient for a visible parent window so GTK blocks input to it */
+   {
+      GList * toplevels = gtk_window_list_toplevels();
+      GList * l;
+      for( l = toplevels; l; l = l->next )
+         if( gtk_widget_get_visible( GTK_WIDGET(l->data) ) &&
+             GTK_WIDGET(l->data) != form->FWindow ) {
+            gtk_window_set_transient_for( GTK_WINDOW(form->FWindow),
+               GTK_WINDOW(l->data) );
+            break;
+         }
+      g_list_free( toplevels );
+   }
+   g_signal_connect( form->FWindow, "destroy", G_CALLBACK(on_window_destroy), form );
+   g_signal_connect( form->FWindow, "configure-event", G_CALLBACK(on_window_configure), form );
+
+   /* Background color */
+   {
+      unsigned int clr = form->base.FClrPane;
+      int r = clr & 0xFF, g = (clr >> 8) & 0xFF, b = (clr >> 16) & 0xFF;
+      char css[128];
+      snprintf( css, sizeof(css), "window { background-color: #%02X%02X%02X; }", r, g, b );
+      GtkCssProvider * provider = gtk_css_provider_new();
+      gtk_css_provider_load_from_data( provider, css, -1, NULL );
+      GtkStyleContext * ctx = gtk_widget_get_style_context( form->FWindow );
+      gtk_style_context_add_provider( ctx, GTK_STYLE_PROVIDER(provider),
+         GTK_STYLE_PROVIDER_PRIORITY_APPLICATION );
+      g_object_unref( provider );
+   }
+
+   GtkWidget * vbox = gtk_box_new( GTK_ORIENTATION_VERTICAL, 0 );
+   gtk_container_add( GTK_CONTAINER(form->FWindow), vbox );
+   gtk_widget_show( vbox );
+
+   GtkWidget * overlay = gtk_overlay_new();
+   gtk_box_pack_start( GTK_BOX(vbox), overlay, TRUE, TRUE, 0 );
+   gtk_widget_show( overlay );
+
+   form->FFixed = gtk_fixed_new();
+   gtk_container_add( GTK_CONTAINER(overlay), form->FFixed );
+   gtk_widget_show( form->FFixed );
+
+   HBForm_CreateAllChildren( form );
+
+   if( form->FCenter )
+      gtk_window_set_position( GTK_WINDOW(form->FWindow), GTK_WIN_POS_CENTER );
+   else
+      gtk_window_move( GTK_WINDOW(form->FWindow), form->base.FLeft, form->base.FTop );
+
+   gtk_widget_show( form->FWindow );
+
+   form->FModalResult = 0;
    form->FRunning = 1;
-   /* No gtk_main() - shares the main window's loop */
+   gtk_main();  /* nested main loop - blocks until gtk_main_quit() */
+
+   return form->FModalResult;
 }
 
 static void HBForm_Close( HBForm * form )
 {
-   form->FRunning = 0;
+   /* Don't clear FRunning here — on_window_destroy checks it
+    * to decide whether to quit the gtk_main loop */
    if( form->FWindow )
    {
       gtk_widget_destroy( form->FWindow );
-      form->FWindow = NULL;
+      /* on_window_destroy sets FWindow = NULL and FRunning = 0 */
    }
 }
 
@@ -2108,11 +2181,18 @@ HB_FUNC( UI_GETSELECTED )
 HB_FUNC( UI_FORMSETDESIGN ) { HBForm * p = GetForm(1); if( p ) HBForm_SetDesignMode( p, hb_parl(2) ); }
 HB_FUNC( UI_FORMRUN )       { HBForm * p = GetForm(1); if( p ) HBForm_Run( p ); }
 HB_FUNC( UI_FORMSHOW )      { HBForm * p = GetForm(1); if( p ) HBForm_Show( p ); }
+HB_FUNC( UI_FORMSHOWMODAL ) { HBForm * p = GetForm(1); if( p ) hb_retni( HBForm_ShowModal( p ) ); else hb_retni(0); }
 HB_FUNC( UI_FORMCLOSE )     { HBForm * p = GetForm(1); if( p ) HBForm_Close( p ); }
-HB_FUNC( UI_FORMDESTROY )   { HBForm * p = GetForm(1); if( p ) { HBControl_ReleaseEvents(&p->base); RemoveControl(&p->base); free(p); } }
+HB_FUNC( UI_FORMDESTROY )   { HBForm * p = GetForm(1); if( p ) { if( p->FWindow ) { gtk_widget_destroy( p->FWindow ); p->FWindow = NULL; } HBControl_ReleaseEvents(&p->base); RemoveControl(&p->base); free(p); } }
 HB_FUNC( UI_FORMRESULT )    { HBForm * p = GetForm(1); hb_retni( p ? p->FModalResult : 0 ); }
 
 /* --- Control creation --- */
+
+/* UI_DropNonVisual - stub (TODO: implement non-visual component icons) */
+HB_FUNC( UI_DROPNONVISUAL )
+{
+   hb_retnint( 0 );
+}
 
 HB_FUNC( UI_LABELNEW )
 {
@@ -2385,10 +2465,32 @@ HB_FUNC( UI_SETPROP )
          }
       }
    }
-   else if( strcasecmp(szProp,"nLeft")==0 )   { p->FLeft = hb_parni(3); HBControl_UpdatePosition(p); }
-   else if( strcasecmp(szProp,"nTop")==0 )    { p->FTop = hb_parni(3); HBControl_UpdatePosition(p); }
-   else if( strcasecmp(szProp,"nWidth")==0 )  { p->FWidth = hb_parni(3); HBControl_UpdatePosition(p); }
-   else if( strcasecmp(szProp,"nHeight")==0 ) { p->FHeight = hb_parni(3); HBControl_UpdatePosition(p); }
+   else if( strcasecmp(szProp,"nLeft")==0 ) {
+      p->FLeft = hb_parni(3);
+      if( p->FControlType == CT_FORM ) {
+         HBForm * f = (HBForm *)p; f->FCenter = 0;
+         if( f->FWindow ) gtk_window_move( GTK_WINDOW(f->FWindow), p->FLeft, p->FTop );
+      } else HBControl_UpdatePosition(p);
+   }
+   else if( strcasecmp(szProp,"nTop")==0 ) {
+      p->FTop = hb_parni(3);
+      if( p->FControlType == CT_FORM ) {
+         HBForm * f = (HBForm *)p; f->FCenter = 0;
+         if( f->FWindow ) gtk_window_move( GTK_WINDOW(f->FWindow), p->FLeft, p->FTop );
+      } else HBControl_UpdatePosition(p);
+   }
+   else if( strcasecmp(szProp,"nWidth")==0 ) {
+      p->FWidth = hb_parni(3);
+      if( p->FControlType == CT_FORM ) {
+         HBForm * f = (HBForm *)p; if( f->FWindow ) gtk_window_resize( GTK_WINDOW(f->FWindow), p->FWidth, p->FHeight );
+      } else HBControl_UpdatePosition(p);
+   }
+   else if( strcasecmp(szProp,"nHeight")==0 ) {
+      p->FHeight = hb_parni(3);
+      if( p->FControlType == CT_FORM ) {
+         HBForm * f = (HBForm *)p; if( f->FWindow ) gtk_window_resize( GTK_WINDOW(f->FWindow), p->FWidth, p->FHeight );
+      } else HBControl_UpdatePosition(p);
+   }
    else if( strcasecmp(szProp,"lVisible")==0 ) {
       p->FVisible = hb_parl(3);
       if( p->FWidget ) gtk_widget_set_visible( p->FWidget, p->FVisible );
@@ -5046,6 +5148,20 @@ HB_FUNC( UI_FORMHIDE )
       gtk_widget_hide( p->FWindow );
 }
 
+/* UI_FormIsVisible( hForm ) */
+HB_FUNC( UI_FORMISVISIBLE )
+{
+   HBForm * p = GetForm(1);
+   hb_retl( p && p->FWindow && gtk_widget_get_visible( p->FWindow ) );
+}
+
+/* UI_FormIsKeyWindow( hForm ) - is this form the currently focused window? */
+HB_FUNC( UI_FORMISKEYWINDOW )
+{
+   HBForm * p = GetForm(1);
+   hb_retl( p && p->FWindow && gtk_window_is_active( GTK_WINDOW(p->FWindow) ) );
+}
+
 /* UI_ToolBtnHighlight( hToolbar, nBtn, lHighlight ) */
 HB_FUNC( UI_TOOLBTNHIGHLIGHT )
 {
@@ -5497,10 +5613,11 @@ HB_FUNC( CODEEDITORGOTOFUNCTION )
    if( found )
    {
       int offset = (int)(found - fullText);
-      char * nl = strchr( found, '\n' );
-      if( nl ) { nl = strchr( nl + 1, '\n' ); if( nl ) offset = (int)(nl - fullText) + 1; }
+      int line = (int) SciMsg( ed->sciWidget, SCI_LINEFROMPOSITION, offset, 0 );
+      int pos = (int) SciMsg( ed->sciWidget, SCI_POSITIONFROMLINE, line + 2, 0 );
+      pos += 3;  /* skip "   " indent */
 
-      SciMsg( ed->sciWidget, SCI_GOTOPOS, offset, 0 );
+      SciMsg( ed->sciWidget, SCI_GOTOPOS, pos, 0 );
       SciMsg( ed->sciWidget, SCI_SCROLLCARET, 0, 0 );
       gtk_widget_grab_focus( ed->sciWidget );
       if( ed->window ) gtk_window_present( GTK_WINDOW(ed->window) );

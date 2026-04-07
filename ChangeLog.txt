@@ -1,6 +1,51 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-07 (Session 14: Linux GTK3 — ShowModal, form lifecycle & project restore)
+
+  SHOWMODAL (GTK3):
+  - Implemented ShowModal() for TForm on Linux/GTK3. Uses
+    gtk_window_set_modal() + gtk_window_set_transient_for() with a nested
+    gtk_main() loop. Blocks caller until form is closed, returns FModalResult
+    (0=none, 1=default button, 2=cancel button).
+  - Added UI_FORMSHOWMODAL bridge function matching the Cocoa version.
+
+  FORM LIFECYCLE (GTK3):
+  - Fixed on_window_destroy: only calls gtk_main_quit() when the form
+    owned a gtk_main loop (FRunning guard). HBForm_Show() no longer sets
+    FRunning=1 since it shares the main loop.
+  - Fixed HBForm_Close: lets on_window_destroy handle FRunning/FWindow
+    cleanup instead of clearing them before gtk_widget_destroy.
+  - Fixed button click handler: removed premature FRunning=0 before
+    gtk_widget_destroy, letting on_window_destroy handle it.
+  - Fixed UI_FORMDESTROY: now calls gtk_widget_destroy on the window
+    before freeing the struct.
+  - Added explicit cleanup after Activate() returns: DestroyAllForms(),
+    InspectorClose(), CodeEditorDestroy().
+
+  FORM POSITIONING (GTK3):
+  - UI_SetProp for nLeft/nTop on forms now calls gtk_window_move() and
+    clears FCenter, so saved positions are applied at runtime.
+  - UI_SetProp for nWidth/nHeight on forms now calls gtk_window_resize().
+  - HBForm_Run: added else branch with gtk_window_move() when FCenter=0.
+
+  PROJECT RESTORE (GTK3):
+  - Added RestoreFormFromCode() — parses saved .prg code and restores
+    form properties (Title, Left, Top, Width, Height, Color) and controls
+    (Labels, Buttons, Edits, CheckBoxes, ComboBoxes, GroupBoxes, ListBoxes,
+    RadioButtons, Memos) with position, size, and text.
+  - TBOpen now calls RestoreFormFromCode() after CreateDesignForm().
+  - MenuNewForm: uses UI_FormHide() instead of Close() to preserve forms.
+
+  IDE IMPROVEMENTS (GTK3):
+  - Added "Form" toggle button to toolbar (ToggleFormCode).
+  - Added UI_FORMISVISIBLE and UI_FORMISKEYWINDOW bridge functions.
+  - Fixed OnEventDblClick cursor positioning: changed CRLF to LF for
+    correct offset calculation, added re-position after SyncDesignerToCode.
+  - Fixed CodeEditorGotoFunction: uses SCI_LINEFROMPOSITION/POSITIONFROMLINE
+    instead of manual newline scanning.
+  - Added UI_DROPNONVISUAL stub for non-visual component support.
+
 2026-04-07 (Session 13: Form lifecycle, project restore & modal forms)
 
   MODAL FORMS:
