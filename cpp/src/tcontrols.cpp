@@ -152,7 +152,12 @@ void TButton::DoOnClick()
          pForm->FModalResult = 2;
 
       if( FDefault || FCancel )
-         pForm->Close();
+      {
+         /* Send WM_CLOSE so the form's message handler runs the correct
+          * close logic (modal hide vs main destroy vs secondary hide) */
+         if( pForm->FHandle )
+            SendMessage( pForm->FHandle, WM_CLOSE, 0, 0 );
+      }
    }
 }
 

@@ -1,6 +1,56 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-07 (Session 16: Win32 — ShowModal fix, project restore, inspector events)
+
+  SHOWMODAL REWRITE (WIN32):
+  - Replaced GetMessage+PostQuitMessage with PeekMessage+WaitMessage loop
+    controlled by FModal flag. PostQuitMessage contaminated the main loop
+    causing hangs after closing the modal form.
+  - WM_CLOSE on modal forms now just clears FModal flag (no SW_HIDE, no
+    DestroyWindow). ShowModal() handles cleanup in correct order:
+    EnableWindow(owner) first, then DestroyWindow(modal).
+  - Fixed visual distortion on modal close: removed forced RedrawWindow
+    and unnecessary SetForegroundWindow. Windows auto-activates the owner
+    since it was set as parent in CreateWindowExA.
+  - Buttons with Default/Cancel now send WM_CLOSE instead of calling
+    Close() directly, so the form's close handler runs correctly for
+    modal, main, and secondary windows.
+
+  PROJECT RESTORE (WIN32):
+  - Added RestoreFormFromCode() — parses form .prg code to restore:
+    Title, Width, Height, Left, Top, Color, and recreates all controls
+    (Label, Button, Edit, CheckBox, ComboBox, GroupBox, ListBox,
+    RadioButton, Memo) + non-visual components. Ported from Linux/GTK3.
+  - TBOpen() now calls RestoreFormFromCode() for each form.
+  - Only the first form is visible after loading; others are hidden
+    with UI_FormHide() — matches Mac/Linux behavior.
+
+  INSPECTOR EVENT FIX:
+  - Fixed event handler name generation: InsPopulateEvents() indents
+    event names with 6 spaces for display ("      OnClick"), but the
+    double-click callback was passing those spaces to Harbour.
+    Result: "Button1    OnClick" instead of "Button1Click".
+    Now strips leading spaces before passing to the callback.
+
+  BUILD FIXES:
+  - Added UI_MSGBOX stub with MessageBoxA to user app build stubs
+    (was missing after removing duplicate from hbbridge.cpp).
+  - Added #include <windows.h> to user app stubs for MessageBoxA.
+  - AllTrim() on control names in RegenerateFormCode/OnEventDblClick.
+
+  SAVE DIALOG FIX:
+  - Changed lpstrInitialDir from CSIDL_PERSONAL (OneDrive-redirected
+    Documents) to CSIDL_DESKTOPDIRECTORY to avoid "file not found"
+    error on OneDrive-enabled systems.
+  - Removed OFN_PATHMUSTEXIST from Save dialog flags.
+  - Removed debug trace code from TBSave().
+
+  LAYOUT:
+  - Splitter moved 90px left (nInsW reduced by 90px).
+
+------------------------------------------------------------------------
+
 2026-04-07 (Session 15: Win32 — ShowModal, Form toggle & form lifecycle)
 
   SHOWMODAL (WIN32):

@@ -572,6 +572,10 @@ static LRESULT CALLBACK InsWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                evi.cchTextMax = 64;
                SendMessageA( d->hEventList, LVM_GETITEMTEXTA, pe->iItem, (LPARAM) &evi );
 
+               /* Strip leading spaces (events are indented for display) */
+               { char * p = szEvName; while( *p == ' ' ) p++;
+                 if( p != szEvName ) memmove( szEvName, p, strlen(p) + 1 ); }
+
                if( szEvName[0] && hb_vmRequestReenter() )
                {
                   PHB_ITEM pCtrl = hb_itemPutNInt( NULL, d->hCtrl );

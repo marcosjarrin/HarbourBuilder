@@ -78,7 +78,7 @@ function Main()
    // C++Builder classic proportions scaled to current screen
    // Reference: 1024x768 -> Inspector 250px (24.4%), Bar 140px
    nBarH    := 160                           // title + menu + 2 toolbars(40+40) + palette
-   nInsW    := Int( nScreenW * 0.18 )        // ~18% of screen width
+   nInsW    := Int( nScreenW * 0.18 ) - 90    // ~18% of screen width, shifted left
 
    // === Window 1: Main Bar (full screen width) ===
    cCompLabel := "Visual IDE for Harbour"
@@ -697,8 +697,8 @@ static function RegenerateFormCode( cName, hForm )
          hCtrl := UI_GetChild( hForm, i )
          if hCtrl == 0; loop; endif
 
-         cCtrlName  := UI_GetProp( hCtrl, "cName" )
-         cCtrlClass := UI_GetProp( hCtrl, "cClassName" )
+         cCtrlName  := AllTrim( UI_GetProp( hCtrl, "cName" ) )
+         cCtrlClass := AllTrim( UI_GetProp( hCtrl, "cClassName" ) )
          nType      := UI_GetType( hCtrl )
          if Empty( cCtrlName ); cCtrlName := "ctrl" + LTrim(Str(i)); endif
 
@@ -892,7 +892,7 @@ static function OnEventDblClick( hCtrl, cEvent )
    endif
 
    // Build handler name: ComponentName + EventWithoutOn
-   cHandler := cName + SubStr( cEvent, 3 )  // skip "On"
+   cHandler := AllTrim( cName ) + SubStr( cEvent, 3 )  // skip "On"
 
    // Ensure we're on the form's tab in the editor
    if nActiveForm > 0
@@ -1365,6 +1365,150 @@ static function TBNew()
 
 return nil
 
+// Restore visual controls on a design form by parsing the form .prg code
+static function RestoreFormFromCode( hForm, cCode )
+
+   local aLines, cLine, cTrim, i, nType
+   local nT, nL, nW, nH, cText, cName, hCtrl
+   local nPos, nPos2, cTitle
+
+   if Empty( cCode ) .or. hForm == 0
+      return nil
+   endif
+
+   aLines := HB_ATokens( cCode, Chr(10) )
+
+   for i := 1 to Len( aLines )
+      cLine := aLines[i]
+      cTrim := AllTrim( cLine )
+
+      // Parse form properties: ::Title, ::Width, ::Height, ::Left, ::Top, ::Color
+      if '::Title' $ cTrim .and. ':=' $ cTrim
+         nPos := At( '"', cTrim )
+         nPos2 := RAt( '"', cTrim )
+         if nPos > 0 .and. nPos2 > nPos
+            cTitle := SubStr( cTrim, nPos + 1, nPos2 - nPos - 1 )
+            UI_SetProp( hForm, "cText", cTitle )
+         endif
+         loop
+      endif
+      if '::Width' $ cTrim .and. ':=' $ cTrim .and. ! "::o" $ cTrim
+         UI_SetProp( hForm, "nWidth", Val( AllTrim( SubStr( cTrim, At( ":=", cTrim ) + 2 ) ) ) )
+         loop
+      endif
+      if '::Height' $ cTrim .and. ':=' $ cTrim .and. ! "::o" $ cTrim
+         UI_SetProp( hForm, "nHeight", Val( AllTrim( SubStr( cTrim, At( ":=", cTrim ) + 2 ) ) ) )
+         loop
+      endif
+      if '::Left' $ cTrim .and. ':=' $ cTrim .and. ! "::o" $ cTrim
+         UI_SetProp( hForm, "nLeft", Val( AllTrim( SubStr( cTrim, At( ":=", cTrim ) + 2 ) ) ) )
+         loop
+      endif
+      if '::Top' $ cTrim .and. ':=' $ cTrim .and. ! "::o" $ cTrim
+         UI_SetProp( hForm, "nTop", Val( AllTrim( SubStr( cTrim, At( ":=", cTrim ) + 2 ) ) ) )
+         loop
+      endif
+      if '::Color' $ cTrim .and. ':=' $ cTrim .and. ! "::o" $ cTrim
+         UI_SetProp( hForm, "nClrPane", Val( AllTrim( SubStr( cTrim, At( ":=", cTrim ) + 2 ) ) ) )
+         loop
+      endif
+
+      // Parse non-visual components: COMPONENT ::oName TYPE nType OF Self
+      if Left( Upper( cTrim ), 10 ) == "COMPONENT "
+         nPos := At( "::o", cTrim )
+         if nPos > 0
+            cName := SubStr( cTrim, nPos + 3 )
+            nPos2 := At( " ", cName )
+            if nPos2 > 0; cName := Left( cName, nPos2 - 1 ); endif
+            nPos := At( "TYPE ", Upper( cTrim ) )
+            if nPos > 0
+               nType := Val( SubStr( cTrim, nPos + 5 ) )
+               if nType >= 38
+                  hCtrl := UI_DropNonVisual( hForm, nType, cName )
+               endif
+            endif
+         endif
+         loop
+      endif
+
+      // Parse control creation lines: @ nT, nL KEYWORD ::oName ...
+      if ! ( Left( cTrim, 2 ) == "@ " )
+         loop
+      endif
+
+      // Extract coordinates: @ nT, nL
+      nT := Val( SubStr( cTrim, 3 ) )
+      nPos := At( ",", cTrim )
+      if nPos == 0; loop; endif
+      nL := Val( SubStr( cTrim, nPos + 1 ) )
+
+      // Extract control name from ::oName
+      nPos := At( "::o", cTrim )
+      if nPos == 0; loop; endif
+      cName := SubStr( cTrim, nPos + 3 )
+      nPos2 := At( " ", cName )
+      if nPos2 > 0; cName := Left( cName, nPos2 - 1 ); endif
+
+      // Extract text from PROMPT "..."
+      cText := ""
+      nPos := At( 'PROMPT "', cTrim )
+      if nPos > 0
+         nPos2 := At( '"', SubStr( cTrim, nPos + 8 ) )
+         if nPos2 > 0
+            cText := SubStr( cTrim, nPos + 8, nPos2 - 1 )
+         endif
+      endif
+
+      // Extract SIZE w, h  or  SIZE w
+      nW := 80
+      nH := 24
+      nPos := At( "SIZE ", cTrim )
+      if nPos > 0
+         nW := Val( SubStr( cTrim, nPos + 5 ) )
+         nPos2 := At( ",", SubStr( cTrim, nPos + 5 ) )
+         if nPos2 > 0
+            nH := Val( SubStr( cTrim, nPos + 5 + nPos2 ) )
+         endif
+      endif
+      if nH < 1; nH := 24; endif
+
+      // Determine control type and create it
+      hCtrl := 0
+      do case
+         case " SAY " $ Upper( cTrim )
+            hCtrl := UI_LabelNew( hForm, cText, nL, nT, nW, nH )
+         case " BUTTON " $ Upper( cTrim )
+            hCtrl := UI_ButtonNew( hForm, cText, nL, nT, nW, nH )
+         case " GET " $ Upper( cTrim )
+            cText := ""
+            nPos := At( 'VAR "', cTrim )
+            if nPos > 0
+               nPos2 := At( '"', SubStr( cTrim, nPos + 5 ) )
+               if nPos2 > 0; cText := SubStr( cTrim, nPos + 5, nPos2 - 1 ); endif
+            endif
+            hCtrl := UI_EditNew( hForm, cText, nL, nT, nW, nH )
+         case " CHECKBOX " $ Upper( cTrim )
+            hCtrl := UI_CheckBoxNew( hForm, cText, nL, nT, nW, nH )
+         case " COMBOBOX " $ Upper( cTrim )
+            hCtrl := UI_ComboBoxNew( hForm, nL, nT, nW, nH )
+         case " GROUPBOX " $ Upper( cTrim )
+            hCtrl := UI_GroupBoxNew( hForm, cText, nL, nT, nW, nH )
+         case " LISTBOX " $ Upper( cTrim )
+            hCtrl := UI_ListBoxNew( hForm, nL, nT, nW, nH )
+         case " RADIOBUTTON " $ Upper( cTrim )
+            hCtrl := UI_RadioButtonNew( hForm, cText, nL, nT, nW, nH )
+         case " MEMO " $ Upper( cTrim )
+            hCtrl := UI_MemoNew( hForm, "", nL, nT, nW, nH )
+      endcase
+
+      // Set the control name
+      if hCtrl != 0
+         UI_SetProp( hCtrl, "cName", cName )
+      endif
+   next
+
+return nil
+
 // Open Project: load a .hbp project file
 static function TBOpen()
 
@@ -1423,10 +1567,18 @@ static function TBOpen()
       nFormX := nEditorX + Int( ( nEditorW - 400 ) / 2 ) + ( Len(aForms) ) * 20
       nFormY := nEditorTop + Int( ( nEditorH - 300 ) * 0.35 ) + ( Len(aForms) ) * 20
 
-      // Create design form
+      // Create design form and restore properties/controls from code
       CreateDesignForm( nFormX, nFormY )
+      RestoreFormFromCode( oDesignForm:hCpp, cFormCode )
       oDesignForm:SetDesign( .t. )
-      oDesignForm:Show()
+
+      // Only show the first form; hide the rest
+      if Len( aForms ) == 1
+         oDesignForm:Show()
+      else
+         oDesignForm:Show()
+         UI_FormHide( oDesignForm:hCpp )
+      endif
 
       // Store the loaded code
       aForms[ Len(aForms) ][ 3 ] := cFormCode
@@ -1448,6 +1600,7 @@ static function TBOpen()
       oDesignForm := aForms[1][2]
       UI_SetDesignForm( oDesignForm:hCpp )
       CodeEditorSelectTab( hCodeEditor, 2 )
+      UI_FormBringToFront( oDesignForm:hCpp )
       InspectorRefresh( oDesignForm:hCpp )
       InspectorPopulateCombo( oDesignForm:hCpp )
    endif
@@ -1473,20 +1626,44 @@ static function TBSave()
    // Project directory = same as .hbp file
    cDir := Left( cCurrentFile, RAt( "\", cCurrentFile ) )
 
+   // Trace to log file
+   LogTrace( "TBSave: file=[" + cCurrentFile + "] dir=[" + cDir + "]" )
+
    // Write .hbp file (project index)
    cHbp := "Project1" + Chr(10)
    for i := 1 to Len( aForms )
       cHbp += aForms[i][1] + Chr(10)
    next
    MemoWrit( cCurrentFile, cHbp )
+   LogTrace( "  .hbp written" )
 
    // Write Project1.prg
    MemoWrit( cDir + "Project1.prg", CodeEditorGetTabText( hCodeEditor, 1 ) )
+   LogTrace( "  Project1.prg written" )
 
    // Write each form .prg
    for i := 1 to Len( aForms )
       MemoWrit( cDir + aForms[i][1] + ".prg", aForms[i][3] )
+      LogTrace( "  " + aForms[i][1] + ".prg written" )
    next
+
+   LogTrace( "  Save complete." )
+
+return nil
+
+static function LogTrace( cMsg )
+
+   local nH := FOpen( "c:\HarbourBuilder\save_trace.log", 2 )  // FO_READWRITE
+
+   if nH == -1
+      nH := FCreate( "c:\HarbourBuilder\save_trace.log" )
+   else
+      FSeek( nH, 0, 2 )  // seek to end
+   endif
+   if nH != -1
+      FWrite( nH, cMsg + Chr(13) + Chr(10) )
+      FClose( nH )
+   endif
 
 return nil
 
@@ -1765,7 +1942,9 @@ static function TBRun()
    // Platform stubs for macOS/Linux functions referenced by classes.prg
    cAllPrg += '#pragma BEGINDUMP' + Chr(10)
    cAllPrg += '#include <hbapi.h>' + Chr(10)
+   cAllPrg += '#include <windows.h>' + Chr(10)
    cAllPrg += 'HB_FUNC( UI_MEMONEW )        { hb_retnint( 0 ); }' + Chr(10)
+   cAllPrg += 'HB_FUNC( UI_MSGBOX )         { MessageBoxA( GetActiveWindow(), hb_parc(1), hb_parc(2) ? hb_parc(2) : "App", 0x40 ); }' + Chr(10)
    cAllPrg += 'HB_FUNC( MAC_RUNTIMEERRORDIALOG ) { hb_retni( 0 ); }' + Chr(10)
    cAllPrg += 'HB_FUNC( MAC_APPTERMINATE )  { }' + Chr(10)
    cAllPrg += '#pragma ENDDUMP' + Chr(10)
@@ -2201,7 +2380,9 @@ static function TBDebugRun()
    // Platform stubs for macOS/Linux functions referenced by classes.prg
    cAllPrg += '#pragma BEGINDUMP' + Chr(10)
    cAllPrg += '#include <hbapi.h>' + Chr(10)
+   cAllPrg += '#include <windows.h>' + Chr(10)
    cAllPrg += 'HB_FUNC( UI_MEMONEW )        { hb_retnint( 0 ); }' + Chr(10)
+   cAllPrg += 'HB_FUNC( UI_MSGBOX )         { MessageBoxA( GetActiveWindow(), hb_parc(1), hb_parc(2) ? hb_parc(2) : "App", 0x40 ); }' + Chr(10)
    cAllPrg += 'HB_FUNC( MAC_RUNTIMEERRORDIALOG ) { hb_retni( 0 ); }' + Chr(10)
    cAllPrg += 'HB_FUNC( MAC_APPTERMINATE )  { }' + Chr(10)
    cAllPrg += '#pragma ENDDUMP' + Chr(10)
@@ -3455,8 +3636,12 @@ HB_FUNC( W32_SAVEFILEDIALOG )
    char szFile[MAX_PATH];
    char szFilter[256];
    const char * cExt = hb_parc(3);
+   char szInitDir[MAX_PATH];
 
    lstrcpynA( szFile, hb_parc(2), MAX_PATH );
+
+   /* Default to user's Desktop (avoids OneDrive-redirected Documents) */
+   SHGetFolderPathA( NULL, CSIDL_DESKTOPDIRECTORY, NULL, 0, szInitDir );
 
    sprintf( szFilter, "HbBuilder Files (*.%s)%c*.%s%cAll Files (*.*)%c*.*%c",
             cExt, 0, cExt, 0, 0, 0 );
@@ -3469,7 +3654,8 @@ HB_FUNC( W32_SAVEFILEDIALOG )
    ofn.nMaxFile = MAX_PATH;
    ofn.lpstrTitle = hb_parc(1);
    ofn.lpstrDefExt = cExt;
-   ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+   ofn.lpstrInitialDir = szInitDir;
+   ofn.Flags = OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY;
 
    if( GetSaveFileNameA( &ofn ) )
       hb_retc( szFile );

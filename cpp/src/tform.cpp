@@ -1255,8 +1255,15 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
          /* Fire OnClose event before closing */
          FireEvent( FOnClose );
 
-         if( FMainWindow || FModal )
-            Close();   /* Destroy window -> WM_DESTROY -> PostQuitMessage exits loop */
+         if( FModal )
+         {
+            /* Modal form: just clear the flag — ShowModal() loop will exit
+             * and handle EnableWindow + DestroyWindow in the correct order */
+            FModal = FALSE;
+            FRunning = FALSE;
+         }
+         else if( FMainWindow )
+            Close();   /* Main window: destroy -> PostQuitMessage */
          else
          {
             /* Secondary window (Show): just hide, don't destroy */
@@ -1266,8 +1273,8 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
 
       case WM_DESTROY:
          FireEvent( FOnDestroy );
-         if( FMainWindow || FModal )
-            PostQuitMessage(0);  /* Exits message loop (main Run() or modal nested loop) */
+         if( FMainWindow )
+            PostQuitMessage(0);
          return 0;
    }
 
@@ -1395,27 +1402,46 @@ int TForm::ShowModal()
    FModal = TRUE;
    FRunning = TRUE;
 
-   /* Nested message loop — blocks until PostQuitMessage is called */
+   /* Nested message loop — runs while FModal is TRUE.
+    * Uses PeekMessage + WaitMessage instead of GetMessage + PostQuitMessage
+    * to avoid contaminating the main message loop with WM_QUIT. */
    {
       MSG msg;
-      while( GetMessage( &msg, NULL, 0, 0 ) > 0 )
+      while( FModal )
       {
-         if( !IsDialogMessage( FHandle, &msg ) )
+         if( PeekMessage( &msg, NULL, 0, 0, PM_REMOVE ) )
          {
-            TranslateMessage( &msg );
-            DispatchMessage( &msg );
+            /* If WM_QUIT arrives (e.g. app terminating), re-post it and exit */
+            if( msg.message == WM_QUIT )
+            {
+               PostQuitMessage( (int) msg.wParam );
+               break;
+            }
+            if( !FHandle || !IsDialogMessage( FHandle, &msg ) )
+            {
+               TranslateMessage( &msg );
+               DispatchMessage( &msg );
+            }
          }
+         else
+            WaitMessage();
       }
    }
 
    FModal = FALSE;
    FRunning = FALSE;
 
-   /* Re-enable and activate the owner window */
-   if( hOwner )
-   {
+   /* 1. Re-enable owner FIRST (while modal is still visible) —
+    *    this is how standard Win32 modal dialogs work */
+   if( hOwner && IsWindow( hOwner ) )
       EnableWindow( hOwner, TRUE );
-      SetForegroundWindow( hOwner );
+
+   /* 2. Destroy the modal window — Windows auto-activates the owner
+    *    since it was set as parent in CreateWindowExA */
+   if( FHandle )
+   {
+      DestroyWindow( FHandle );
+      FHandle = NULL;
    }
 
    return FModalResult;
