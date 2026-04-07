@@ -1893,7 +1893,7 @@ static void HBForm_Run( HBForm * form )
       if( s_palData && s_palData->notebook ) {
          GtkWidget * tbHBox = gtk_box_new( GTK_ORIENTATION_HORIZONTAL, 4 );
          /* Ensure toolbar has enough width for all buttons (Run must be visible) */
-         gtk_widget_set_size_request( tbVBox, 308, -1 );
+         gtk_widget_set_size_request( tbVBox, 348, -1 );
          gtk_box_pack_start( GTK_BOX(tbHBox), tbVBox, FALSE, FALSE, 0 );
          GtkWidget * sep = gtk_separator_new( GTK_ORIENTATION_VERTICAL );
          gtk_box_pack_start( GTK_BOX(tbHBox), sep, FALSE, FALSE, 2 );

@@ -3,6 +3,10 @@ HarbourBuilder - Cross-platform visual IDE for Harbour
 
 2026-04-07 (Session 14: Linux GTK3 — ShowModal, form lifecycle & project restore)
 
+  TOOLBAR:
+  - Adjusted toolbar splitter width from 308 to 348 pixels so all buttons
+    in the first row (including the new "Form" toggle) are visible.
+
   SHOWMODAL (GTK3):
   - Implemented ShowModal() for TForm on Linux/GTK3. Uses
     gtk_window_set_modal() + gtk_window_set_transient_for() with a nested
