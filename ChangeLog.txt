@@ -1,6 +1,16 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-07 (Session 13: Form lifecycle, project restore & modal forms)
+
+  MODAL FORMS:
+  - Added ShowModal() method to TForm. Uses [NSApp runModalForWindow:]
+    to block caller until the form is closed. Returns FModalResult
+    (0=none, 1=default button, 2=cancel button).
+  - windowWillClose: detects modal windows via [NSApp modalWindow] and
+    calls [NSApp stopModal] instead of [NSApp stop:nil].
+  - Usage: nResult := oForm2:ShowModal()
+
 2026-04-07 (Session 13: Form lifecycle & project restore fixes)
 
   BUG FIXES:

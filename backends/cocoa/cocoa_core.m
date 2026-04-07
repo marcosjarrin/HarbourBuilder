@@ -419,6 +419,7 @@ void EnsureNSApp( void )
 }
 - (void)run;
 - (void)showOnly;  /* Create + show without entering run loop */
+- (int)showModal;  /* Show as modal, block until closed, return FModalResult */
 - (void)close;
 - (void)center;
 - (void)createAllChildren;
@@ -2111,6 +2112,14 @@ static HBPaletteTarget * s_palTarget = nil;
    [self createWindowWithRunLoop:NO];
 }
 
+- (int)showModal
+{
+   [self createWindowWithRunLoop:NO];
+   FModalResult = 0;
+   [NSApp runModalForWindow:FWindow];
+   return FModalResult;
+}
+
 - (void)close
 {
    FWasRunning = FRunning;
@@ -2301,6 +2310,14 @@ static HBPaletteTarget * s_palTarget = nil;
    if( FOnClose ) [self fireEvent:FOnClose];
    if( FOnHide ) [self fireEvent:FOnHide];
 
+   /* If this window is running a modal session, end it */
+   if( [NSApp modalWindow] == FWindow ) {
+      [NSApp stopModal];
+      FRunning = NO;
+      FWasRunning = NO;
+      return;
+   }
+
    /* Only stop the run loop if this form had its own modal loop (Activate/Run) */
    BOOL wasModal = FRunning || FWasRunning;
    FRunning = NO;
@@ -2476,6 +2493,7 @@ HB_FUNC( UI_FORMSETDARKMODE ) {
 }
 HB_FUNC( UI_FORMRUN )       { HBForm * p = GetForm(1); if( p ) [p run]; }
 HB_FUNC( UI_FORMSHOW )      { HBForm * p = GetForm(1); if( p ) [p showOnly]; }
+HB_FUNC( UI_FORMSHOWMODAL ) { HBForm * p = GetForm(1); if( p ) hb_retni( [p showModal] ); else hb_retni(0); }
 HB_FUNC( UI_FORMCLOSE )     { HBForm * p = GetForm(1); if( p ) [p close]; }
 HB_FUNC( UI_FORMHIDE )      { HBForm * p = GetForm(1); if( p && p->FWindow ) [p->FWindow orderOut:nil]; }
 HB_FUNC( UI_FORMISVISIBLE ) { HBForm * p = GetForm(1); hb_retl( p && p->FWindow && [p->FWindow isVisible] ); }
