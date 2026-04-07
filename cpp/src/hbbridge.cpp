@@ -1861,6 +1861,190 @@ HB_FUNC( W32_PROGRESSCLOSE )
    }
 }
 
+/* W32_RunBatchWithProgress( cBatFile, cTitle, cStatusText ) -> cOutput
+ * Runs a .bat file in a background thread while showing a marquee progress
+ * dialog so the user sees activity and the IDE doesn't appear frozen.
+ * Returns the captured stdout+stderr output as a string. */
+
+struct _BatchThreadData {
+   char szBatFile[MAX_PATH];
+   char * pOutput;
+   DWORD  dwOutputLen;
+   volatile LONG bDone;
+};
+
+static DWORD WINAPI _BatchThreadProc( LPVOID pArg )
+{
+   _BatchThreadData * td = (_BatchThreadData *)pArg;
+
+   /* Create pipe for capturing output */
+   SECURITY_ATTRIBUTES sa = { sizeof(SECURITY_ATTRIBUTES), NULL, TRUE };
+   HANDLE hReadPipe, hWritePipe;
+
+   if( !CreatePipe( &hReadPipe, &hWritePipe, &sa, 0 ) )
+   {
+      td->pOutput = (char *)HeapAlloc( GetProcessHeap(), 0, 64 );
+      lstrcpyA( td->pOutput, "Failed to create pipe." );
+      td->dwOutputLen = lstrlenA( td->pOutput );
+      InterlockedExchange( &td->bDone, TRUE );
+      return 1;
+   }
+   SetHandleInformation( hReadPipe, HANDLE_FLAG_INHERIT, 0 );
+
+   /* Build command: cmd /c "batfile" */
+   char szCmd[MAX_PATH + 32];
+   wsprintfA( szCmd, "cmd /c \"\"%s\"\"", td->szBatFile );
+
+   STARTUPINFOA si;
+   PROCESS_INFORMATION pi;
+   ZeroMemory( &si, sizeof(si) );
+   si.cb = sizeof(si);
+   si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+   si.hStdOutput = hWritePipe;
+   si.hStdError  = hWritePipe;
+   si.hStdInput  = GetStdHandle( STD_INPUT_HANDLE );
+   si.wShowWindow = SW_HIDE;
+   ZeroMemory( &pi, sizeof(pi) );
+
+   if( !CreateProcessA( NULL, szCmd, NULL, NULL, TRUE,
+        CREATE_NO_WINDOW, NULL, NULL, &si, &pi ) )
+   {
+      CloseHandle( hReadPipe );
+      CloseHandle( hWritePipe );
+      td->pOutput = (char *)HeapAlloc( GetProcessHeap(), 0, 64 );
+      lstrcpyA( td->pOutput, "Failed to execute batch file." );
+      td->dwOutputLen = lstrlenA( td->pOutput );
+      InterlockedExchange( &td->bDone, TRUE );
+      return 1;
+   }
+
+   CloseHandle( hWritePipe );
+
+   /* Read output from pipe */
+   DWORD dwCap = 32768, dwLen = 0;
+   char * pBuf = (char *)HeapAlloc( GetProcessHeap(), 0, dwCap );
+   char tmp[4096];
+   DWORD nRead;
+
+   while( ReadFile( hReadPipe, tmp, sizeof(tmp), &nRead, NULL ) && nRead > 0 )
+   {
+      if( dwLen + nRead + 1 > dwCap )
+      {
+         dwCap *= 2;
+         pBuf = (char *)HeapReAlloc( GetProcessHeap(), 0, pBuf, dwCap );
+      }
+      CopyMemory( pBuf + dwLen, tmp, nRead );
+      dwLen += nRead;
+   }
+   pBuf[dwLen] = 0;
+   CloseHandle( hReadPipe );
+
+   WaitForSingleObject( pi.hProcess, INFINITE );
+   CloseHandle( pi.hProcess );
+   CloseHandle( pi.hThread );
+
+   td->pOutput = pBuf;
+   td->dwOutputLen = dwLen;
+   InterlockedExchange( &td->bDone, TRUE );
+   return 0;
+}
+
+HB_FUNC( W32_RUNBATCHWITHPROGRESS )
+{
+   const char * cBatFile = hb_parc(1);
+   const char * cTitle   = HB_ISCHAR(2) ? hb_parc(2) : "Working...";
+   const char * cStatus  = HB_ISCHAR(3) ? hb_parc(3) : "Please wait...";
+
+   if( !cBatFile || !cBatFile[0] ) { hb_retc( "" ); return; }
+
+   /* Prepare thread data */
+   _BatchThreadData td;
+   ZeroMemory( &td, sizeof(td) );
+   lstrcpynA( td.szBatFile, cBatFile, MAX_PATH );
+   td.bDone = FALSE;
+
+   /* Create marquee progress dialog */
+   static BOOL bRegBatch = FALSE;
+   if( !bRegBatch )
+   {
+      WNDCLASSEXA wc = { sizeof(WNDCLASSEXA) };
+      wc.lpfnWndProc = DefWindowProcA;
+      wc.hInstance = GetModuleHandle(NULL);
+      wc.lpszClassName = "HbBatchProgressDlg";
+      wc.hCursor = LoadCursor( NULL, IDC_ARROW );
+      wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+      RegisterClassExA( &wc );
+      bRegBatch = TRUE;
+   }
+
+   int sw = GetSystemMetrics( SM_CXSCREEN );
+   int sh = GetSystemMetrics( SM_CYSCREEN );
+   int dlgW = 460, dlgH = 130;
+   int x = (sw - dlgW) / 2, y = (sh - dlgH) / 2;
+
+   HWND hDlg = CreateWindowExA( WS_EX_DLGMODALFRAME | WS_EX_TOPMOST,
+      "HbBatchProgressDlg", cTitle,
+      WS_POPUP | WS_CAPTION | WS_VISIBLE,
+      x, y, dlgW, dlgH, NULL, NULL, GetModuleHandle(NULL), NULL );
+
+   /* Dark title bar */
+   {  typedef HRESULT (WINAPI *PFN)(HWND, DWORD, LPCVOID, DWORD);
+      HMODULE hDwm = LoadLibraryA("dwmapi.dll");
+      if( hDwm ) {
+         PFN pFn = (PFN)GetProcAddress(hDwm, "DwmSetWindowAttribute");
+         if( pFn ) { BOOL val = TRUE; pFn( hDlg, 20, &val, sizeof(val) ); }
+         FreeLibrary( hDwm );
+      }
+   }
+
+   HFONT hFont = (HFONT)GetStockObject( DEFAULT_GUI_FONT );
+
+   /* Status label */
+   HWND hLabel = CreateWindowExA( 0, "STATIC", cStatus,
+      WS_CHILD | WS_VISIBLE | SS_LEFT,
+      16, 12, dlgW - 40, 20, hDlg, NULL, GetModuleHandle(NULL), NULL );
+   SendMessageA( hLabel, WM_SETFONT, (WPARAM) hFont, TRUE );
+
+   /* Marquee progress bar */
+   HWND hBar = CreateWindowExA( 0, PROGRESS_CLASSA, NULL,
+      WS_CHILD | WS_VISIBLE | PBS_MARQUEE,
+      16, 40, dlgW - 40, 24, hDlg, NULL, GetModuleHandle(NULL), NULL );
+   SendMessageA( hBar, PBM_SETMARQUEE, TRUE, 30 );
+
+   UpdateWindow( hDlg );
+
+   /* Start background thread */
+   HANDLE hThread = CreateThread( NULL, 0, _BatchThreadProc, &td, 0, NULL );
+
+   /* Message pump while thread runs */
+   while( !td.bDone )
+   {
+      MSG m;
+      while( PeekMessage( &m, NULL, 0, 0, PM_REMOVE ) )
+      {
+         TranslateMessage( &m );
+         DispatchMessage( &m );
+      }
+      Sleep( 50 );
+   }
+
+   if( hThread ) {
+      WaitForSingleObject( hThread, INFINITE );
+      CloseHandle( hThread );
+   }
+
+   /* Close dialog */
+   DestroyWindow( hDlg );
+
+   /* Return output */
+   if( td.pOutput ) {
+      hb_retclen( td.pOutput, td.dwOutputLen );
+      HeapFree( GetProcessHeap(), 0, td.pOutput );
+   } else {
+      hb_retc( "" );
+   }
+}
+
 /* W32_BuildErrorDialog( cTitle, cLog ) - resizable dialog with selectable/copyable text */
 
 static HWND s_errEdit = NULL;

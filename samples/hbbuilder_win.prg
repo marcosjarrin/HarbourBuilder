@@ -58,8 +58,7 @@ function Main()
       W32_SetAppDarkMode( .T. )
    endif
 
-   // Check if Harbour and BCC are installed
-   CheckHarbourInstall()
+   // Harbour check moved to TBRun() — auto-download + build on first Run
 
    // Auto-generate icons if they don't exist yet
    if ! File( HB_DirBase() + "..\resources\palette_new.bmp" )
@@ -1904,6 +1903,13 @@ static function TBRun()
       cLog += "Compiler: " + aCI[2] + Chr(10)
    endif
 
+   // Ensure Harbour is installed for the selected compiler
+   if ! File( cHbBin + "\harbour.exe" )
+      if ! EnsureHarbour( cCompiler, aCI )
+         return nil
+      endif
+   endif
+
    W32_ShellExec( 'cmd /c mkdir "' + cBuildDir + '" 2>nul' )
    // Delete old exe to avoid running stale builds
    W32_ShellExec( 'cmd /c del "' + cBuildDir + '\UserApp.exe" 2>nul' )
@@ -2319,6 +2325,13 @@ static function TBDebugRun()
       cHbLib     := cHbDir + "\lib\win\bcc"
    endif
 
+   // Ensure Harbour is installed for the selected compiler
+   if ! File( cHbBin + "\harbour.exe" )
+      if ! EnsureHarbour( cCompiler, aCI )
+         return nil
+      endif
+   endif
+
    W32_ShellExec( 'cmd /c mkdir "' + cBuildDir + '" 2>nul' )
    W32_ShellExec( 'cmd /c del "' + cBuildDir + '\DebugApp.exe" 2>nul' )
    W32_ShellExec( 'cmd /c del "' + cBuildDir + '\*.obj" 2>nul' )
@@ -2688,26 +2701,98 @@ static function ShowAIAssistant()
 
 return nil
 
-// === Harbour Installation Check ===
+// === Harbour Auto-Install ===
 
-static function CheckHarbourInstall()
+static function EnsureHarbour( cCompiler, aCI )
 
-   if ! File( "c:\harbour\bin\win\bcc\harbour.exe" )
-      MsgInfo( "Harbour compiler not found!" + Chr(10) + ;
-               Chr(10) + ;
-               "HbBuilder requires Harbour 3.2 to compile projects." + Chr(10) + ;
-               Chr(10) + ;
-               "Please install Harbour from:" + Chr(10) + ;
-               "https://harbour.github.io/" + Chr(10) + ;
-               Chr(10) + ;
-               "Expected path: c:\harbour" + Chr(10) + ;
-               Chr(10) + ;
-               "After installation, restart HbBuilder.", ;
-               "Harbour Not Found" )
+   local cHbDir   := "c:\harbour"
+   local cHbSrc   := "c:\harbour_src"
+   local cOutput, cCmd, cCC, cCDir
+   local cMsvcBase, cWinKit, cWinKitVer
+   local lOk
+
+   if ! MsgYesNo( "Harbour compiler not found!" + Chr(10) + ;
+                  Chr(10) + ;
+                  "HbBuilder needs Harbour to compile projects." + Chr(10) + ;
+                  Chr(10) + ;
+                  "Download from GitHub and build it now?" + Chr(10) + ;
+                  "(This may take several minutes)", ;
+                  "Harbour Not Found" )
+      return .F.
    endif
 
+   // Step 1: Clone Harbour source (with animated progress)
+   if ! File( cHbSrc + "\config\global.mk" )
+      MemoWrit( cHbSrc + "_clone.bat", ;
+         "@echo off" + Chr(10) + ;
+         'git clone --depth 1 https://github.com/harbour/core.git "' + cHbSrc + '"' + Chr(10) )
+      cOutput := W32_RunBatchWithProgress( cHbSrc + "_clone.bat", ;
+         "Downloading Harbour...", ;
+         "Cloning https://github.com/harbour/core.git ..." )
+      if ! File( cHbSrc + "\config\global.mk" )
+         MsgInfo( "Failed to download Harbour source." + Chr(10) + Chr(10) + ;
+                  "Make sure git is installed and you have internet access." + Chr(10) + ;
+                  Chr(10) + cOutput, "Download Failed" )
+         return .F.
+      endif
+   endif
 
-return nil
+   // Step 2: Write build batch for detected compiler
+   lOk := .F.
+
+   if cCompiler == "msvc"
+      cMsvcBase  := aCI[4]
+      cWinKitVer := aCI[5]
+      cWinKit    := "c:\Program Files (x86)\Windows Kits\10"
+
+      MemoWrit( cHbSrc + "\hb_build.bat", ;
+         "@echo off" + Chr(10) + ;
+         "cd /d " + cHbSrc + Chr(10) + ;
+         "set PATH=" + cMsvcBase + "\bin\Hostx86\x86;%PATH%" + Chr(10) + ;
+         "set INCLUDE=" + cMsvcBase + "\include;" + ;
+            cWinKit + "\Include\" + cWinKitVer + "\ucrt;" + ;
+            cWinKit + "\Include\" + cWinKitVer + "\um;" + ;
+            cWinKit + "\Include\" + cWinKitVer + "\shared" + Chr(10) + ;
+         "set LIB=" + cMsvcBase + "\lib\x86;" + ;
+            cWinKit + "\Lib\" + cWinKitVer + "\ucrt\x86;" + ;
+            cWinKit + "\Lib\" + cWinKitVer + "\um\x86" + Chr(10) + ;
+         "set HB_BUILD_CONTRIBS=no" + Chr(10) + ;
+         "set HB_INSTALL_PREFIX=" + cHbDir + Chr(10) + ;
+         "win-make.exe install" + Chr(10) )
+   else
+      cCDir := aCI[4]
+      MemoWrit( cHbSrc + "\hb_build.bat", ;
+         "@echo off" + Chr(10) + ;
+         "cd /d " + cHbSrc + Chr(10) + ;
+         "set PATH=" + cCDir + "\bin;%PATH%" + Chr(10) + ;
+         "set HB_COMPILER=bcc" + Chr(10) + ;
+         "set HB_BUILD_CONTRIBS=no" + Chr(10) + ;
+         "set HB_INSTALL_PREFIX=" + cHbDir + Chr(10) + ;
+         "win-make.exe install" + Chr(10) )
+   endif
+
+   // Step 3: Build Harbour (with animated marquee progress bar)
+   cOutput := W32_RunBatchWithProgress( cHbSrc + "\hb_build.bat", ;
+      "Building Harbour...", ;
+      "Compiling with " + aCI[2] + " (this may take several minutes)..." )
+
+   // Step 4: Verify
+   if cCompiler == "msvc"
+      lOk := File( cHbDir + "\bin\win\msvc\harbour.exe" )
+   else
+      lOk := File( cHbDir + "\bin\win\bcc\harbour.exe" )
+   endif
+
+   if lOk
+      MsgInfo( "Harbour installed successfully!" + Chr(10) + Chr(10) + ;
+               "Location: " + cHbDir, "Installation Complete" )
+   else
+      MsgInfo( "Harbour build failed." + Chr(10) + Chr(10) + ;
+               "Build output:" + Chr(10) + Left( cOutput, 1000 ), ;
+               "Build Failed" )
+   endif
+
+return lOk
 
 // === Dark Mode Toggle ===
 
@@ -3543,6 +3628,14 @@ HB_FUNC( W32_MSGBOX )
 HB_FUNC( UI_MSGBOX )
 {
    MessageBoxA( GetActiveWindow(), hb_parc(1), hb_parc(2), MB_OK | MB_ICONINFORMATION );
+}
+
+/* UI_MsgYesNo - Yes/No dialog, returns .T. if user clicks Yes */
+HB_FUNC( UI_MSGYESNO )
+{
+   int nResult = MessageBoxA( GetActiveWindow(), hb_parc(1),
+      hb_parc(2) ? hb_parc(2) : "Confirm", MB_YESNO | MB_ICONQUESTION );
+   hb_retl( nResult == IDYES );
 }
 
 HB_FUNC( W32_GETSCREENWIDTH )

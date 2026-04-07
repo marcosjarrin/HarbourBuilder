@@ -867,6 +867,12 @@ function MsgInfo( xText, cTitle )
 
 return nil
 
+function MsgYesNo( xText, cTitle )
+
+   if cTitle == nil; cTitle := "Confirm"; endif
+
+return UI_MsgYesNo( ValToStr( xText ), ValToStr( cTitle ) )
+
 static function ValToStr( xVal )
    local cType := ValType( xVal )
    do case
