@@ -5,7 +5,7 @@
 #include "hbide.h"
 #include <string.h>
 /* Global dark mode flag for forms — set from Harbour via W32_SetIDEDarkMode */
-int g_bDarkIDE = 1;
+extern "C" int g_bDarkIDE = 1;
 
 /* Owner-draw dark menu item data */
 struct DARKMENUITM { char szText[64]; };
@@ -49,6 +49,7 @@ TForm::TForm()
    FModalResult = 0;
    FRunning = FALSE;
    FMainWindow = FALSE;
+   FModal = FALSE;
    FGridBmp = NULL;
    FGridDC = NULL;
    FGridW = FGridH = 0;
@@ -208,7 +209,7 @@ void TForm::CreateHandle( HWND hParent )
          FCenter ? CW_USEDEFAULT : FLeft,
          FCenter ? CW_USEDEFAULT : FTop,
          FWidth, FHeight,
-         NULL, NULL, GetModuleHandle(NULL), NULL );
+         hParent, NULL, GetModuleHandle(NULL), NULL );
    }
 
    if( FHandle )
@@ -1254,19 +1255,19 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
          /* Fire OnClose event before closing */
          FireEvent( FOnClose );
 
-         if( FMainWindow )
-            Close();   /* Main window: destroy -> PostQuitMessage */
+         if( FMainWindow || FModal )
+            Close();   /* Destroy window -> WM_DESTROY -> PostQuitMessage exits loop */
          else
          {
-            /* Secondary window: just hide, don't destroy */
+            /* Secondary window (Show): just hide, don't destroy */
             ShowWindow( FHandle, SW_HIDE );
          }
          return 0;
 
       case WM_DESTROY:
          FireEvent( FOnDestroy );
-         if( FMainWindow )
-            PostQuitMessage(0);
+         if( FMainWindow || FModal )
+            PostQuitMessage(0);  /* Exits message loop (main Run() or modal nested loop) */
          return 0;
    }
 
@@ -1360,6 +1361,64 @@ void TForm::Show()
     * because menus are created after Show() */
 
    FRunning = TRUE;
+}
+
+/* ShowModal() - Create window as modal, block until closed, return FModalResult.
+ * Disables the owner window so the user can only interact with this form.
+ * Uses a nested message loop (like GTK3's gtk_main / Cocoa's runModalForWindow). */
+int TForm::ShowModal()
+{
+   HWND hOwner = GetActiveWindow();
+
+   CreateHandle( hOwner );
+   CreateAllChildren();
+
+   if( FDesignMode )
+      SubclassChildren();
+
+   if( FCenter )
+      Center();
+   else if( FHandle )
+      SetWindowPos( FHandle, NULL, FLeft, FTop, 0, 0, SWP_NOSIZE | SWP_NOZORDER );
+
+   if( g_bDarkIDE && FHandle )
+      SetDarkTitleBar( FHandle, TRUE );
+
+   /* Disable the owner window to make this form modal */
+   if( hOwner )
+      EnableWindow( hOwner, FALSE );
+
+   ShowWindow( FHandle, SW_SHOW );
+   UpdateWindow( FHandle );
+
+   FModalResult = 0;
+   FModal = TRUE;
+   FRunning = TRUE;
+
+   /* Nested message loop — blocks until PostQuitMessage is called */
+   {
+      MSG msg;
+      while( GetMessage( &msg, NULL, 0, 0 ) > 0 )
+      {
+         if( !IsDialogMessage( FHandle, &msg ) )
+         {
+            TranslateMessage( &msg );
+            DispatchMessage( &msg );
+         }
+      }
+   }
+
+   FModal = FALSE;
+   FRunning = FALSE;
+
+   /* Re-enable and activate the owner window */
+   if( hOwner )
+   {
+      EnableWindow( hOwner, TRUE );
+      SetForegroundWindow( hOwner );
+   }
+
+   return FModalResult;
 }
 
 void TForm::Close()

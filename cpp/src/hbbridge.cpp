@@ -86,14 +86,6 @@ HB_FUNC( W32_INVALIDATEWINDOW )
    }
 }
 
-/* UI_MsgBox - cross-platform message box */
-HB_FUNC( UI_MSGBOX )
-{
-   MessageBoxA( GetActiveWindow(), hb_parc(1),
-      HB_ISCHAR(2) ? hb_parc(2) : "HbBuilder",
-      MB_OK | MB_ICONINFORMATION );
-}
-
 /* Helper: get TControl pointer from Harbour handle */
 static TControl * GetCtrl( int nParam )
 {
@@ -183,6 +175,24 @@ HB_FUNC( UI_FORMSHOW )
 {
    TForm * p = GetForm(1);
    if( p ) p->Show();
+}
+
+/* UI_FormShowModal( hForm ) --> nModalResult */
+HB_FUNC( UI_FORMSHOWMODAL )
+{
+   TForm * p = GetForm(1);
+   if( p )
+      hb_retni( p->ShowModal() );
+   else
+      hb_retni( 0 );
+}
+
+/* UI_FormHide( hForm ) */
+HB_FUNC( UI_FORMHIDE )
+{
+   TForm * p = GetForm(1);
+   if( p && p->FHandle )
+      ShowWindow( p->FHandle, SW_HIDE );
 }
 
 /* UI_FormClose( hForm ) */
@@ -2396,13 +2406,32 @@ HB_FUNC( UI_SETDESIGNFORM )
    g_designForm = p;
 }
 
-/* UI_FormBringToFront( hForm ) */
+/* UI_FormIsKeyWindow( hForm ) --> lIsKey */
+HB_FUNC( UI_FORMISKEYWINDOW )
+{
+   TForm * p = GetForm(1);
+   hb_retl( p && p->FHandle && p->FHandle == GetForegroundWindow() );
+}
+
+/* UI_FormIsVisible( hForm ) --> lVisible */
+HB_FUNC( UI_FORMISVISIBLE )
+{
+   TForm * p = GetForm(1);
+   hb_retl( p && p->FHandle && IsWindowVisible( p->FHandle ) );
+}
+
+/* UI_FormBringToFront( hForm ) - force a form window to the foreground */
 HB_FUNC( UI_FORMBRINGTOFRONT )
 {
    TForm * p = GetForm(1);
    if( p && p->FHandle )
-      SetWindowPos( p->FHandle, HWND_TOP, 0, 0, 0, 0,
-         SWP_NOMOVE | SWP_NOSIZE );
+   {
+      HWND hWnd = p->FHandle;
+      ShowWindow( hWnd, SW_SHOW );
+      SetWindowPos( hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
+      SetWindowPos( hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
+      SetForegroundWindow( hWnd );
+   }
 }
 
 /* UI_FormOnComponentDrop( hForm, bBlock ) - set callback for component palette drop */

@@ -1,6 +1,40 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-07 (Session 15: Win32 — ShowModal, Form toggle & form lifecycle)
+
+  SHOWMODAL (WIN32):
+  - Implemented ShowModal() for TForm on Windows. Uses EnableWindow() to
+    disable owner + nested GetMessage/DispatchMessage loop. Blocks caller
+    until form is closed, returns FModalResult (0/1/2).
+  - Added FModal flag to distinguish modal forms from secondary (Show) windows.
+  - WM_CLOSE/WM_DESTROY now handle three cases: FMainWindow (PostQuitMessage),
+    FModal (PostQuitMessage exits nested loop), secondary (SW_HIDE only).
+  - CreateWindowExA now passes hParent for proper owner chain.
+  - Added UI_FORMSHOWMODAL bridge function matching Cocoa/GTK3 versions.
+
+  FORM TOGGLE (WIN32):
+  - Added toolbar "Form" button with tooltip "Toggle Form/Code".
+  - ToggleFormCode(): hides visible form or shows hidden form.
+  - UI_FormBringToFront() uses TOPMOST/NOTOPMOST trick + SetForegroundWindow
+    to reliably force windows to front on Windows.
+  - CodeEditorBringToFront() uses same TOPMOST trick.
+  - Added UI_FormIsKeyWindow(), UI_FormIsVisible(), UI_FormHide().
+
+  FORM LIFECYCLE (WIN32):
+  - Fixed MenuNewForm(): was calling Close() (DestroyWindow, FHandle=NULL)
+    on the previous form. Changed to UI_FormHide() to preserve the handle.
+    Now matches Mac/Linux behavior — forms can be re-shown when switching tabs.
+  - Fixed SwitchToForm(): reordered to call CodeEditorSelectTab() before
+    UI_FormBringToFront() so form stays on top. Added lSwitching guard to
+    prevent re-entrant calls from tab change callback.
+
+  LINK FIXES (WIN32):
+  - Fixed g_bDarkIDE C/C++ linkage mismatch (extern "C").
+  - Resolved duplicate symbols: UI_MSGBOX, W32_DEBUGPANEL.
+
+------------------------------------------------------------------------
+
 2026-04-07 (Session 14: Linux GTK3 — ShowModal, form lifecycle & project restore)
 
   DARK MODE (GTK3):

@@ -6,7 +6,7 @@
 #include "hbide.h"
 #include <string.h>
 
-extern int g_bDarkIDE;
+extern "C" int g_bDarkIDE;
 
 /* ======================================================================
  * TLabel

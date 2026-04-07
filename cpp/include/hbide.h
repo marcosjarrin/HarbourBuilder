@@ -304,6 +304,7 @@ public:
    int          FModalResult;
    BOOL         FRunning;
    BOOL         FMainWindow;   /* TRUE = this form owns the message loop */
+   BOOL         FModal;        /* TRUE = ShowModal() is active (nested message loop) */
    BOOL         FDesignMode;
 
    /* Toolbar */
@@ -339,6 +340,7 @@ public:
 
    void         Run();
    void         Show();    /* Create + show without entering message loop */
+   int          ShowModal();  /* Show as modal, block until closed, return FModalResult */
    void         Close();
    void         Center();
 

@@ -26,6 +26,7 @@ static hCodeEditor   // Code editor (background, right of inspector)
 static nScreenW      // Screen width
 static nScreenH      // Screen height
 static cCurrentFile  // Current file path (empty = untitled)
+static lSwitching := .f.  // Guard against re-entrant SwitchToForm
 
 // Project form list (C++Builder: each form = a unit)
 // Each entry: { cName, oForm, cCode, nFormX, nFormY }
@@ -303,6 +304,8 @@ function Main()
    BUTTON "Redo"  OF oTB TOOLTIP "Redo (Ctrl+Y)"         ACTION CodeEditorRedo( hCodeEditor )
    SEPARATOR OF oTB
    BUTTON "Run"   OF oTB TOOLTIP "Run project (F9)"       ACTION TBRun()
+   SEPARATOR OF oTB
+   BUTTON "Form"  OF oTB TOOLTIP "Toggle Form/Code"      ACTION ToggleFormCode()
 
    // Load toolbar icons (Silk icon set by famfamfam, CC BY 2.5)
    UI_ToolBarLoadImages( oTB:hCpp, HB_DirBase() + "..\resources\toolbar.bmp" )
@@ -1192,9 +1195,12 @@ return nil
 // Switch active form: bring selected form to front
 static function SwitchToForm( nIdx )
 
+   if lSwitching; return nil; endif
    if nIdx < 1 .or. nIdx > Len( aForms )
       return nil
    endif
+
+   lSwitching := .t.
 
    // Save current form's code from editor
    if nActiveForm > 0 .and. nActiveForm != nIdx
@@ -1204,17 +1210,19 @@ static function SwitchToForm( nIdx )
    // Activate new form
    nActiveForm := nIdx
    oDesignForm := aForms[ nIdx ][ 2 ]
-
-   // Bring to front
    UI_SetDesignForm( oDesignForm:hCpp )
-   UI_FormBringToFront( oDesignForm:hCpp )
 
-   // Switch editor to this form's tab
+   // Switch editor tab first (may trigger OnEditorTabChange, guarded by lSwitching)
    CodeEditorSelectTab( hCodeEditor, nIdx + 1 )
 
    // Refresh inspector
    InspectorRefresh( oDesignForm:hCpp )
    InspectorPopulateCombo( oDesignForm:hCpp )
+
+   // Bring form to front LAST so it stays on top
+   UI_FormBringToFront( oDesignForm:hCpp )
+
+   lSwitching := .f.
 
 return nil
 
@@ -1227,9 +1235,9 @@ static function MenuNewForm()
    // Save current form code
    SaveActiveFormCode()
 
-   // Hide current form
+   // Hide current form (don't Close — that destroys the window)
    if nActiveForm > 0
-      aForms[ nActiveForm ][ 2 ]:Close()
+      UI_FormHide( aForms[ nActiveForm ][ 2 ]:hCpp )
    endif
 
    // Calculate position (same as initial form, offset a bit)
@@ -1616,6 +1624,24 @@ static function SelectCompiler()
          nSelectedCompIdx  := 0
          UI_SetProp( oIDE:hCpp, "cText", "HbBuilder 1.0 - [Auto]" )
       endif
+   endif
+
+return nil
+
+// Toggle between Design Form and Code Editor windows
+static function ToggleFormCode()
+
+   if oDesignForm == nil
+      return nil
+   endif
+
+   if UI_FormIsVisible( oDesignForm:hCpp )
+      // Form is visible - hide it and bring code editor to front
+      UI_FormHide( oDesignForm:hCpp )
+      CodeEditorBringToFront( hCodeEditor )
+   else
+      // Form is hidden - show it and bring to front
+      UI_FormBringToFront( oDesignForm:hCpp )
    endif
 
 return nil
@@ -3105,87 +3131,7 @@ static void EnsureGdiPlus(void)
    }
 }
 
-/* W32_DebugPanel() - Debugger panel with Watch, Locals, Call Stack */
-HB_FUNC( W32_DEBUGPANEL )
-{
-   static HWND s_hDbgWnd = NULL;
-   HWND hTab, hList, hOwner;
-   HFONT hFont;
-   RECT rc;
-   TCITEMA tci;
-   LVCOLUMNA lvc;
-
-   if( s_hDbgWnd && IsWindow(s_hDbgWnd) ) {
-      SetWindowPos(s_hDbgWnd,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE);
-      return;
-   }
-
-   hOwner = GetActiveWindow();
-   GetWindowRect(hOwner, &rc);
-   hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-
-   s_hDbgWnd = CreateWindowExA(WS_EX_TOOLWINDOW,
-      "STATIC","Debugger",
-      WS_POPUP|WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_VISIBLE,
-      rc.left+50, rc.bottom-250, rc.right-rc.left-100, 230,
-      NULL,NULL,GetModuleHandle(NULL),NULL);
-
-   /* Tab control: Watch | Locals | Call Stack */
-   hTab = CreateWindowExA(0,WC_TABCONTROLA,NULL,
-      WS_CHILD|WS_VISIBLE|WS_CLIPSIBLINGS,
-      0,0,rc.right-rc.left-100,28,
-      s_hDbgWnd,NULL,GetModuleHandle(NULL),NULL);
-   SendMessage(hTab,WM_SETFONT,(WPARAM)hFont,TRUE);
-
-   tci.mask=TCIF_TEXT;
-   tci.pszText="Watch"; SendMessageA(hTab,TCM_INSERTITEMA,0,(LPARAM)&tci);
-   tci.pszText="Locals"; SendMessageA(hTab,TCM_INSERTITEMA,1,(LPARAM)&tci);
-   tci.pszText="Call Stack"; SendMessageA(hTab,TCM_INSERTITEMA,2,(LPARAM)&tci);
-   tci.pszText="Breakpoints"; SendMessageA(hTab,TCM_INSERTITEMA,3,(LPARAM)&tci);
-   tci.pszText="Output"; SendMessageA(hTab,TCM_INSERTITEMA,4,(LPARAM)&tci);
-
-   /* ListView for variables */
-   hList = CreateWindowExA(WS_EX_CLIENTEDGE,WC_LISTVIEWA,NULL,
-      WS_CHILD|WS_VISIBLE|LVS_REPORT|LVS_SHOWSELALWAYS,
-      0,28,rc.right-rc.left-100,180,
-      s_hDbgWnd,NULL,GetModuleHandle(NULL),NULL);
-   SendMessage(hList,WM_SETFONT,(WPARAM)hFont,TRUE);
-   SendMessage(hList,LVM_SETEXTENDEDLISTVIEWSTYLE,0,
-      LVS_EX_FULLROWSELECT|LVS_EX_GRIDLINES);
-
-   memset(&lvc,0,sizeof(lvc));
-   lvc.mask = LVCF_TEXT|LVCF_WIDTH;
-   lvc.pszText="Name"; lvc.cx=150;
-   SendMessageA(hList,LVM_INSERTCOLUMNA,0,(LPARAM)&lvc);
-   lvc.pszText="Value"; lvc.cx=200;
-   SendMessageA(hList,LVM_INSERTCOLUMNA,1,(LPARAM)&lvc);
-   lvc.pszText="Type"; lvc.cx=100;
-   SendMessageA(hList,LVM_INSERTCOLUMNA,2,(LPARAM)&lvc);
-
-   /* Sample data */
-   { LVITEMA lvi = {0};
-     lvi.mask=LVIF_TEXT; lvi.iItem=0; lvi.pszText="oForm";
-     SendMessageA(hList,LVM_INSERTITEMA,0,(LPARAM)&lvi);
-     lvi.iSubItem=1; lvi.pszText="TForm {hCpp=0x...}";
-     SendMessageA(hList,LVM_SETITEMA,0,(LPARAM)&lvi);
-     lvi.iSubItem=2; lvi.pszText="Object";
-     SendMessageA(hList,LVM_SETITEMA,0,(LPARAM)&lvi);
-
-     lvi.iSubItem=0; lvi.iItem=1; lvi.pszText="nCount";
-     SendMessageA(hList,LVM_INSERTITEMA,0,(LPARAM)&lvi);
-     lvi.iSubItem=1; lvi.pszText="42";
-     SendMessageA(hList,LVM_SETITEMA,0,(LPARAM)&lvi);
-     lvi.iSubItem=2; lvi.pszText="Numeric";
-     SendMessageA(hList,LVM_SETITEMA,0,(LPARAM)&lvi);
-
-     lvi.iSubItem=0; lvi.iItem=2; lvi.pszText="cName";
-     SendMessageA(hList,LVM_INSERTITEMA,0,(LPARAM)&lvi);
-     lvi.iSubItem=1; lvi.pszText="\"Form1\"";
-     SendMessageA(hList,LVM_SETITEMA,0,(LPARAM)&lvi);
-     lvi.iSubItem=2; lvi.pszText="String";
-     SendMessageA(hList,LVM_SETITEMA,0,(LPARAM)&lvi);
-   }
-}
+/* W32_DebugPanel() - implemented in hbbridge.cpp */
 
 /* W32_ProjectInspector( aItems ) - show project tree */
 static LRESULT CALLBACK ProjInsWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
@@ -5877,8 +5823,10 @@ HB_FUNC( CODEEDITORBRINGTOFRONT )
    if( ed && ed->hWnd )
    {
       ShowWindow( ed->hWnd, SW_SHOW );
-      SetWindowPos( ed->hWnd, HWND_TOP, 0, 0, 0, 0,
-         SWP_NOMOVE | SWP_NOSIZE );
+      /* Force to front: TOPMOST then NOTOPMOST trick */
+      SetWindowPos( ed->hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
+      SetWindowPos( ed->hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE );
+      SetForegroundWindow( ed->hWnd );
    }
 }
 
