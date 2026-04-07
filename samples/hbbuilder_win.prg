@@ -1900,26 +1900,20 @@ static function TBRun()
       cUcrtLib   := cWinKit + "\Lib\" + cWinKitVer + "\ucrt\x86"
       cUmLib     := cWinKit + "\Lib\" + cWinKitVer + "\um\x86"
       // Detect actual Harbour bin/lib layout
-      if File( cHbDir + "\bin\win\msvc\harbour.exe" )
-         cHbBin  := cHbDir + "\bin\win\msvc"
-         cHbLib  := cHbDir + "\lib\win\msvc"
-      else
-         cHbBin  := cHbDir + "\bin"
-         cHbLib  := cHbDir + "\lib"
-      endif
+      cHbBin := FindHarbourSub( cHbDir, "bin", "msvc", "harbour.exe" )
+      cHbLib := FindHarbourSub( cHbDir, "lib", "msvc", "hbrtl.lib" )
       cLog += "Compiler: " + aCI[2] + Chr(10)
+      cLog += "Harbour bin: " + cHbBin + Chr(10)
+      cLog += "Harbour lib: " + cHbLib + Chr(10)
    else
       cCDir      := aCI[4]  // e.g. "c:\bcc77c"
       cCC        := cCDir + "\bin\bcc32.exe"
       cLinker    := cCDir + "\bin\ilink32.exe"
-      if File( cHbDir + "\bin\win\bcc\harbour.exe" )
-         cHbBin  := cHbDir + "\bin\win\bcc"
-         cHbLib  := cHbDir + "\lib\win\bcc"
-      else
-         cHbBin  := cHbDir + "\bin"
-         cHbLib  := cHbDir + "\lib"
-      endif
+      cHbBin := FindHarbourSub( cHbDir, "bin", "bcc", "harbour.exe" )
+      cHbLib := FindHarbourSub( cHbDir, "lib", "bcc", "hbrtl.lib" )
       cLog += "Compiler: " + aCI[2] + Chr(10)
+      cLog += "Harbour bin: " + cHbBin + Chr(10)
+      cLog += "Harbour lib: " + cHbLib + Chr(10)
    endif
 
    W32_ShellExec( 'cmd /c mkdir "' + cBuildDir + '" 2>nul' )
@@ -2353,24 +2347,14 @@ static function TBDebugRun()
       cSharedInc := cWinKit + "\Include\" + cWinKitVer + "\shared"
       cUcrtLib   := cWinKit + "\Lib\" + cWinKitVer + "\ucrt\x86"
       cUmLib     := cWinKit + "\Lib\" + cWinKitVer + "\um\x86"
-      if File( cHbDir + "\bin\win\msvc\harbour.exe" )
-         cHbBin  := cHbDir + "\bin\win\msvc"
-         cHbLib  := cHbDir + "\lib\win\msvc"
-      else
-         cHbBin  := cHbDir + "\bin"
-         cHbLib  := cHbDir + "\lib"
-      endif
+      cHbBin := FindHarbourSub( cHbDir, "bin", "msvc", "harbour.exe" )
+      cHbLib := FindHarbourSub( cHbDir, "lib", "msvc", "hbrtl.lib" )
    else
       cCDir      := aCI[4]
       cCC        := cCDir + "\bin\bcc32.exe"
       cLinker    := cCDir + "\bin\ilink32.exe"
-      if File( cHbDir + "\bin\win\bcc\harbour.exe" )
-         cHbBin  := cHbDir + "\bin\win\bcc"
-         cHbLib  := cHbDir + "\lib\win\bcc"
-      else
-         cHbBin  := cHbDir + "\bin"
-         cHbLib  := cHbDir + "\lib"
-      endif
+      cHbBin := FindHarbourSub( cHbDir, "bin", "bcc", "harbour.exe" )
+      cHbLib := FindHarbourSub( cHbDir, "lib", "bcc", "hbrtl.lib" )
    endif
 
    W32_ShellExec( 'cmd /c mkdir "' + cBuildDir + '" 2>nul' )
@@ -2743,6 +2727,23 @@ static function ShowAIAssistant()
 return nil
 
 // === Harbour Detection & Auto-Install ===
+
+// Find a file inside Harbour dir, trying: dir\sub\win\compiler, dir\sub\win, dir\sub
+// e.g. FindHarbourSub( "c:\harbour", "lib", "msvc", "hbrtl.lib" )
+// tries: c:\harbour\lib\win\msvc\hbrtl.lib, c:\harbour\lib\win\hbrtl.lib, c:\harbour\lib\hbrtl.lib
+static function FindHarbourSub( cHbDir, cCategory, cComp, cFile )
+
+   if File( cHbDir + "\" + cCategory + "\win\" + cComp + "\" + cFile )
+      return cHbDir + "\" + cCategory + "\win\" + cComp
+   endif
+   if File( cHbDir + "\" + cCategory + "\win\" + cFile )
+      return cHbDir + "\" + cCategory + "\win"
+   endif
+   if File( cHbDir + "\" + cCategory + "\" + cFile )
+      return cHbDir + "\" + cCategory
+   endif
+
+return cHbDir + "\" + cCategory + "\win\" + cComp  // fallback to standard path
 
 static function FindHarbour( cCompiler )
 
