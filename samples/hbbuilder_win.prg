@@ -2854,7 +2854,8 @@ static function EnsureHarbour( cCompiler, aCI )
       MemoWrit( cHbSrc + "\hb_build.bat", ;
          "@echo off" + Chr(10) + ;
          "cd /d " + cHbSrc + Chr(10) + ;
-         "set PATH=" + cMsvcBase + "\bin\Hostx86\x86;%PATH%" + Chr(10) + ;
+         "set PATH=" + cMsvcBase + "\bin\Hostx86\x86;" + ;
+            cWinKit + "\bin\" + cWinKitVer + "\x86;%PATH%" + Chr(10) + ;
          "set INCLUDE=" + cMsvcBase + "\include;" + ;
             cWinKit + "\Include\" + cWinKitVer + "\ucrt;" + ;
             cWinKit + "\Include\" + cWinKitVer + "\um;" + ;
