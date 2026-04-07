@@ -1289,23 +1289,29 @@ static void InsAddEventCat( INSDATA * d, int nRow, const char * szCat )
 /* Add one event row to the Events ListView (indented under category) */
 static void InsAddEvent( INSDATA * d, int nRow, const char * szEvent, const char * szHandler )
 {
-   LVITEMA lvi = {0};
-   char buf[80];
-   sprintf( buf, "      %s", szEvent );  /* indent 6 spaces, same as properties */
+   LVITEMA lvi;
+   char buf[128];
+   int nInserted;
+
+   /* Column 0: event name (indented) */
+   ZeroMemory( &lvi, sizeof(lvi) );
+   sprintf( buf, "      %s", szEvent );
    lvi.mask = LVIF_TEXT | LVIF_PARAM;
    lvi.iItem = nRow;
    lvi.iSubItem = 0;
    lvi.pszText = buf;
-   lvi.lParam = 0;  /* 0 = event row */
-   SendMessageA( d->hEventList, LVM_INSERTITEMA, 0, (LPARAM) &lvi );
-   /* Set handler name in column 2 */
+   lvi.lParam = 0;
+   nInserted = (int) SendMessageA( d->hEventList, LVM_INSERTITEMA, 0, (LPARAM) &lvi );
+
+   /* Column 1: handler name — use actual inserted index */
+   if( nInserted >= 0 )
    {
-      LVITEMA lvi2 = {0};
-      lvi2.mask = LVIF_TEXT;
-      lvi2.iItem = nRow;
-      lvi2.iSubItem = 1;
-      lvi2.pszText = (char *)( szHandler ? szHandler : "" );
-      SendMessageA( d->hEventList, LVM_SETITEMA, 0, (LPARAM) &lvi2 );
+      ZeroMemory( &lvi, sizeof(lvi) );
+      lvi.mask = LVIF_TEXT;
+      lvi.iItem = nInserted;
+      lvi.iSubItem = 1;
+      lvi.pszText = (char *)( szHandler && szHandler[0] ? szHandler : "" );
+      SendMessageA( d->hEventList, LVM_SETITEMA, 0, (LPARAM) &lvi );
    }
 }
 
@@ -1334,6 +1340,9 @@ static void InsPopulateEvents( INSDATA * d )
       }
       hb_vmRequestRestore();
    }
+   /* For forms, if name is empty use "Form1" */
+   if( szCtrlName[0] == 0 || lstrcmpA(szCtrlName, "ctrl") == 0 )
+      lstrcpynA( szCtrlName, "Form1", 64 );
 
    /* Get control type via UI_GetType - use reenter for VM safety */
    pDyn = hb_dynsymFindName( "UI_GETTYPE" );
