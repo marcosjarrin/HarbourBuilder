@@ -1288,16 +1288,36 @@ static void InsAddEventCat( INSDATA * d, int nRow, const char * szCat )
 
 /* Add one event row to the Events ListView (indented under category) */
 /* szCtrlName: control name for building handler (e.g. "Form1")
- * szEvent: event name (e.g. "OnClick") — handler = szCtrlName + szEvent[2..] */
+ * szEvent: event name (e.g. "OnClick") — handler = szCtrlName + szEvent[2..]
+ * pCode: source code text to search for existing handler (NULL = don't check) */
+static const char * s_pEventCode = NULL;
+
 static void InsAddEvent2( INSDATA * d, int nRow, const char * szEvent, const char * szCtrlName )
 {
    LVITEMA lvi;
-   char buf[128], handler[128];
+   char buf[128], handler[128], search[160];
    int nInserted;
+   BOOL bExists = FALSE;
 
    /* Build handler name: CtrlName + event suffix (skip "On") */
    if( szCtrlName && szCtrlName[0] && lstrlenA(szEvent) > 2 )
+   {
       wsprintfA( handler, "%s%s", szCtrlName, szEvent + 2 );
+      /* Check if handler function exists in source code */
+      if( s_pEventCode )
+      {
+         wsprintfA( search, "function %s", handler );
+         /* Case-insensitive search */
+         { const char * p = s_pEventCode;
+           int slen = lstrlenA(search);
+           while( *p ) {
+              if( CompareStringA(LOCALE_INVARIANT, NORM_IGNORECASE, p, slen, search, slen) == CSTR_EQUAL )
+                 { bExists = TRUE; break; }
+              p++;
+           }
+         }
+      }
+   }
    else
       handler[0] = 0;
 
@@ -1311,14 +1331,14 @@ static void InsAddEvent2( INSDATA * d, int nRow, const char * szEvent, const cha
    lvi.lParam = 0;
    nInserted = (int) SendMessageA( d->hEventList, LVM_INSERTITEMA, 0, (LPARAM) &lvi );
 
-   /* Column 1: handler name */
+   /* Column 1: handler name — only show if function exists in code */
    if( nInserted >= 0 )
    {
       ZeroMemory( &lvi, sizeof(lvi) );
       lvi.mask = LVIF_TEXT;
       lvi.iItem = nInserted;
       lvi.iSubItem = 1;
-      lvi.pszText = handler;
+      lvi.pszText = bExists ? handler : (char *)"";
       SendMessageA( d->hEventList, LVM_SETITEMA, 0, (LPARAM) &lvi );
    }
 }
@@ -1328,6 +1348,8 @@ static void InsPopulateEvents( INSDATA * d )
    int nType, n = 0;
    PHB_DYNS pDyn, pGetProp;
    char szCtrlName[64] = "ctrl";
+   char * pCode = NULL;
+   HB_SIZE nCodeLen = 0;
 
    InsLog( "InsPopulateEvents called" );
    if( !d || !d->hEventList ) { InsLog("  -> guard exit (no d or no hEventList)"); return; }
@@ -1351,6 +1373,31 @@ static void InsPopulateEvents( INSDATA * d )
    /* For forms, if name is empty use "Form1" */
    if( szCtrlName[0] == 0 || lstrcmpA(szCtrlName, "ctrl") == 0 )
       lstrcpynA( szCtrlName, "Form1", 64 );
+
+   /* Read all code from editor to check which handlers exist */
+   {
+      PHB_DYNS pGetCode = hb_dynsymFindName( "INS_GETALLCODE" );
+      if( pGetCode && hb_vmRequestReenter() )
+      {
+         hb_vmPushDynSym( pGetCode ); hb_vmPushNil();
+         hb_vmDo( 0 );
+         {
+            const char * s = hb_itemGetCPtr( hb_stackReturnItem() );
+            nCodeLen = hb_itemGetCLen( hb_stackReturnItem() );
+            if( s && nCodeLen > 0 )
+            {
+               pCode = (char *) HeapAlloc( GetProcessHeap(), 0, nCodeLen + 1 );
+               CopyMemory( pCode, s, nCodeLen );
+               pCode[nCodeLen] = 0;
+            }
+         }
+         hb_vmRequestRestore();
+      }
+   }
+
+
+   /* Set code for handler existence checking */
+   s_pEventCode = pCode;
 
    /* Get control type via UI_GetType - use reenter for VM safety */
    pDyn = hb_dynsymFindName( "UI_GETTYPE" );
@@ -1566,6 +1613,10 @@ static void InsPopulateEvents( INSDATA * d )
    }
 
    #undef AE
+
+   /* Cleanup */
+   s_pEventCode = NULL;
+   if( pCode ) HeapFree( GetProcessHeap(), 0, pCode );
 }
 
 /* Update the combo selection to match the currently inspected control.

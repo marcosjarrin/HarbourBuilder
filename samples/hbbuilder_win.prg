@@ -871,6 +871,19 @@ static function SaveActiveFormCode()
 
 return nil
 
+// Return all editor code for inspector event handler checking
+function INS_GetAllCode()
+
+   local cAll := "", i
+
+   cAll := CodeEditorGetTabText( hCodeEditor, 1 )  // Project1.prg
+   for i := 1 to Len( aForms )
+      cAll += aForms[i][3]  // Form code from memory
+      cAll += CodeEditorGetTabText( hCodeEditor, i + 1 )  // Editor tab
+   next
+
+return cAll
+
 // Double-click on event in inspector: generate METHOD handler
 static function OnEventDblClick( hCtrl, cEvent )
 
