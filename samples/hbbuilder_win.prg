@@ -77,7 +77,7 @@ function Main()
    // C++Builder classic proportions scaled to current screen
    // Reference: 1024x768 -> Inspector 250px (24.4%), Bar 140px
    nBarH    := 160                           // title + menu + 2 toolbars(40+40) + palette
-   nInsW    := Int( nScreenW * 0.18 ) - 90    // ~18% of screen width, shifted left
+   nInsW    := Max( 270, Int( nScreenW * 0.18 ) )  // at least 270px to show property values
 
    // === Window 1: Main Bar (full screen width) ===
    cCompLabel := "Visual IDE for Harbour"
