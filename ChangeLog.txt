@@ -1,14 +1,26 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
-2026-04-07 (Session 13: New Form crash fix)
+2026-04-07 (Session 13: Form lifecycle & project restore fixes)
 
-  BUG FIX:
+  BUG FIXES:
   - Fixed crash when selecting File > New Form. MenuNewForm() was calling
     :Close() on the current design form, which triggers windowWillClose:
     → [NSApp stop:nil], killing the run loop. Changed to UI_FormHide()
     (orderOut:nil) which simply hides the window without stopping the app.
   - Added Hide() method to TForm class (INLINE UI_FormHide).
+  - Fixed closing a secondary form (Form2) killing the entire app.
+    Root cause: Activate() on Form2 created a nested [NSApp run] loop;
+    closing it called [NSApp stop:nil] which collapsed both loops.
+    Fix: prevent nested [NSApp run] via s_nRunLoopDepth counter;
+    windowWillClose: only stops the loop if the form owned a modal loop
+    (FRunning/FWasRunning guard).
+  - Fixed project load not restoring form colors (nClrPane). The color
+    was set via UI_SetProp before the NSWindow existed, so the visual
+    update was skipped. Fix: apply FBgColor when creating the window,
+    and pass it to the dot grid view at creation time.
+  - Fixed project load not restoring form positions (::Left, ::Top).
+    Added parsing of ::Left, ::Top, and ::Color in RestoreFormFromCode.
 
 2026-04-07 (Session 12c: Debugger UX polish)
 

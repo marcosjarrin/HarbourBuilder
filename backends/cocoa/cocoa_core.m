@@ -363,6 +363,7 @@ void EnsureNSApp( void )
    BOOL       FAppBar;
    int        FModalResult;
    BOOL       FRunning;
+   BOOL       FWasRunning;      /* was in modal [NSApp run] loop when close was requested */
    BOOL       FDesignMode;
    HBControl * FSelected[MAX_CHILDREN];
    int        FSelCount;
@@ -2006,6 +2007,8 @@ static HBPaletteTarget * s_palTarget = nil;
    if( FDesignMode ) {
       [FWindow setAppearance:[NSAppearance appearanceNamed:NSAppearanceNameDarkAqua]];
       [FWindow setBackgroundColor:[NSColor colorWithCalibratedWhite:0.18 alpha:1.0]];
+   } else if( FBgColor ) {
+      [FWindow setBackgroundColor:FBgColor];
    }
    if( FAppBar ) [FWindow setHasShadow:NO];
 
@@ -2030,6 +2033,7 @@ static HBPaletteTarget * s_palTarget = nil;
    if( FDesignMode )
    {
       HBDotGridView * grid = [[HBDotGridView alloc] initWithFrame:[FContentView bounds]];
+      if( FBgColor ) grid->bgColor = FBgColor;
       [grid setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
       [FContentView addSubview:grid];
    }
@@ -2088,10 +2092,17 @@ static HBPaletteTarget * s_palTarget = nil;
    [FWindow makeKeyAndOrderFront:nil];
    [NSApp activateIgnoringOtherApps:YES];
 
-   FRunning = YES;
+   static int s_nRunLoopDepth = 0;
    if( enterLoop ) {
-      [NSApp run];
-      FRunning = NO;
+      if( s_nRunLoopDepth > 0 ) {
+         /* Already inside [NSApp run] — don't nest, just show */
+      } else {
+         FRunning = YES;
+         s_nRunLoopDepth++;
+         [NSApp run];
+         s_nRunLoopDepth--;
+         FRunning = NO;
+      }
    }
 }
 
@@ -2102,6 +2113,7 @@ static HBPaletteTarget * s_palTarget = nil;
 
 - (void)close
 {
+   FWasRunning = FRunning;
    FRunning = NO;
    [FWindow close];
 }
@@ -2288,11 +2300,18 @@ static HBPaletteTarget * s_palTarget = nil;
 {
    if( FOnClose ) [self fireEvent:FOnClose];
    if( FOnHide ) [self fireEvent:FOnHide];
+
+   /* Only stop the run loop if this form had its own modal loop (Activate/Run) */
+   BOOL wasModal = FRunning || FWasRunning;
    FRunning = NO;
-   [NSApp stop:nil];
-   [NSApp postEvent:[NSEvent otherEventWithType:NSEventTypeApplicationDefined
-      location:NSZeroPoint modifierFlags:0 timestamp:0
-      windowNumber:0 context:nil subtype:0 data1:0 data2:0] atStart:YES];
+   FWasRunning = NO;
+
+   if( wasModal ) {
+      [NSApp stop:nil];
+      [NSApp postEvent:[NSEvent otherEventWithType:NSEventTypeApplicationDefined
+         location:NSZeroPoint modifierFlags:0 timestamp:0
+         windowNumber:0 context:nil subtype:0 data1:0 data2:0] atStart:YES];
+   }
 }
 
 - (BOOL)windowShouldClose:(NSWindow *)sender
