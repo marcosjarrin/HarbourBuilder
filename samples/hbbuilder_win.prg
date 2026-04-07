@@ -2706,16 +2706,6 @@ static function CheckHarbourInstall()
                "Harbour Not Found" )
    endif
 
-   if ! File( "c:\bcc77c\bin\bcc32.exe" )
-      MsgInfo( "C Compiler (BCC) not found!" + Chr(10) + ;
-               Chr(10) + ;
-               "HbBuilder requires Embarcadero BCC to link projects." + Chr(10) + ;
-               Chr(10) + ;
-               "Expected path: c:\bcc77c" + Chr(10) + ;
-               Chr(10) + ;
-               "Download from: www.embarcadero.com", ;
-               "Compiler Not Found" )
-   endif
 
 return nil
 
