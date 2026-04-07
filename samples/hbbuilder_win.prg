@@ -871,6 +871,91 @@ static function SaveActiveFormCode()
 
 return nil
 
+// Delete an event handler function from the active form's code
+function INS_DeleteHandler( cHandler )
+
+   local cCode, cNew, nStart, nEnd, nLen, cSearch
+   local cLine, nLineStart, nLineEnd
+   local nSepStart, nSepLineStart
+
+   if nActiveForm < 1 .or. nActiveForm > Len( aForms )
+      return nil
+   endif
+
+   // Get current code from the editor tab
+   cCode := CodeEditorGetTabText( hCodeEditor, nActiveForm + 1 )
+   cSearch := "static function " + cHandler
+
+   // Find the function (case-insensitive)
+   nStart := At( Lower( cSearch ), Lower( cCode ) )
+   if nStart == 0
+      cSearch := "function " + cHandler
+      nStart := At( Lower( cSearch ), Lower( cCode ) )
+   endif
+   if nStart == 0
+      return nil
+   endif
+
+   // Find end of function: look for "return" line
+   nLen := Len( cCode )
+   nEnd := nStart + Len( cSearch )
+
+   do while nEnd < nLen
+      if SubStr( cCode, nEnd, 1 ) == Chr(10)
+         nLineStart := nEnd + 1
+         nLineEnd := At( Chr(10), SubStr( cCode, nLineStart ) )
+         if nLineEnd > 0
+            cLine := AllTrim( SubStr( cCode, nLineStart, nLineEnd - 1 ) )
+         else
+            cLine := AllTrim( SubStr( cCode, nLineStart ) )
+         endif
+         cLine := Lower( cLine )
+         if cLine == "return nil" .or. cLine == "return" .or. Left( cLine, 7 ) == "return "
+            if nLineEnd > 0
+               nEnd := nLineStart + nLineEnd
+               do while nEnd < nLen .and. ;
+                  ( SubStr( cCode, nEnd, 1 ) == Chr(10) .or. ;
+                    SubStr( cCode, nEnd, 1 ) == Chr(13) )
+                  nEnd++
+               enddo
+            else
+               nEnd := nLen
+            endif
+            exit
+         endif
+      endif
+      nEnd++
+   enddo
+
+   // Remove separator comment (//----) before the function
+   if nStart > 3
+      nSepStart := nStart - 1
+      do while nSepStart > 1 .and. ;
+         ( SubStr( cCode, nSepStart, 1 ) == Chr(10) .or. ;
+           SubStr( cCode, nSepStart, 1 ) == Chr(13) )
+         nSepStart--
+      enddo
+      nSepLineStart := nSepStart
+      do while nSepLineStart > 1 .and. SubStr( cCode, nSepLineStart - 1, 1 ) != Chr(10)
+         nSepLineStart--
+      enddo
+      if Left( SubStr( cCode, nSepLineStart, nSepStart - nSepLineStart + 1 ), 3 ) == "//-"
+         nStart := nSepLineStart
+      endif
+   endif
+
+   // Remove the function block
+   cNew := Left( cCode, nStart - 1 ) + SubStr( cCode, nEnd )
+
+   // Update editor and form data
+   CodeEditorSetTabText( hCodeEditor, nActiveForm + 1, cNew )
+   aForms[ nActiveForm ][ 3 ] := cNew
+
+   // Re-sync to remove event binding
+   SyncDesignerToCode()
+
+return nil
+
 // Return all editor code for inspector event handler checking
 function INS_GetAllCode()
 

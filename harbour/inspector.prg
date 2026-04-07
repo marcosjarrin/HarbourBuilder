@@ -596,6 +596,55 @@ static LRESULT CALLBACK InsWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
             return 0;
          }
 
+         /* Right-click on Events list -> context menu to delete handler */
+         if( pnm->code == NM_RCLICK && pnm->idFrom == 103 )
+         {
+            NMITEMACTIVATE * pe = (NMITEMACTIVATE *) lParam;
+            if( d && pe->iItem >= 0 )
+            {
+               /* Get handler name from column 1 */
+               char szHandler[128] = {0};
+               LVITEMA evi = {0};
+               evi.iItem = pe->iItem;
+               evi.iSubItem = 1;
+               evi.pszText = szHandler;
+               evi.cchTextMax = 128;
+               SendMessageA( d->hEventList, LVM_GETITEMTEXTA, pe->iItem, (LPARAM) &evi );
+
+               /* Only show menu if handler exists */
+               if( szHandler[0] )
+               {
+                  HMENU hMenu = CreatePopupMenu();
+                  POINT pt;
+                  char szMenu[160];
+                  wsprintfA( szMenu, "Delete %s", szHandler );
+                  AppendMenuA( hMenu, MF_STRING, 1, szMenu );
+                  GetCursorPos( &pt );
+
+                  int cmd = (int) TrackPopupMenu( hMenu, TPM_RETURNCMD | TPM_NONOTIFY,
+                     pt.x, pt.y, 0, d->hWnd, NULL );
+                  DestroyMenu( hMenu );
+
+                  if( cmd == 1 )
+                  {
+                     /* Call Harbour function to delete the handler from code */
+                     PHB_DYNS pDel = hb_dynsymFindName( "INS_DELETEHANDLER" );
+                     if( pDel && hb_vmRequestReenter() )
+                     {
+                        hb_vmPushDynSym( pDel ); hb_vmPushNil();
+                        hb_vmPushString( szHandler, strlen(szHandler) );
+                        hb_vmDo( 1 );
+                        hb_vmRequestRestore();
+
+                        /* Refresh events to update display */
+                        InsPopulateEvents( d );
+                     }
+                  }
+               }
+            }
+            return 0;
+         }
+
          /* Tab change: Properties / Events */
          if( pnm->code == TCN_SELCHANGE && pnm->idFrom == 102 )
          {
