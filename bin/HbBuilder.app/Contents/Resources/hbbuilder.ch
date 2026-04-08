@@ -114,6 +114,15 @@
    => ;
       <oCtrl> := TMemo():New( <oParent>, <cVar>, <nLeft>, <nTop>, <nWidth>, <nHeight> )
 
+// Browse
+#xcommand @ <nTop>, <nLeft> BROWSE <oCtrl> ;
+      [ OF <oParent> ] ;
+      [ SIZE <nWidth>, <nHeight> ] ;
+      [ HEADERS <hdrs,...> ] ;
+   => ;
+      <oCtrl> := TBrowse():New( <oParent>, <nLeft>, <nTop>, <nWidth>, <nHeight> ) ;
+      [; <oCtrl>:SetupColumns( \{ <hdrs> \} ) ]
+
 // CheckBox
 #xcommand @ <nTop>, <nLeft> CHECKBOX <oCtrl> ;
       PROMPT <cText> ;

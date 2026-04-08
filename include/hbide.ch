@@ -167,6 +167,8 @@
 #define CT_GITTAG          128
 #define CT_GITBLAME        129
 #define CT_GITMERGE        130
+// Non-visual: Data containers
+#define CT_COMPARRAY       131
 
 // Alignment
 #define ALIGN_LEFT         0

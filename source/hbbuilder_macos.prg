@@ -579,6 +579,7 @@ static function RegenerateFormCode( cName, hForm )
    local nL, nT, nCW, nCH, cText
    local cDatas := "", cCreate := "", cEvents := "", cVal
    local cExistingCode, aEvents, j, cEvName, cEvSuffix, cHandlerName
+   local aHdrs, kk
 
    // Read existing code to find declared event handlers
    cExistingCode := ""
@@ -662,8 +663,26 @@ static function RegenerateFormCode( cName, hForm )
                cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
                   ' MEMO ::o' + cCtrlName + ' OF Self SIZE ' + ;
                   LTrim(Str(nCW)) + ", " + LTrim(Str(nCH)) + e
+            case nType == 79  // Browse
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' BROWSE ::o' + cCtrlName + ' OF Self SIZE ' + ;
+                  LTrim(Str(nCW)) + ", " + LTrim(Str(nCH))
+               cVal := UI_GetProp( hCtrl, "aColumns" )
+               if ! Empty( cVal )
+                  aHdrs := hb_ATokens( cVal, "|" )
+                  cCreate += ' HEADERS '
+                  for kk := 1 to Len( aHdrs )
+                     if kk > 1; cCreate += ', '; endif
+                     cCreate += '"' + AllTrim( aHdrs[kk] ) + '"'
+                  next
+               endif
+               cCreate += e
+               cVal := UI_GetProp( hCtrl, "cDataSource" )
+               if ! Empty( cVal )
+                  cCreate += '   ::o' + cCtrlName + ':cDataSource := "' + cVal + '"' + e
+               endif
             otherwise
-               if nType >= 38  // Non-visual component
+               if IsNonVisual( nType )
                   cCreate += '   COMPONENT ::o' + cCtrlName + ' TYPE ' + ;
                      ComponentTypeName( nType ) + ' OF Self  // ' + cCtrlClass + e
                   // Component-specific properties
@@ -678,6 +697,15 @@ static function RegenerateFormCode( cName, hForm )
                      endif
                      if UI_GetProp( hCtrl, "lActive" )
                         cCreate += '   ::o' + cCtrlName + ':Open()' + e
+                     endif
+                  elseif nType == 131  // CompArray
+                     cVal := UI_GetProp( hCtrl, "aHeaders" )
+                     if ! Empty( cVal )
+                        cCreate += '   ::o' + cCtrlName + ':aHeaders := "' + cVal + '"' + e
+                     endif
+                     cVal := UI_GetProp( hCtrl, "aData" )
+                     if ! Empty( cVal )
+                        cCreate += '   ::o' + cCtrlName + ':aData := "' + cVal + '"' + e
                      endif
                   endif
                else
@@ -771,7 +799,7 @@ static function RestoreFormFromCode( hForm, cCode )
 
    local aLines, cLine, cTrim, i, j, nType, nCount
    local nT, nL, nW, nH, cText, cName, hCtrl
-   local nPos, nPos2, cTitle, cVal
+   local nPos, nPos2, cTitle, cVal, cPropName
 
    if Empty( cCode ) .or. hForm == 0
       return nil
@@ -832,7 +860,7 @@ static function RestoreFormFromCode( hForm, cCode )
                if nType == 0 .and. Left( cVal, 3 ) == "CT_"
                   nType := ResolveComponentType( cVal )
                endif
-               if nType >= 38
+               if IsNonVisual( nType )
                   hCtrl := UI_DropNonVisual( hForm, nType, cName )
                endif
             endif
@@ -886,6 +914,43 @@ static function RestoreFormFromCode( hForm, cCode )
                      hCtrl := UI_GetChild( hForm, j )
                      if hCtrl != 0 .and. UI_GetProp( hCtrl, "cName" ) == cName
                         UI_SetProp( hCtrl, "cRDD", cText )
+                        exit
+                     endif
+                  next
+               endif
+            endif
+         endif
+         loop
+      endif
+
+      // Parse component properties: aHeaders, aData, cDataSource
+      if Left( cTrim, 3 ) == "::o" .and. ;
+         ( ":aHeaders" $ cTrim .or. ":aData" $ cTrim .or. ":cDataSource" $ cTrim ) .and. ;
+         ":=" $ cTrim
+         if ":aHeaders" $ cTrim
+            cPropName := "aHeaders"
+            nPos := At( ":aHeaders", cTrim )
+         elseif ":cDataSource" $ cTrim
+            cPropName := "cDataSource"
+            nPos := At( ":cDataSource", cTrim )
+         else
+            cPropName := "aData"
+            nPos := At( ":aData", cTrim )
+         endif
+         if nPos > 0
+            cName := SubStr( cTrim, 4, nPos - 4 )
+            if Right( cName, 1 ) == ":"; cName := Left( cName, Len(cName) - 1 ); endif
+            nPos2 := At( '"', cTrim )
+            if nPos2 > 0
+               cText := SubStr( cTrim, nPos2 + 1 )
+               nPos2 := At( '"', cText )
+               if nPos2 > 0
+                  cText := Left( cText, nPos2 - 1 )
+                  nCount := UI_GetChildCount( hForm )
+                  for j := 1 to nCount
+                     hCtrl := UI_GetChild( hForm, j )
+                     if hCtrl != 0 .and. UI_GetProp( hCtrl, "cName" ) == cName
+                        UI_SetProp( hCtrl, cPropName, cText )
                         exit
                      endif
                   next
@@ -982,6 +1047,28 @@ static function RestoreFormFromCode( hForm, cCode )
             hCtrl := UI_RadioButtonNew( hForm, cText, nL, nT, nW, nH )
          case " MEMO " $ Upper( cTrim )
             hCtrl := UI_MemoNew( hForm, "", nL, nT, nW, nH )
+         case " BROWSE " $ Upper( cTrim )
+            hCtrl := UI_BrowseNew( hForm, nL, nT, nW, nH )
+            // Extract HEADERS "col1", "col2", "col3"
+            nPos := At( "HEADERS ", Upper( cTrim ) )
+            if nPos > 0
+               cText := SubStr( cTrim, nPos + 8 )
+               // Parse comma-separated quoted strings into "|"-separated
+               cVal := ""
+               do while ! Empty( cText )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  cText := SubStr( cText, nPos2 + 1 )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  if ! Empty( cVal ); cVal += "|"; endif
+                  cVal += Left( cText, nPos2 - 1 )
+                  cText := SubStr( cText, nPos2 + 1 )
+               enddo
+               if hCtrl != 0 .and. ! Empty( cVal )
+                  UI_SetProp( hCtrl, "aColumns", cVal )
+               endif
+            endif
       endcase
 
       // Set the control name
@@ -1761,7 +1848,7 @@ static function TBSave()
    SaveActiveFormCode()
 
    if Empty( cCurrentFile )
-      cFile := MAC_SaveFileDialog( "Save HbBuilder Project", "Project1.hbp", "hbp" )
+      cFile := MAC_SaveFileDialog( "Save HbBuilder Project", "Project1", "hbp" )
       if Empty( cFile )
          return nil
       endif
@@ -2789,6 +2876,16 @@ static function ResPath( cFile )
 return "../resources/" + cFile
 
 // Map component type number to CT_* define name for code generation
+static function IsNonVisual( nType )
+   // Visual controls that have high CT_* numbers (>= 38)
+   // CT_BROWSE=79, CT_DBGRID=80, CT_DBNAVIGATOR=81, CT_DBTEXT=82,
+   // CT_DBEDIT=83, CT_DBCOMBOBOX=84, CT_DBCHECKBOX=85, CT_DBIMAGE=86,
+   // CT_WEBVIEW=62
+   if nType == 62 .or. ( nType >= 79 .and. nType <= 86 )
+      return .F.
+   endif
+return nType >= 38
+
 static function ComponentTypeName( nType )
    do case
       case nType == 38;  return "CT_TIMER"
@@ -2881,6 +2978,7 @@ static function ComponentTypeName( nType )
       case nType == 128; return "CT_GITTAG"
       case nType == 129; return "CT_GITBLAME"
       case nType == 130; return "CT_GITMERGE"
+      case nType == 131; return "CT_COMPARRAY"
    endcase
 return LTrim(Str(nType))
 
@@ -2926,7 +3024,8 @@ static function ResolveComponentType( cName )
       { "CT_GITBRANCH", 123 }, { "CT_GITLOG", 124 }, ;
       { "CT_GITDIFF", 125 }, { "CT_GITREMOTE", 126 }, ;
       { "CT_GITSTASH", 127 }, { "CT_GITTAG", 128 }, ;
-      { "CT_GITBLAME", 129 }, { "CT_GITMERGE", 130 } }
+      { "CT_GITBLAME", 129 }, { "CT_GITMERGE", 130 }, ;
+      { "CT_COMPARRAY", 131 } }
    for i := 1 to Len( aMap )
       if Upper( cName ) == aMap[i][1]
          return aMap[i][2]

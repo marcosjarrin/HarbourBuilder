@@ -152,6 +152,9 @@ class TComponentPalette;
 #define CT_PRINTDIALOG 107
 #define CT_REPORTVIEWER 108
 #define CT_BARCODEPRINTER 109
+/* Data components */
+#define CT_COMPARRAY  131
+
 /* Threading components */
 #define CT_THREAD     63
 #define CT_MUTEX      64

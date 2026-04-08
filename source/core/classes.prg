@@ -382,6 +382,212 @@ METHOD New( oParent, nLeft, nTop, nWidth, nHeight ) CLASS TListBox
 return Self
 
 //----------------------------------------------------------------------------//
+// TBrwColumn - Column descriptor for TBrowse
+//----------------------------------------------------------------------------//
+
+CLASS TBrwColumn
+
+   DATA cTitle    INIT ""
+   DATA nWidth    INIT 100
+   DATA nAlign    INIT 0           // 0=Left, 1=Center, 2=Right
+   DATA cField    INIT ""          // Field name for DBF binding
+   DATA bBlock    INIT nil         // Code block for data retrieval
+
+   METHOD New( cTitle, nWidth, nAlign ) CONSTRUCTOR
+
+ENDCLASS
+
+METHOD New( cTitle, nWidth, nAlign ) CLASS TBrwColumn
+
+   if cTitle != nil;  ::cTitle := cTitle;  endif
+   if nWidth != nil;  ::nWidth := nWidth;  endif
+   if nAlign != nil;  ::nAlign := nAlign;  endif
+
+return Self
+
+//----------------------------------------------------------------------------//
+// TBrowse - Data grid control
+//----------------------------------------------------------------------------//
+
+CLASS TBrowse INHERIT TControl
+
+   DATA aColumns    INIT {}         // Array of TBrwColumn objects
+   DATA cDataSource INIT ""         // Name of data component (e.g. "CompArray1")
+
+   METHOD New( oParent, nLeft, nTop, nWidth, nHeight )
+   METHOD SetArray( aData, aHeaders )
+   METHOD SetupColumns( cColumnsDef )
+   METHOD AddColumn( cTitle, nWidth, nAlign )
+   METHOD Refresh()
+   METHOD LoadFromDataSource( oForm )
+
+   ACCESS aArray INLINE nil
+   ASSIGN aArray( x ) INLINE ::SetArray( x )
+
+ENDCLASS
+
+METHOD New( oParent, nLeft, nTop, nWidth, nHeight ) CLASS TBrowse
+
+   if nWidth == nil;  nWidth := 400; endif
+   if nHeight == nil; nHeight := 200; endif
+
+   ::oParent := oParent
+   ::hCpp := UI_BrowseNew( oParent:hCpp, nLeft, nTop, nWidth, nHeight )
+
+return Self
+
+METHOD SetArray( aData, aHeaders ) CLASS TBrowse
+
+   local i, j, nCols, xVal
+
+   if aData == nil .or. Len( aData ) == 0
+      return Self
+   endif
+
+   // Determine number of columns from first row
+   if ValType( aData[1] ) == "A"
+      nCols := Len( aData[1] )
+   else
+      nCols := 1
+   endif
+
+   // Create columns from headers if none defined yet
+   if Len( ::aColumns ) == 0
+      if aHeaders != nil .and. Len( aHeaders ) > 0
+         for i := 1 to Len( aHeaders )
+            ::AddColumn( aHeaders[i], 100 )
+         next
+      else
+         for i := 1 to nCols
+            ::AddColumn( "Col " + LTrim( Str( i ) ), 100 )
+         next
+      endif
+   endif
+
+   // Fill cells
+   for i := 1 to Len( aData )
+      if ValType( aData[i] ) == "A"
+         for j := 1 to Min( nCols, Len( aData[i] ) )
+            xVal := aData[i][j]
+            UI_BrowseSetCell( ::hCpp, i - 1, j - 1, hb_ValToStr( xVal ) )
+         next
+      else
+         UI_BrowseSetCell( ::hCpp, i - 1, 0, hb_ValToStr( aData[i] ) )
+      endif
+   next
+
+   ::Refresh()
+
+return Self
+
+METHOD AddColumn( cTitle, nWidth, nAlign ) CLASS TBrowse
+
+   local oCol
+
+   if nWidth == nil; nWidth := 100; endif
+   oCol := TBrwColumn():New( cTitle, nWidth, nAlign )
+   AAdd( ::aColumns, oCol )
+   UI_BrowseAddCol( ::hCpp, cTitle, "", nWidth, iif( nAlign != nil, nAlign, 0 ) )
+
+return oCol
+
+METHOD SetupColumns( aColumnsDef ) CLASS TBrowse
+
+   local i
+
+   if aColumnsDef == nil; return Self; endif
+
+   if ValType( aColumnsDef ) == "A"
+      for i := 1 to Len( aColumnsDef )
+         ::AddColumn( aColumnsDef[i] )
+      next
+   elseif ValType( aColumnsDef ) == "C" .and. ! Empty( aColumnsDef )
+      for i := 1 to Len( hb_ATokens( aColumnsDef, "|" ) )
+         ::AddColumn( hb_ATokens( aColumnsDef, "|" )[i] )
+      next
+   endif
+
+return Self
+
+METHOD Refresh() CLASS TBrowse
+
+   UI_BrowseRefresh( ::hCpp )
+
+return Self
+
+METHOD LoadFromDataSource( oForm ) CLASS TBrowse
+
+   local cDS, oComp
+
+   cDS := ::cDataSource
+   if Empty( cDS )
+      return Self
+   endif
+
+   // Find the component by name in the form's instance variables
+   if __objHasMsg( oForm, "o" + cDS )
+      oComp := __objSendMsg( oForm, "o" + cDS )
+      if oComp != nil .and. __objHasMethod( oComp, "GETARRAY" )
+         ::SetArray( oComp:GetArray(), oComp:GetHeaders() )
+      endif
+   endif
+
+return Self
+
+//----------------------------------------------------------------------------//
+// TCompArray - Non-visual array data container
+// Design-time: aHeaders = "Name|Age|City", aData = "John|45|NYC;Mary|32|LA"
+// Runtime: provides parsed arrays for TBrowse binding
+//----------------------------------------------------------------------------//
+
+CLASS TCompArray
+
+   DATA aHeaders    INIT ""         // Design-time string: "Name|Age|City"
+   DATA aData       INIT ""         // Design-time string: "John|45|NYC;Mary|32|LA"
+
+   METHOD New() CONSTRUCTOR
+   METHOD Parse()
+   METHOD GetHeaders()
+   METHOD GetArray()
+
+ENDCLASS
+
+METHOD New() CLASS TCompArray
+return Self
+
+METHOD Parse() CLASS TCompArray
+return Self
+
+METHOD GetHeaders() CLASS TCompArray
+
+   if ValType( ::aHeaders ) == "C" .and. ! Empty( ::aHeaders )
+      return hb_ATokens( ::aHeaders, "|" )
+   elseif ValType( ::aHeaders ) == "A"
+      return ::aHeaders
+   endif
+
+return {}
+
+METHOD GetArray() CLASS TCompArray
+
+   local aResult := {}, aRows, i
+
+   if ValType( ::aData ) == "C" .and. ! Empty( ::aData )
+      aRows := hb_ATokens( ::aData, ";" )
+      for i := 1 to Len( aRows )
+         if ! Empty( aRows[i] )
+            AAdd( aResult, hb_ATokens( aRows[i], "|" ) )
+         endif
+      next
+   elseif ValType( ::aData ) == "A"
+      return ::aData
+   endif
+
+return aResult
+
+return ::aArray
+
+//----------------------------------------------------------------------------//
 // TComponentPalette
 //----------------------------------------------------------------------------//
 
@@ -2008,5 +2214,6 @@ function HB_CreateComponent( nType )
       case nType == CT_SQLITE;     return TSQLite():New()
       case nType == CT_FIREBIRD;   return TFirebird():New()
       case nType == CT_SQLSERVER;  return TSQLServer():New()
+      case nType == CT_COMPARRAY;  return TCompArray():New()
    endcase
 return nil

@@ -1,6 +1,46 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-08 (Session 31: macOS — TBrowse, TCompArray, TBrwColumn, array editor)
+
+  TBROWSE CONTROL:
+  - TBrowse is now a visual control (CT_BROWSE=79), no longer treated as
+    non-visual — IsNonVisual() excludes Browse/DbGrid/WebView types
+  - aColumns property editable from inspector via "..." array editor dialog
+    Columns appear immediately on the browse in the designer
+  - Columns persist on save/load via HEADERS clause:
+    @ 50, 20 BROWSE ::oBrowse1 OF Self SIZE 400, 200 HEADERS "Name", "Age", "City"
+  - TBrwColumn class: cTitle, nWidth, nAlign, cField, bBlock
+  - At runtime aColumns contains TBrwColumn objects created by SetupColumns()
+  - cDataSource property to bind browse to TCompArray/TDbfTable
+  - FClassName set to "TBrowse" (was showing "TControl" in inspector)
+  - Fixed column creation timing: FHeaders read at createView if set before
+    view exists (fixes columns missing after project load)
+
+  TCOMPARRAY COMPONENT:
+  - New non-visual component (CT_COMPARRAY=131) for design-time array data
+  - aHeaders and aData properties with "..." array editor in inspector
+  - GetHeaders()/GetArray() parse "|"/";"-separated strings or native arrays
+  - Connects to TBrowse via cDataSource + LoadFromDataSource()
+
+  INSPECTOR:
+  - New type 'A' (array) — shows "(N items)" with "..." button that opens
+    multi-line text editor (dark theme, monospaced font, OK/Cancel)
+  - Fixed type 'A' not loaded in inspector (szValue was uninitialized garbage)
+  - Fixed generic dropdown (type 'D') disabled items and selection
+
+  EDITOR:
+  - Cross-file autocomplete: searches all open tabs for CLASS definitions
+  - Methods show () in dropdown (Show(), Close() vs Height, Width)
+  - Added ShowModal() to TForm members
+
+  BUGFIX:
+  - ErrorBlock installed in CreateForm() instead of Run()
+  - build_mac.sh: fixed Scintilla re-download on every build
+  - TBNew() prompts to save before creating new project
+  - Save dialog: "Project1" instead of "Project1.hbp" (prevented .hbp.hbp)
+  - Non-visual components show correct class name in inspector
+
 2026-04-08 (Session 30: macOS — TDbfTable cRDD property + inspector dropdown fix)
 
   DBFTABLE COMPONENT:

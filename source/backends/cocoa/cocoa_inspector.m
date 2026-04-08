@@ -237,6 +237,17 @@ static HBFontPickerTarget * s_fontTarget = nil;
          return [NSString stringWithFormat:@"%d", idx];
       }
 
+      /* Array: show element count */
+      if( d->rows[nReal].cType == 'A' )
+      {
+         const char * raw = d->rows[nReal].szValue;
+         if( !raw || !raw[0] ) return @"(0 items)";
+         int count = 1;
+         for( const char * p = raw; *p; p++ )
+            if( *p == '|' ) count++;
+         return [NSString stringWithFormat:@"(%d items)", count];
+      }
+
       return [NSString stringWithUTF8String:d->rows[nReal].szValue];
    }
 }
@@ -361,6 +372,12 @@ static HBFontPickerTarget * s_fontTarget = nil;
       [self openFilePickerForRow:nReal];
       return NO;
    }
+   /* For array properties, open array editor */
+   if( d->rows[nReal].cType == 'A' && [[col identifier] isEqualToString:@"value"] )
+   {
+      [self openArrayEditorForRow:nReal];
+      return NO;
+   }
    return YES;
 }
 
@@ -478,6 +495,116 @@ static HBFontPickerTarget * s_fontTarget = nil;
          }
       }
    }];
+}
+
+- (void)openArrayEditorForRow:(int)nReal
+{
+   /* Convert "|"-separated value to newline-separated text */
+   NSString * curVal = [NSString stringWithUTF8String:d->rows[nReal].szValue];
+   NSString * text = [curVal stringByReplacingOccurrencesOfString:@"|" withString:@"\n"];
+
+   /* Create modal dialog with NSTextView */
+   NSWindow * sheet = [[NSWindow alloc]
+      initWithContentRect:NSMakeRect(0, 0, 350, 300)
+      styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
+      backing:NSBackingStoreBuffered defer:NO];
+   [sheet setTitle:[NSString stringWithFormat:@"Edit %s (one item per line)",
+      d->rows[nReal].szName]];
+
+   NSScrollView * scrollView = [[NSScrollView alloc]
+      initWithFrame:NSMakeRect(10, 50, 330, 240)];
+   [scrollView setHasVerticalScroller:YES];
+   [scrollView setBorderType:NSBezelBorder];
+
+   NSTextView * textView = [[NSTextView alloc]
+      initWithFrame:NSMakeRect(0, 0, 310, 220)];
+   [textView setMinSize:NSMakeSize(310, 220)];
+   [textView setMaxSize:NSMakeSize(FLT_MAX, FLT_MAX)];
+   [textView setVerticallyResizable:YES];
+   [[textView textContainer] setWidthTracksTextView:YES];
+   [textView setFont:[NSFont monospacedSystemFontOfSize:12 weight:NSFontWeightRegular]];
+   [textView setString:text];
+   [textView setEditable:YES];
+
+   /* Dark appearance */
+   [textView setBackgroundColor:[NSColor colorWithCalibratedWhite:0.15 alpha:1.0]];
+   [textView setTextColor:[NSColor colorWithCalibratedWhite:0.9 alpha:1.0]];
+   [textView setInsertionPointColor:[NSColor whiteColor]];
+
+   [scrollView setDocumentView:textView];
+   [[sheet contentView] addSubview:scrollView];
+
+   /* OK button */
+   NSButton * okBtn = [[NSButton alloc]
+      initWithFrame:NSMakeRect(260, 10, 80, 30)];
+   [okBtn setTitle:@"OK"];
+   [okBtn setBezelStyle:NSBezelStyleRounded];
+   [okBtn setKeyEquivalent:@"\r"];
+   [okBtn setTarget:NSApp];
+   [okBtn setAction:@selector(stopModal)];
+   [okBtn setTag:1];
+   [[sheet contentView] addSubview:okBtn];
+
+   /* Cancel button */
+   NSButton * cancelBtn = [[NSButton alloc]
+      initWithFrame:NSMakeRect(170, 10, 80, 30)];
+   [cancelBtn setTitle:@"Cancel"];
+   [cancelBtn setBezelStyle:NSBezelStyleRounded];
+   [cancelBtn setKeyEquivalent:@"\033"];
+   [cancelBtn setTarget:NSApp];
+   [cancelBtn setAction:@selector(abortModal)];
+   [cancelBtn setTag:0];
+   [[sheet contentView] addSubview:cancelBtn];
+
+   [sheet center];
+   [sheet makeKeyAndOrderFront:nil];
+   NSModalResponse response = [NSApp runModalForWindow:sheet];
+
+   if( response == NSModalResponseAbort )
+   {
+      [sheet orderOut:nil];
+      return;
+   }
+   NSString * newText = [[textView string] stringByTrimmingCharactersInSet:
+      [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+   /* Convert newlines back to "|" separator */
+   NSArray * lines = [newText componentsSeparatedByCharactersInSet:
+      [NSCharacterSet newlineCharacterSet]];
+   NSMutableArray * nonEmpty = [NSMutableArray array];
+   for( NSString * line in lines )
+   {
+      NSString * trimmed = [line stringByTrimmingCharactersInSet:
+         [NSCharacterSet whitespaceCharacterSet]];
+      if( [trimmed length] > 0 )
+         [nonEmpty addObject:trimmed];
+   }
+   NSString * result = [nonEmpty componentsJoinedByString:@"|"];
+   const char * szResult = [result UTF8String];
+
+   strncpy( d->rows[nReal].szValue, szResult, sizeof(d->rows[nReal].szValue) - 1 );
+   d->rows[nReal].szValue[sizeof(d->rows[nReal].szValue) - 1] = '\0';
+
+   /* Push to control */
+   if( d->hCtrl )
+   {
+      hb_vmPushDynSym( hb_dynsymFind( "UI_SETPROP" ) );
+      hb_vmPushNil();
+      hb_vmPushNumInt( (HB_MAXINT) d->hCtrl );
+      hb_vmPushString( d->rows[nReal].szName, strlen(d->rows[nReal].szName) );
+      hb_vmPushString( szResult, strlen(szResult) );
+      hb_vmDo( 3 );
+   }
+
+   [d->tableView reloadData];
+   if( d->pOnPropChanged )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( d->pOnPropChanged );
+      hb_vmSend( 0 );
+   }
+
+   [sheet orderOut:nil];
 }
 
 - (void)logicalMenuDummy:(id)sender { /* no-op, enables menu items */ }
@@ -641,7 +768,7 @@ static int s_dropdownChoice = -1;
       /* Show "..." button for color and font properties, hide for others */
       if( [[col identifier] isEqualToString:@"button"] )
       {
-         if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'P' )
+         if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'P' || d->rows[nReal].cType == 'A' )
          {
             [cell setTitle:@"..."];
             [cell setTransparent:NO];
@@ -720,6 +847,8 @@ static int s_dropdownChoice = -1;
             [self openFontPickerForRow:nReal];
          else if( d->rows[nReal].cType == 'P' )
             [self openFilePickerForRow:nReal];
+         else if( d->rows[nReal].cType == 'A' )
+            [self openArrayEditorForRow:nReal];
       }
       /* Click on value column for dropdown properties */
       if( [[clickedCol identifier] isEqualToString:@"value"] && d->rows[nReal].cType == 'D' )
@@ -1048,6 +1177,10 @@ static void InsBuildRows( INSDATA * d, PHB_ITEM pArray )
             strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
          else if( d->rows[d->nRows].cType == 'P' )
             strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
+         else if( d->rows[d->nRows].cType == 'A' )
+            strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
+         else
+            d->rows[d->nRows].szValue[0] = 0;
 
          d->nRows++;
       }
