@@ -1799,6 +1799,9 @@ static void HBForm_CreateAllChildren( HBForm * form )
    }
 }
 
+/* Forward declaration: runtime form click handler */
+static gboolean on_form_click( GtkWidget * widget, GdkEventButton * event, gpointer data );
+
 static void HBForm_Run( HBForm * form )
 {
    EnsureGTK();
@@ -1938,6 +1941,12 @@ static void HBForm_Run( HBForm * form )
       form->FOverlay = da;
       gtk_widget_show( da );
    }
+   else
+   {
+      /* Runtime: wire form-level click event on the window */
+      gtk_widget_add_events( form->FWindow, GDK_BUTTON_PRESS_MASK );
+      g_signal_connect( form->FWindow, "button-press-event", G_CALLBACK(on_form_click), form );
+   }
 
    gtk_widget_show( overlay );
 
@@ -1960,6 +1969,27 @@ static void HBForm_Run( HBForm * form )
 
    form->FRunning = 1;
    gtk_main();
+}
+
+/* Runtime form click: fire base.FOnClick */
+static gboolean on_form_click( GtkWidget * widget, GdkEventButton * event, gpointer data )
+{
+   static guint32 lastClickTime = 0;
+   static guint32 lastDblTime = 0;
+   HBForm * form = (HBForm *)data;
+   if( event->button != 1 ) return FALSE;
+
+   if( event->type == GDK_BUTTON_PRESS && event->time != lastClickTime )
+   {
+      lastClickTime = event->time;
+      HBControl_FireEvent( &form->base, form->base.FOnClick );
+   }
+   else if( event->type == GDK_2BUTTON_PRESS && event->time != lastDblTime )
+   {
+      lastDblTime = event->time;
+      HBControl_FireEvent( &form->base, form->FOnDblClick );
+   }
+   return FALSE;
 }
 
 /* Show() - create and show without entering gtk_main */
@@ -2019,6 +2049,12 @@ static void HBForm_Show( HBForm * form )
       gtk_widget_set_app_paintable( da, TRUE );
       form->FOverlay = da;
       gtk_widget_show( da );
+   }
+   else
+   {
+      /* Runtime: wire form-level click event on the window */
+      gtk_widget_add_events( form->FWindow, GDK_BUTTON_PRESS_MASK );
+      g_signal_connect( form->FWindow, "button-press-event", G_CALLBACK(on_form_click), form );
    }
 
    if( form->FCenter )
@@ -2088,6 +2124,10 @@ static int HBForm_ShowModal( HBForm * form )
    gtk_widget_show( form->FFixed );
 
    HBForm_CreateAllChildren( form );
+
+   /* Runtime: wire form-level click event */
+   gtk_widget_add_events( form->FWindow, GDK_BUTTON_PRESS_MASK );
+   g_signal_connect( form->FWindow, "button-press-event", G_CALLBACK(on_form_click), form );
 
    if( form->FCenter )
       gtk_window_set_position( GTK_WINDOW(form->FWindow), GTK_WIN_POS_CENTER );
@@ -3508,6 +3548,20 @@ HB_FUNC( UI_MSGBOX )
    gtk_window_set_title( GTK_WINDOW(dialog), hb_parc(2) ? hb_parc(2) : "" );
    gtk_dialog_run( GTK_DIALOG(dialog) );
    gtk_widget_destroy( dialog );
+}
+
+/* UI_MsgYesNo( cText [, cTitle] ) --> lYes  (.T. if Yes clicked) */
+HB_FUNC( UI_MSGYESNO )
+{
+   EnsureGTK();
+   GtkWidget * dialog = gtk_message_dialog_new( NULL,
+      GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_YES_NO,
+      "%s", hb_parc(1) ? hb_parc(1) : "" );
+   gtk_window_set_title( GTK_WINDOW(dialog),
+      hb_parc(2) ? hb_parc(2) : "Confirm" );
+   gint result = gtk_dialog_run( GTK_DIALOG(dialog) );
+   gtk_widget_destroy( dialog );
+   hb_retl( result == GTK_RESPONSE_YES );
 }
 
 /* ======================================================================

@@ -59,7 +59,7 @@ NEED_LINK=0
 # [1/4] Harbour → C (only if .prg changed)
 if needs_rebuild "${SRC}.prg" "${SRC}.c" || \
    needs_rebuild "$PROJDIR/harbour/classes.prg" "${SRC}.c" || \
-   needs_rebuild "$PROJDIR/harbour/hbbuilder.ch" "${SRC}.c"; then
+   needs_rebuild "$PROJDIR/include/hbbuilder.ch" "${SRC}.c"; then
    echo "[1/4] Compiling ${SRC}.prg..."
    "$HBBIN/harbour" ${SRC}.prg -n -w -q \
       -I"$HBINC" \
@@ -160,7 +160,7 @@ cp "$PROJDIR/resources/harbour_logo.png" "$APP/Contents/Resources/" 2>/dev/null
 cp -R "$PROJDIR/resources/menu_icons" "$APP/Contents/Resources/" 2>/dev/null
 # Copy Harbour source files needed for building user projects
 cp "$PROJDIR/harbour/classes.prg" "$APP/Contents/Resources/" 2>/dev/null
-cp "$PROJDIR/harbour/hbbuilder.ch" "$APP/Contents/Resources/" 2>/dev/null
+cp "$PROJDIR/include/hbbuilder.ch" "$APP/Contents/Resources/" 2>/dev/null
 cp "$PROJDIR/harbour/dbgclient.prg" "$APP/Contents/Resources/" 2>/dev/null
 cp "$PROJDIR/harbour/dbghook.c" "$APP/Contents/Resources/" 2>/dev/null
 # Copy backends for user project compilation

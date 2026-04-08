@@ -16,7 +16,7 @@
 // │  Messages / Compiler output (future)                        │
 // └─────────────────────────────────────────────────────────────┘ 768
 
-#include "../harbour/hbbuilder.ch"
+#include "../include/hbbuilder.ch"
 
 static oIDE          // Main IDE bar (top strip)
 static oDesignForm   // Design form (active, floats on top of editor)
@@ -1700,7 +1700,7 @@ static function TBRun()
       MAC_ShellExec( "cp " + HB_DirBase() + "../Resources/hbbuilder.ch " + cBuildDir + "/" )
    else
       MAC_ShellExec( "cp " + cProjDir + "/harbour/classes.prg " + cBuildDir + "/" )
-      MAC_ShellExec( "cp " + cProjDir + "/harbour/hbbuilder.ch " + cBuildDir + "/" )
+      MAC_ShellExec( "cp " + cProjDir + "/include/hbbuilder.ch " + cBuildDir + "/" )
    endif
 
    // Step 2: Assemble main.prg
@@ -1923,7 +1923,7 @@ static function TBDebugRun()
       MAC_ShellExec( "cp " + cResDir + "/dbgclient.prg " + cBuildDir + "/" )
    else
       MAC_ShellExec( "cp " + cProjDir + "/harbour/classes.prg " + cBuildDir + "/" )
-      MAC_ShellExec( "cp " + cProjDir + "/harbour/hbbuilder.ch " + cBuildDir + "/" )
+      MAC_ShellExec( "cp " + cProjDir + "/include/hbbuilder.ch " + cBuildDir + "/" )
       MAC_ShellExec( "cp " + cProjDir + "/harbour/dbgclient.prg " + cBuildDir + "/" )
    endif
 

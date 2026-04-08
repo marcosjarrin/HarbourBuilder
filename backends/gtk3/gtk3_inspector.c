@@ -486,6 +486,77 @@ static void on_row_activated( GtkTreeView * treeView, GtkTreePath * path,
    }
 }
 
+/* Right-click context menu on Events tab — delete handler */
+static void on_event_delete_handler( GtkMenuItem * menuItem, gpointer data )
+{
+   INSDATA * d = (INSDATA *)data;
+   const char * szHandler = g_object_get_data( G_OBJECT(menuItem), "handler" );
+   if( !szHandler || !szHandler[0] ) return;
+
+   PHB_DYNS pDel = hb_dynsymFindName( "INS_DELETEHANDLER" );
+   if( pDel && hb_vmRequestReenter() )
+   {
+      hb_vmPushDynSym( pDel ); hb_vmPushNil();
+      hb_vmPushString( szHandler, strlen(szHandler) );
+      hb_vmDo( 1 );
+      hb_vmRequestRestore();
+
+      /* Refresh inspector via Harbour callback */
+      PHB_DYNS pRefresh = hb_dynsymFindName( "INSPECTORREFRESH" );
+      if( pRefresh && hb_vmRequestReenter() )
+      {
+         hb_vmPushDynSym( pRefresh ); hb_vmPushNil();
+         hb_vmPushNumInt( d->hCtrl );
+         hb_vmDo( 1 );
+         hb_vmRequestRestore();
+      }
+   }
+}
+
+static gboolean on_tree_button_press( GtkWidget * widget, GdkEventButton * event,
+   gpointer data )
+{
+   INSDATA * d = (INSDATA *)data;
+
+   /* Only handle right-click on Events tab */
+   if( event->button != 3 || d->nTab != 1 )
+      return FALSE;
+
+   GtkTreePath * path = NULL;
+   if( !gtk_tree_view_get_path_at_pos( GTK_TREE_VIEW(widget),
+      (gint)event->x, (gint)event->y, &path, NULL, NULL, NULL ) )
+      return FALSE;
+
+   GtkTreeIter iter;
+   if( !gtk_tree_model_get_iter( GTK_TREE_MODEL(d->store), &iter, path ) )
+   {
+      gtk_tree_path_free( path );
+      return FALSE;
+   }
+   gtk_tree_path_free( path );
+
+   int nReal;
+   gtk_tree_model_get( GTK_TREE_MODEL(d->store), &iter, COL_REAL_IDX, &nReal, -1 );
+
+   if( nReal < 0 || nReal >= d->nRows ) return FALSE;
+   if( d->rows[nReal].bIsCat ) return FALSE;
+   if( d->rows[nReal].szValue[0] == 0 ) return FALSE; /* No handler assigned */
+
+   /* Build context menu */
+   GtkWidget * menu = gtk_menu_new();
+   char title[320];
+   snprintf( title, sizeof(title), "Delete %s", d->rows[nReal].szValue );
+   GtkWidget * item = gtk_menu_item_new_with_label( title );
+   g_object_set_data_full( G_OBJECT(item), "handler",
+      g_strdup( d->rows[nReal].szValue ), g_free );
+   g_signal_connect( item, "activate", G_CALLBACK(on_event_delete_handler), d );
+   gtk_menu_shell_append( GTK_MENU_SHELL(menu), item );
+   gtk_widget_show_all( menu );
+   gtk_menu_popup_at_pointer( GTK_MENU(menu), (GdkEvent *)event );
+
+   return TRUE;
+}
+
 /* Combo box selection changed */
 static void on_combo_sel_changed( GtkComboBox * widget, gpointer data )
 {
@@ -603,6 +674,9 @@ HB_FUNC( INS_CREATE )
 
    /* Double-click for category collapse and picker dialogs */
    g_signal_connect( d->treeView, "row-activated", G_CALLBACK(on_row_activated), d );
+
+   /* Right-click context menu for event handler deletion */
+   g_signal_connect( d->treeView, "button-press-event", G_CALLBACK(on_tree_button_press), d );
 
    /* Scroll view */
    GtkWidget * scroll = gtk_scrolled_window_new( NULL, NULL );

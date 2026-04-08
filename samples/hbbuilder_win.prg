@@ -16,7 +16,7 @@
 // |  Messages / Compiler output (future)                         |
 // +--------------------------------------------------------------+ 768
 
-#include "../harbour/hbbuilder.ch"
+#include "../include/hbbuilder.ch"
 
 REQUEST HB_GT_GUI_DEFAULT
 

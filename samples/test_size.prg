@@ -1,7 +1,7 @@
 // Minimal test: create two forms side by side, compare sizes
 // Build: same as hbbuilder_win.prg
 
-#include "../harbour/hbbuilder.ch"
+#include "../include/hbbuilder.ch"
 
 REQUEST HB_GT_GUI_DEFAULT
 

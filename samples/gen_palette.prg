@@ -2,7 +2,7 @@
 // Compile: build_cpp.bat gen_palette
 // Run: gen_palette.exe
 
-#include "../harbour/hbbuilder.ch"
+#include "../include/hbbuilder.ch"
 
 REQUEST HB_GT_GUI_DEFAULT
 

@@ -2,7 +2,7 @@
 // Compile: build_cpp.bat gen_palette (from samples/)
 // Run: gen_palette.exe -> creates ../resources/palette_new.bmp
 
-#include "../harbour/hbbuilder.ch"
+#include "../include/hbbuilder.ch"
 
 REQUEST HB_GT_GUI_DEFAULT
 

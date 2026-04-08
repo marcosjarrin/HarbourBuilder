@@ -10,7 +10,7 @@
 // 7. Special characters in code
 // 8. Path handling
 
-#include "../harbour/hbbuilder.ch"
+#include "../include/hbbuilder.ch"
 
 static nPass := 0
 static nFail := 0

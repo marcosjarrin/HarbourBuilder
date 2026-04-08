@@ -1,6 +1,41 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-08 (Session 18: Linux — Event handlers, form events, build script)
+
+  EVENT HANDLER RECOVERY (LINUX):
+  - Added INS_GetAllCode() to hbbuilder_linux.prg — returns all editor code
+    (Project1.prg + all form tabs) for handler existence checking, matching
+    Win32 and macOS implementations.
+  - Added INS_DeleteHandler(cHandler) — removes a handler function and its
+    separator comment from the active form's code, re-syncs via
+    SyncDesignerToCode(). Enables right-click deletion from inspector.
+  - Added right-click context menu on Events tab in gtk3_inspector.c:
+    on_tree_button_press() shows "Delete HandlerName" popup on right-click,
+    on_event_delete_handler() calls INS_DELETEHANDLER from Harbour and
+    refreshes the inspector.
+
+  FORM RUNTIME EVENTS (GTK3):
+  - Added on_form_click() handler for form-level OnClick and OnDblClick
+    in gtk3_core.c. Connected via button-press-event on the GtkWindow
+    in HBForm_Run(), HBForm_Show(), and HBForm_ShowModal().
+  - Per-type timestamp deduplication prevents double-firing from GTK
+    event propagation through window/container hierarchy.
+  - Added UI_MsgYesNo() to gtk3_core.c — GTK3 Yes/No confirmation dialog
+    using GTK_BUTTONS_YES_NO, fixing linker error.
+
+  BUILD SYSTEM:
+  - Moved build_gtk.sh from samples/ to project root as build_linux.sh.
+  - Added incremental build support (needs_rebuild) — only recompiles
+    files whose sources changed, matching build_mac.sh pattern.
+  - Fixed cProjDir: changed from hardcoded ~/harbourbuilder to
+    HB_DirBase() + ".." for correct runtime path resolution.
+
+  PROJECT STRUCTURE:
+  - Moved hbbuilder.ch from harbour/ to include/ directory.
+  - Updated all #include references and cp commands across all three
+    platforms (win32, macOS, Linux), build scripts, tests, and samples.
+
 2026-04-08 (Session 17: macOS — Inspector events parity with Win32)
 
   PROGRESS DIALOG WITH BUILD LOG (MACOS):

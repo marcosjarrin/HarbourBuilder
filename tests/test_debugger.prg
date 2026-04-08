@@ -5,7 +5,7 @@
 //
 // Each test prints PASS or FAIL. Exit code 0 = all passed.
 
-#include "../harbour/hbbuilder.ch"
+#include "../include/hbbuilder.ch"
 
 static nTests    := 0
 static nPassed   := 0
