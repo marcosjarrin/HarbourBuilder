@@ -1,6 +1,25 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-08 (Session 30: macOS — TDbfTable cRDD property + inspector dropdown fix)
+
+  DBFTABLE COMPONENT:
+  - Added cRDD property to TDbfTable inspector (dropdown: DBFCDX/DBFNTX/DBFFPT)
+  - Code generator emits ::oDBFTable1:cRDD := "DBFNTX" when not default
+  - Parser restores cRDD when loading project files
+  - FRdd field added to HBControl struct, initialized to "DBFCDX"
+
+  INSPECTOR:
+  - Fixed dropdown (type 'D') items appearing disabled — NSMenuItem needs
+    action+target to be enabled (was action:nil, now uses dropdownMenuSelected:)
+  - Fixed dropdown selection not registering — replaced unreliable isHighlighted
+    detection with action-based capture via s_dropdownChoice
+  - Dropdown click on value column now handled in tableViewClicked
+
+  NON-VISUAL COMPONENTS:
+  - UI_DropNonVisual now sets FClassName from component type (TDbfTable, TMySQL,
+    TSQLite, TTimer, TThread, etc.) instead of leaving generic "TControl"
+
 2026-04-08 (Session 29: macOS — Autocomplete, ErrorBlock, inspector fixes)
 
   EDITOR — AUTOCOMPLETE:

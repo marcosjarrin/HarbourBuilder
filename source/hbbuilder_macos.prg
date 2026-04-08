@@ -672,6 +672,10 @@ static function RegenerateFormCode( cName, hForm )
                      if ! Empty( cVal )
                         cCreate += '   ::o' + cCtrlName + ':cFileName := "' + cVal + '"' + e
                      endif
+                     cVal := UI_GetProp( hCtrl, "cRDD" )
+                     if ! Empty( cVal ) .and. Upper( cVal ) != "DBFCDX"
+                        cCreate += '   ::o' + cCtrlName + ':cRDD := "' + cVal + '"' + e
+                     endif
                      if UI_GetProp( hCtrl, "lActive" )
                         cCreate += '   ::o' + cCtrlName + ':Open()' + e
                      endif
@@ -856,6 +860,32 @@ static function RestoreFormFromCode( hForm, cCode )
                      hCtrl := UI_GetChild( hForm, j )
                      if hCtrl != 0 .and. UI_GetProp( hCtrl, "cName" ) == cName
                         UI_SetProp( hCtrl, "cFileName", cText )
+                        exit
+                     endif
+                  next
+               endif
+            endif
+         endif
+         loop
+      endif
+
+      // Parse component property: ::oName:cRDD := "value"
+      if Left( cTrim, 3 ) == "::o" .and. ":cRDD" $ cTrim .and. ":=" $ cTrim
+         nPos := At( ":cRDD", cTrim )
+         if nPos > 0
+            cName := SubStr( cTrim, 4, nPos - 4 )
+            if Right( cName, 1 ) == ":"; cName := Left( cName, Len(cName) - 1 ); endif
+            nPos2 := At( '"', cTrim )
+            if nPos2 > 0
+               cText := SubStr( cTrim, nPos2 + 1 )
+               nPos2 := At( '"', cText )
+               if nPos2 > 0
+                  cText := Left( cText, nPos2 - 1 )
+                  nCount := UI_GetChildCount( hForm )
+                  for j := 1 to nCount
+                     hCtrl := UI_GetChild( hForm, j )
+                     if hCtrl != 0 .and. UI_GetProp( hCtrl, "cName" ) == cName
+                        UI_SetProp( hCtrl, "cRDD", cText )
                         exit
                      endif
                   next

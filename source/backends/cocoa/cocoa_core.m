@@ -292,6 +292,7 @@ void EnsureNSApp( void )
    char FName[64];
    char FText[256];
    char FFileName[512];       /* Design-time file path (e.g. DBF file for TDBFTable) */
+   char FRdd[16];             /* RDD driver: DBFCDX, DBFNTX, DBFFPT */
    BOOL FActive;              /* Design-time Active flag (auto-open on form load) */
    int  FLeft, FTop, FWidth, FHeight;
    BOOL FVisible, FEnabled, FTabStop;
@@ -580,7 +581,7 @@ void EnsureNSApp( void )
       FLeft = 0; FTop = 0; FWidth = 80; FHeight = 24;
       FVisible = YES; FEnabled = YES; FTabStop = YES;
       FControlType = 0; FView = nil; FFont = nil; FBgColor = nil;
-      FClrPane = 0xFFFFFFFF; FFileName[0] = '\0'; FActive = NO;
+      FClrPane = 0xFFFFFFFF; FFileName[0] = '\0'; strcpy(FRdd, "DBFCDX"); FActive = NO;
       FOnClick = NULL; FOnChange = NULL; FOnInit = NULL; FOnClose = NULL;
       FCtrlParent = nil; FChildCount = 0;
       memset( FChildren, 0, sizeof(FChildren) );
@@ -2959,6 +2960,15 @@ HB_FUNC( UI_SETPROP )
       strncpy( p->FName, hb_parc(3), sizeof(p->FName)-1 );
    else if( strcasecmp(szProp,"cFileName")==0 && HB_ISCHAR(3) )
       strncpy( p->FFileName, hb_parc(3), sizeof(p->FFileName)-1 );
+   else if( strcasecmp(szProp,"cRDD")==0 ) {
+      if( HB_ISCHAR(3) )
+         strncpy( p->FRdd, hb_parc(3), sizeof(p->FRdd)-1 );
+      else if( HB_ISNUM(3) ) {
+         static const char * rddNames[] = { "DBFCDX", "DBFNTX", "DBFFPT" };
+         int idx = hb_parni(3);
+         if( idx >= 0 && idx < 3 ) strcpy( p->FRdd, rddNames[idx] );
+      }
+   }
    else if( strcasecmp(szProp,"lActive")==0 )
       p->FActive = hb_parl(3);
    else if( strcasecmp(szProp,"lSizable")==0 && p->FControlType == CT_FORM )
@@ -3077,6 +3087,7 @@ HB_FUNC( UI_GETPROP )
    else if( strcasecmp(szProp,"cName")==0 )      hb_retc( p->FName );
    else if( strcasecmp(szProp,"cClassName")==0 ) hb_retc( p->FClassName );
    else if( strcasecmp(szProp,"cFileName")==0 )  hb_retc( p->FFileName );
+   else if( strcasecmp(szProp,"cRDD")==0 )      hb_retc( p->FRdd );
    else if( strcasecmp(szProp,"lActive")==0 )   hb_retl( p->FActive );
    else if( strcasecmp(szProp,"lSizable")==0 && p->FControlType==CT_FORM )
       hb_retl( ((HBForm *)p)->FSizable );
@@ -3274,9 +3285,14 @@ HB_FUNC( UI_GETALLPROPS )
       case CT_COMBOBOX:
          ADD_N("nItemIndex",((HBComboBox*)p)->FItemIndex,"Data");
          ADD_N("nItemCount",((HBComboBox*)p)->FItemCount,"Data"); break;
-      case CT_DBFTABLE:
+      case CT_DBFTABLE: {
+         int rddIdx = 0;
+         if( strcasecmp(p->FRdd,"DBFNTX") == 0 ) rddIdx = 1;
+         else if( strcasecmp(p->FRdd,"DBFFPT") == 0 ) rddIdx = 2;
          ADD_P("cFileName",p->FFileName,"Data");
+         ADD_D("cRDD",rddIdx,"DBFCDX|DBFNTX|DBFFPT","Data");
          ADD_L("lActive",p->FActive,"Data"); break;
+      }
    }
    hb_itemReturnRelease(pArray);
 }

@@ -536,6 +536,9 @@ static HBFontPickerTarget * s_fontTarget = nil;
    }
 }
 
+static int s_dropdownChoice = -1;
+- (void)dropdownMenuSelected:(id)sender { s_dropdownChoice = (int)[sender tag]; }
+
 - (void)openDropdownForRow:(int)nReal inTableView:(NSTableView *)tv atRow:(NSInteger)row
 {
    const char * raw = d->rows[nReal].szValue;
@@ -550,7 +553,8 @@ static HBFontPickerTarget * s_fontTarget = nil;
       const char * end = strchr( p, '|' );
       int len = end ? (int)(end - p) : (int)strlen(p);
       NSString * title = [[NSString alloc] initWithBytes:p length:len encoding:NSUTF8StringEncoding];
-      NSMenuItem * item = [[NSMenuItem alloc] initWithTitle:title action:nil keyEquivalent:@""];
+      NSMenuItem * item = [[NSMenuItem alloc] initWithTitle:title action:@selector(dropdownMenuSelected:) keyEquivalent:@""];
+      [item setTarget:self];
       [item setTag:idx];
       if( idx == curIdx ) [item setState:NSControlStateValueOn];
       [menu addItem:item];
@@ -562,40 +566,32 @@ static HBFontPickerTarget * s_fontTarget = nil;
    NSRect cellRect = [tv frameOfCellAtColumn:1 row:row];
    NSPoint pt = NSMakePoint( cellRect.origin.x, cellRect.origin.y );
 
-   /* Use popUpMenuPositioningItem to show dropdown at cell */
-   BOOL selected = [menu popUpMenuPositioningItem:[menu itemAtIndex:curIdx]
+   s_dropdownChoice = -1;
+   [menu popUpMenuPositioningItem:[menu itemAtIndex:curIdx]
       atLocation:pt inView:tv];
 
-   if( selected )
+   if( s_dropdownChoice >= 0 && s_dropdownChoice != curIdx )
    {
-      /* Find which item was selected */
-      for( int i = 0; i < (int)[[menu itemArray] count]; i++ )
-      {
-         NSMenuItem * mi = [[menu itemArray] objectAtIndex:i];
-         if( [mi isHighlighted] || [mi state] == NSControlStateValueOn )
-         {
-            /* Rebuild value string with new index */
-            const char * opts = strchr( raw, '|' );
-            char newVal[512];
-            snprintf( newVal, sizeof(newVal), "%d%s", i, opts ? opts : "" );
-            strncpy( d->rows[nReal].szValue, newVal, sizeof(d->rows[0].szValue) - 1 );
+      int i = s_dropdownChoice;
+      /* Rebuild value string with new index */
+      const char * opts = strchr( raw, '|' );
+      char newVal[512];
+      snprintf( newVal, sizeof(newVal), "%d%s", i, opts ? opts : "" );
+      strncpy( d->rows[nReal].szValue, newVal, sizeof(d->rows[0].szValue) - 1 );
 
-            /* Apply via UI_SetProp */
-            PHB_DYNS pDyn = hb_dynsymFindName( "UI_SETPROP" );
-            if( pDyn ) {
-               hb_vmPushDynSym( pDyn ); hb_vmPushNil();
-               hb_vmPushNumInt( d->hCtrl );
-               hb_vmPushString( d->rows[nReal].szName, strlen(d->rows[nReal].szName) );
-               hb_vmPushInteger( i );
-               hb_vmDo( 3 );
-            }
-            if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) ) {
-               hb_vmPushEvalSym(); hb_vmPush( d->pOnPropChanged ); hb_vmSend( 0 );
-            }
-            [tv reloadData];
-            break;
-         }
+      /* Apply via UI_SetProp */
+      PHB_DYNS pDyn = hb_dynsymFindName( "UI_SETPROP" );
+      if( pDyn ) {
+         hb_vmPushDynSym( pDyn ); hb_vmPushNil();
+         hb_vmPushNumInt( d->hCtrl );
+         hb_vmPushString( d->rows[nReal].szName, strlen(d->rows[nReal].szName) );
+         hb_vmPushInteger( i );
+         hb_vmDo( 3 );
       }
+      if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) ) {
+         hb_vmPushEvalSym(); hb_vmPush( d->pOnPropChanged ); hb_vmSend( 0 );
+      }
+      [tv reloadData];
    }
 }
 
@@ -725,6 +721,9 @@ static HBFontPickerTarget * s_fontTarget = nil;
          else if( d->rows[nReal].cType == 'P' )
             [self openFilePickerForRow:nReal];
       }
+      /* Click on value column for dropdown properties */
+      if( [[clickedCol identifier] isEqualToString:@"value"] && d->rows[nReal].cType == 'D' )
+         [self openDropdownForRow:nReal inTableView:d->tableView atRow:row];
    }
 }
 
