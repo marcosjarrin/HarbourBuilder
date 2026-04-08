@@ -609,6 +609,12 @@ static ClassMembers s_classMembers[] = {
      "Get() Post()" },
    { "TThread",
      "Join() Start()" },
+   { "TDBFTable",
+     "Append() Bof() cAlias cDatabase cFileName cIndexFile cRDD Close() "
+     "CreateIndex() Delete() Deleted() Eof() FieldCount() FieldGet() "
+     "FieldName() FieldPut() Found() GoBottom() GoTo() GoTop() "
+     "lConnected lExclusive lReadOnly nArea Open() Recall() "
+     "RecCount() RecNo() Seek() Skip() Structure() Tables()" },
    { NULL, NULL }
 };
 
@@ -1054,18 +1060,25 @@ static const char * CE_ResolveVarClass( ScintillaView * sv, sptr_t colonPos )
          dp += varLen;
          if( isalnum((unsigned char)*dp) || *dp == '_' ) continue;  /* partial match */
 
-         /* Found DATA varName — look for "// TClassName" comment */
+         /* Found DATA varName — look for "// ClassName" comment */
          const char * cmt = strstr( dp, "//" );
          if( !cmt ) continue;
          cmt += 2;
          while( *cmt == ' ' ) cmt++;
 
-         if( *cmt == 'T' && isalpha((unsigned char)cmt[1]) )
+         if( isalpha((unsigned char)*cmt) )
          {
-            int ci = 0;
-            while( ci < 63 && (isalnum((unsigned char)cmt[ci]) || cmt[ci] == '_') )
-               { s_resolvedClass[ci] = cmt[ci]; ci++; }
-            s_resolvedClass[ci] = 0;
+            /* Extract class name from comment */
+            char rawCls[64];
+            int ri = 0;
+            while( ri < 63 && (isalnum((unsigned char)cmt[ri]) || cmt[ri] == '_') )
+               { rawCls[ri] = cmt[ri]; ri++; }
+            rawCls[ri] = 0;
+            /* Prepend 'T' if missing (DBFTable -> TDBFTable) */
+            if( rawCls[0] == 'T' && isupper((unsigned char)rawCls[1]) )
+               strncpy( s_resolvedClass, rawCls, 63 );
+            else
+               snprintf( s_resolvedClass, 64, "T%s", rawCls );
             return s_resolvedClass;
          }
       }
@@ -1136,6 +1149,7 @@ static const char * CE_ResolveVarClass( ScintillaView * sv, sptr_t colonPos )
          { "ListView",    "TListView" },
          { "Image",       "TImage" },
          { "Database",    "TDatabase" },
+         { "DBFTable",    "TDBFTable" },
          { "SQLite",      "TSQLite" },
          { "Report",      "TReport" },
          { "WebServer",   "TWebServer" },

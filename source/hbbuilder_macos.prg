@@ -767,7 +767,7 @@ static function RestoreFormFromCode( hForm, cCode )
 
    local aLines, cLine, cTrim, i, j, nType, nCount
    local nT, nL, nW, nH, cText, cName, hCtrl
-   local nPos, nPos2, cTitle
+   local nPos, nPos2, cTitle, cVal
 
    if Empty( cCode ) .or. hForm == 0
       return nil
@@ -819,7 +819,15 @@ static function RestoreFormFromCode( hForm, cCode )
             if nPos2 > 0; cName := Left( cName, nPos2 - 1 ); endif
             nPos := At( "TYPE ", Upper( cTrim ) )
             if nPos > 0
-               nType := Val( SubStr( cTrim, nPos + 5 ) )
+               cVal := AllTrim( SubStr( cTrim, nPos + 5 ) )
+               // Strip trailing " OF ..." if present
+               nPos2 := At( " ", cVal )
+               if nPos2 > 0; cVal := Left( cVal, nPos2 - 1 ); endif
+               nType := Val( cVal )
+               // Resolve CT_* define names
+               if nType == 0 .and. Left( cVal, 3 ) == "CT_"
+                  nType := ResolveComponentType( cVal )
+               endif
                if nType >= 38
                   hCtrl := UI_DropNonVisual( hForm, nType, cName )
                endif
@@ -834,6 +842,8 @@ static function RestoreFormFromCode( hForm, cCode )
          if nPos == 0; nPos := At( ":cDatabase", cTrim ); endif
          if nPos > 0
             cName := SubStr( cTrim, 4, nPos - 4 )
+            // Remove trailing ':' if present
+            if Right( cName, 1 ) == ":"; cName := Left( cName, Len(cName) - 1 ); endif
             nPos2 := At( '"', cTrim )
             if nPos2 > 0
                cText := SubStr( cTrim, nPos2 + 1 )
@@ -860,6 +870,7 @@ static function RestoreFormFromCode( hForm, cCode )
          nPos := At( ":Open()", cTrim )
          if nPos > 0
             cName := SubStr( cTrim, 4, nPos - 4 )
+            if Right( cName, 1 ) == ":"; cName := Left( cName, Len(cName) - 1 ); endif
             nCount := UI_GetChildCount( hForm )
             for j := 1 to nCount
                hCtrl := UI_GetChild( hForm, j )
@@ -2829,6 +2840,56 @@ static function ComponentTypeName( nType )
       case nType == 130; return "CT_GITMERGE"
    endcase
 return LTrim(Str(nType))
+
+// Reverse map: CT_* define name to type number (for parsing saved code)
+static function ResolveComponentType( cName )
+   local i, aMap := { ;
+      { "CT_TIMER", 38 }, { "CT_PAINTBOX", 39 }, ;
+      { "CT_OPENDIALOG", 40 }, { "CT_SAVEDIALOG", 41 }, ;
+      { "CT_FONTDIALOG", 42 }, { "CT_COLORDIALOG", 43 }, ;
+      { "CT_FINDDIALOG", 44 }, { "CT_REPLACEDIALOG", 45 }, ;
+      { "CT_OPENAI", 46 }, { "CT_GEMINI", 47 }, { "CT_CLAUDE", 48 }, ;
+      { "CT_DEEPSEEK", 49 }, { "CT_GROK", 50 }, { "CT_OLLAMA", 51 }, ;
+      { "CT_TRANSFORMER", 52 }, ;
+      { "CT_DBFTABLE", 53 }, { "CT_MYSQL", 54 }, { "CT_MARIADB", 55 }, ;
+      { "CT_POSTGRESQL", 56 }, { "CT_SQLITE", 57 }, { "CT_FIREBIRD", 58 }, ;
+      { "CT_SQLSERVER", 59 }, { "CT_ORACLE", 60 }, { "CT_MONGODB", 61 }, ;
+      { "CT_WEBVIEW", 62 }, { "CT_THREAD", 63 }, { "CT_MUTEX", 64 }, ;
+      { "CT_SEMAPHORE", 65 }, { "CT_CRITICALSECTION", 66 }, ;
+      { "CT_THREADPOOL", 67 }, { "CT_ATOMICINT", 68 }, ;
+      { "CT_CONDVAR", 69 }, { "CT_CHANNEL", 70 }, ;
+      { "CT_WEBSERVER", 71 }, { "CT_WEBSOCKET", 72 }, ;
+      { "CT_HTTPCLIENT", 73 }, { "CT_FTPCLIENT", 74 }, ;
+      { "CT_SMTPCLIENT", 75 }, { "CT_TCPSERVER", 76 }, ;
+      { "CT_TCPCLIENT", 77 }, { "CT_UDPSOCKET", 78 }, ;
+      { "CT_BROWSE", 79 }, { "CT_DBGRID", 80 }, { "CT_DBNAVIGATOR", 81 }, ;
+      { "CT_DBTEXT", 82 }, { "CT_DBEDIT", 83 }, { "CT_DBCOMBOBOX", 84 }, ;
+      { "CT_DBCHECKBOX", 85 }, { "CT_DBIMAGE", 86 }, ;
+      { "CT_PREPROCESSOR", 90 }, { "CT_SCRIPTENGINE", 91 }, ;
+      { "CT_REPORTDESIGNER", 92 }, { "CT_BARCODE", 93 }, ;
+      { "CT_PDFGENERATOR", 94 }, { "CT_EXCELEXPORT", 95 }, ;
+      { "CT_AUDITLOG", 96 }, { "CT_PERMISSIONS", 97 }, ;
+      { "CT_CURRENCY", 98 }, { "CT_TAXENGINE", 99 }, ;
+      { "CT_DASHBOARD", 100 }, { "CT_SCHEDULER", 101 }, ;
+      { "CT_PRINTER", 102 }, { "CT_REPORT", 103 }, { "CT_LABELS", 104 }, ;
+      { "CT_PRINTPREVIEW", 105 }, { "CT_PAGESETUP", 106 }, ;
+      { "CT_PRINTDIALOG", 107 }, { "CT_REPORTVIEWER", 108 }, ;
+      { "CT_BARCODEPRINTER", 109 }, ;
+      { "CT_WHISPER", 110 }, { "CT_EMBEDDINGS", 111 }, ;
+      { "CT_PYTHON", 112 }, { "CT_SWIFT", 113 }, { "CT_GO", 114 }, ;
+      { "CT_NODE", 115 }, { "CT_RUST", 116 }, { "CT_JAVA", 117 }, ;
+      { "CT_DOTNET", 118 }, { "CT_LUA", 119 }, { "CT_RUBY", 120 }, ;
+      { "CT_GITREPO", 121 }, { "CT_GITCOMMIT", 122 }, ;
+      { "CT_GITBRANCH", 123 }, { "CT_GITLOG", 124 }, ;
+      { "CT_GITDIFF", 125 }, { "CT_GITREMOTE", 126 }, ;
+      { "CT_GITSTASH", 127 }, { "CT_GITTAG", 128 }, ;
+      { "CT_GITBLAME", 129 }, { "CT_GITMERGE", 130 } }
+   for i := 1 to Len( aMap )
+      if Upper( cName ) == aMap[i][1]
+         return aMap[i][2]
+      endif
+   next
+return 0
 
 // Framework
 #include "classes.prg"

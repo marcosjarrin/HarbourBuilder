@@ -343,6 +343,12 @@ static HBFontPickerTarget * s_fontTarget = nil;
       [self openFontPickerForRow:nReal];
       return NO;
    }
+   /* For logical properties, show Yes/No dropdown */
+   if( d->rows[nReal].cType == 'L' && [[col identifier] isEqualToString:@"value"] )
+   {
+      [self openLogicalDropdownForRow:nReal inTableView:tableView atRow:row];
+      return NO;
+   }
    /* For dropdown properties, show popup menu */
    if( d->rows[nReal].cType == 'D' && [[col identifier] isEqualToString:@"value"] )
    {
@@ -472,6 +478,62 @@ static HBFontPickerTarget * s_fontTarget = nil;
          }
       }
    }];
+}
+
+- (void)logicalMenuDummy:(id)sender { /* no-op, enables menu items */ }
+
+- (void)openLogicalDropdownForRow:(int)nReal inTableView:(NSTableView *)tv atRow:(NSInteger)row
+{
+   BOOL curVal = ( strcasecmp( d->rows[nReal].szValue, ".T." ) == 0 );
+   int curIdx = curVal ? 0 : 1;
+
+   NSMenu * menu = [[NSMenu alloc] init];
+   NSMenuItem * itemYes = [[NSMenuItem alloc] initWithTitle:@"Yes" action:@selector(logicalMenuDummy:) keyEquivalent:@""];
+   NSMenuItem * itemNo  = [[NSMenuItem alloc] initWithTitle:@"No"  action:@selector(logicalMenuDummy:) keyEquivalent:@""];
+   [itemYes setTarget:self];
+   [itemNo  setTarget:self];
+   [itemYes setTag:1];
+   [itemNo  setTag:0];
+   if( curVal )  [itemYes setState:NSControlStateValueOn];
+   else          [itemNo  setState:NSControlStateValueOn];
+   [menu addItem:itemYes];
+   [menu addItem:itemNo];
+
+   NSRect cellRect = [tv frameOfCellAtColumn:1 row:row];
+   NSPoint pt = NSMakePoint( cellRect.origin.x, cellRect.origin.y );
+   BOOL selected = [menu popUpMenuPositioningItem:[menu itemAtIndex:curIdx]
+      atLocation:pt inView:tv];
+   if( !selected ) return;
+
+   /* Find which item was chosen */
+   for( int i = 0; i < (int)[[menu itemArray] count]; i++ )
+   {
+      NSMenuItem * mi = [[menu itemArray] objectAtIndex:i];
+      if( [mi isHighlighted] )
+      {
+         BOOL newVal = ( [mi tag] == 1 );
+         strcpy( d->rows[nReal].szValue, newVal ? ".T." : ".F." );
+
+         if( d->hCtrl )
+         {
+            hb_vmPushDynSym( hb_dynsymFind( "UI_SETPROP" ) );
+            hb_vmPushNil();
+            hb_vmPushNumInt( (HB_MAXINT) d->hCtrl );
+            hb_vmPushString( d->rows[nReal].szName, strlen(d->rows[nReal].szName) );
+            hb_vmPushLogical( newVal );
+            hb_vmDo( 3 );
+         }
+         break;
+      }
+   }
+
+   [d->tableView reloadData];
+   if( d->pOnPropChanged )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( d->pOnPropChanged );
+      hb_vmSend( 0 );
+   }
 }
 
 - (void)openDropdownForRow:(int)nReal inTableView:(NSTableView *)tv atRow:(NSInteger)row
