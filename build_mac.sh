@@ -150,7 +150,7 @@ clang++ -o ${PROG} \
    -framework Cocoa \
    -framework QuartzCore \
    $([ "$MACOS_MAJOR" -ge 11 ] 2>/dev/null && echo "-framework UniformTypeIdentifiers" || echo "") \
-   -lm -lpthread -lc++ -lsqlite3
+   -lm -lpthread -lsqlite3
 
 # [5/5] Create .app bundle
 APP="$PROJDIR/bin/${PROG}.app"
