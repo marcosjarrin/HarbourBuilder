@@ -2841,6 +2841,48 @@ HB_FUNC( UI_DROPNONVISUAL )
    strncpy( ctrl->FName, cName, sizeof(ctrl->FName) - 1 );
    strncpy( ctrl->FText, cName, sizeof(ctrl->FText) - 1 );
 
+   /* Set FClassName based on component type */
+   {
+      static struct { int type; const char * cls; } s_typeMap[] = {
+         { CT_TIMER, "TTimer" }, { CT_PAINTBOX, "TPaintBox" },
+         { CT_OPENDIALOG, "TOpenDialog" }, { CT_SAVEDIALOG, "TSaveDialog" },
+         { CT_FONTDIALOG, "TFontDialog" }, { CT_COLORDIALOG, "TColorDialog" },
+         { CT_FINDDIALOG, "TFindDialog" }, { CT_REPLACEDIALOG, "TReplaceDialog" },
+         { CT_OPENAI, "TOpenAI" }, { CT_GEMINI, "TGemini" },
+         { CT_CLAUDE, "TClaude" }, { CT_DEEPSEEK, "TDeepSeek" },
+         { CT_GROK, "TGrok" }, { CT_OLLAMA, "TOllama" },
+         { CT_TRANSFORMER, "TTransformer" },
+         { CT_DBFTABLE, "TDbfTable" }, { CT_MYSQL, "TMySQL" },
+         { CT_MARIADB, "TMariaDB" }, { CT_POSTGRESQL, "TPostgreSQL" },
+         { CT_SQLITE, "TSQLite" }, { CT_FIREBIRD, "TFirebird" },
+         { CT_SQLSERVER, "TSQLServer" }, { CT_ORACLE, "TOracle" },
+         { CT_MONGODB, "TMongoDB" },
+         { CT_WEBVIEW, "TWebView" }, { CT_WEBSERVER, "TWebServer" },
+         { CT_WEBSOCKET, "TWebSocket" }, { CT_HTTPCLIENT, "THttpClient" },
+         { CT_FTPCLIENT, "TFtpClient" }, { CT_SMTPCLIENT, "TSmtpClient" },
+         { CT_TCPSERVER, "TTcpServer" }, { CT_TCPCLIENT, "TTcpClient" },
+         { CT_UDPSOCKET, "TUdpSocket" },
+         { CT_THREAD, "TThread" }, { CT_MUTEX, "TMutex" },
+         { CT_SEMAPHORE, "TSemaphore" }, { CT_THREADPOOL, "TThreadPool" },
+         { CT_PRINTER, "TPrinter" }, { CT_REPORT, "TReport" },
+         { CT_BROWSE, "TBrowse" }, { CT_DBGRID, "TDbGrid" },
+         { CT_DBNAVIGATOR, "TDbNavigator" },
+         { 0, NULL }
+      };
+      BOOL found = NO;
+      for( int i = 0; s_typeMap[i].cls; i++ )
+      {
+         if( s_typeMap[i].type == nType )
+         {
+            strncpy( ctrl->FClassName, s_typeMap[i].cls, sizeof(ctrl->FClassName) - 1 );
+            found = YES;
+            break;
+         }
+      }
+      if( !found )
+         snprintf( ctrl->FClassName, sizeof(ctrl->FClassName), "TComponent%d", nType );
+   }
+
    [form addChild:ctrl];
 
    /* Create the visual representation (bitmap icon or text fallback) */

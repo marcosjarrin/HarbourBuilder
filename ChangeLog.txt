@@ -1,6 +1,23 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-08 (Session 29: macOS — Autocomplete, ErrorBlock, inspector fixes)
+
+  EDITOR — AUTOCOMPLETE:
+  - Cross-file class resolution: typing oForm2: now shows members even when
+    CLASS TForm2 is defined in another open tab (searches all tabTexts[])
+  - Methods display with () suffix in dropdown to distinguish from properties
+    (e.g. Show(), ShowModal(), Close() vs Height, Width, Title)
+  - Added ShowModal() to TForm member list
+
+  BUGFIX:
+  - ErrorBlock (GUI error dialog) now installed in TApplication:CreateForm()
+    instead of Run() — errors during form construction now show GUI dialog
+  - build_mac.sh: fixed Scintilla download check (wrong path for ScintillaView.h)
+  - TBNew() now asks to save current project before creating a new one
+  - Non-visual components (TDbfTable, TMySQL, etc.) now show correct class name
+    in inspector combo instead of generic "TControl"
+
 2026-04-08 (Session 28: macOS — ErrorBlock fix + build_mac.sh fix)
 
   BUGFIX:

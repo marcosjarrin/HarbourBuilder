@@ -1536,7 +1536,18 @@ return nil
 static function TBNew()
 
    local i, nFormX, nFormY, nInsW, nEditorX, nEditorW, nEditorH
-   local nInsTop, nEditorTop, nBottomY
+   local nInsTop, nEditorTop, nBottomY, nAns
+
+   // Ask to save current work if there are forms open
+   if Len( aForms ) > 0
+      nAns := MsgYesNoCancel( "Save current project before creating a new one?", "HbBuilder" )
+      if nAns == 0  // Cancel
+         return nil
+      elseif nAns == 1  // Yes
+         TBSave()
+      endif
+      // nAns == 2 (No) → proceed without saving
+   endif
 
    // Destroy all existing forms
    for i := 1 to Len( aForms )
