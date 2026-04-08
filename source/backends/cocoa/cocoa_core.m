@@ -548,6 +548,21 @@ void EnsureNSApp( void )
          [((HBControl *)form) fireEvent:form->FOnMouseUp];
    }
 }
+- (BOOL)acceptsFirstResponder { return YES; }
+- (void)keyDown:(NSEvent *)event {
+   if( form && !form->FDesignMode ) {
+      if( form->FOnKeyDown )
+         [((HBControl *)form) fireEvent:form->FOnKeyDown];
+      if( form->FOnKeyPress )
+         [((HBControl *)form) fireEvent:form->FOnKeyPress];
+   }
+}
+- (void)keyUp:(NSEvent *)event {
+   if( form && !form->FDesignMode ) {
+      if( form->FOnKeyUp )
+         [((HBControl *)form) fireEvent:form->FOnKeyUp];
+   }
+}
 @end
 
 /* --- HBControl implementation --- */

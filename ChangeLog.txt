@@ -1,6 +1,17 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-08 (Session 25: macOS — OnKeyDown fix + build cleanup)
+
+  BUGFIX:
+  - OnKeyDown/OnKeyUp/OnKeyPress event handlers now fire at runtime
+    (HBFormContentView was missing keyDown:/keyUp: handlers)
+  - Added acceptsFirstResponder to HBFormContentView so forms receive
+    keyboard events
+
+  BUILD:
+  - Removed duplicate -lc++ linker flag (clang++ links it implicitly)
+
 2026-04-08 (Session 24: Windows — MinGW 32-bit compiler support)
 
   MINGW SUPPORT:
