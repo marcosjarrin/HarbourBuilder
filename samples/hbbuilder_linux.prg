@@ -1422,8 +1422,7 @@ static function EnsureHarbour( cHbDir )
 
    // Download source if not already present
    if ! File( cHbSrc + "/config/global.mk" )
-      GTK_ProgressOpen( "HbBuilder Setup", 3 )
-      GTK_ProgressStep( "Downloading Harbour compiler from GitHub..." )
+      GTK_ProgressOpen( "Downloading Harbour...", 0 )
       GTK_ShellExec( "rm -rf " + cHbSrc )
       GTK_ShellExec( "git clone --depth 1 https://github.com/harbour/core.git " + cHbSrc + " 2>&1" )
       GTK_ProgressClose()
@@ -1441,11 +1440,9 @@ static function EnsureHarbour( cHbDir )
    endif
 
    // Build and install Harbour
-   GTK_ProgressOpen( "Building Harbour...", 2 )
-   GTK_ProgressStep( "Compiling Harbour (this may take several minutes)..." )
+   GTK_ProgressOpen( "Building Harbour...", 0 )
    cOutput := GTK_ShellExec( "cd " + cHbSrc + " && HB_INSTALL_PREFIX=" + cHbDir + ;
       " make -j$(nproc) install 2>&1" )
-   GTK_ProgressStep( "Verifying installation..." )
    GTK_ProgressClose()
 
    lBusy := .F.

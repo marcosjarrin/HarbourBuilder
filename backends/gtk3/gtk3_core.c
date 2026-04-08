@@ -22,6 +22,7 @@
 #include <sys/select.h>
 #include <signal.h>
 #include <errno.h>
+#include <fcntl.h>
 
 /* Control types - must match all platforms */
 #define CT_FORM       0
@@ -147,6 +148,18 @@ void EnsureGTK( void )
    }
 }
 
+
+/* ======================================================================
+ * Progress dialog state (used by GTK_ShellExec and progress functions)
+ * ====================================================================== */
+
+static GtkWidget * s_progressWnd   = NULL;
+static GtkWidget * s_progressBar   = NULL;
+static GtkWidget * s_progressLabel = NULL;
+static GtkWidget * s_progressLog   = NULL;
+static int         s_progressSteps = 7;
+static int         s_progressCur   = 0;
+static int         s_progressCancelled = 0;
 
 /* ======================================================================
  * Forward declarations
@@ -5724,19 +5737,90 @@ HB_FUNC( GTK_PROCESSEVENTS )
       gtk_main_iteration_do( FALSE );
 }
 
+/* Helper: append text to the progress log view and auto-scroll */
+static void ProgressLogAppend( const char * text, int len )
+{
+   if( !s_progressLog || !text || len <= 0 ) return;
+   GtkTextBuffer * buf = gtk_text_view_get_buffer( GTK_TEXT_VIEW(s_progressLog) );
+   GtkTextIter end;
+   gtk_text_buffer_get_end_iter( buf, &end );
+   gtk_text_buffer_insert( buf, &end, text, len );
+   /* Auto-scroll to bottom */
+   gtk_text_buffer_get_end_iter( buf, &end );
+   GtkTextMark * mark = gtk_text_buffer_get_insert( buf );
+   gtk_text_buffer_move_mark( buf, mark, &end );
+   gtk_text_view_scroll_mark_onscreen( GTK_TEXT_VIEW(s_progressLog), mark );
+}
+
 HB_FUNC( GTK_SHELLEXEC )
 {
    if( !HB_ISCHAR(1) ) { hb_retc(""); return; }
-   char * output = NULL;
-   GError * err = NULL;
-   gint exitStatus = 0;
-   char * argv[] = { "/bin/bash", "-c", (char*)hb_parc(1), NULL };
-   g_spawn_sync( NULL, argv, NULL,
-      G_SPAWN_SEARCH_PATH, NULL, NULL,
-      &output, NULL, &exitStatus, &err );
-   hb_retc( output ? output : "" );
-   if( output ) g_free( output );
-   if( err ) g_error_free( err );
+
+   FILE * fp = popen( hb_parc(1), "r" );
+   if( !fp ) { hb_retc(""); return; }
+
+   size_t bufSize = 65536, total = 0;
+   char * buf = (char *) malloc( bufSize );
+   buf[0] = 0;
+
+   /* Set pipe to non-blocking so we can pump GTK events */
+   int fd = fileno( fp );
+   int flags = fcntl( fd, F_GETFL, 0 );
+   fcntl( fd, F_SETFL, flags | O_NONBLOCK );
+
+   while( 1 )
+   {
+      /* Check for cancel */
+      if( s_progressCancelled )
+      {
+         const char * msg = "\n*** Cancelled by user ***\n";
+         size_t msgLen = strlen( msg );
+         if( total + msgLen + 1 >= bufSize ) {
+            bufSize = total + msgLen + 64;
+            buf = (char *) realloc( buf, bufSize );
+         }
+         memcpy( buf + total, msg, msgLen );
+         total += msgLen;
+         buf[total] = 0;
+         ProgressLogAppend( msg, (int)msgLen );
+         break;
+      }
+
+      char tmp[4096];
+      ssize_t n = read( fd, tmp, sizeof(tmp) );
+      if( n > 0 )
+      {
+         if( total + n + 1 >= bufSize ) {
+            bufSize = (total + n + 1) * 2;
+            buf = (char *) realloc( buf, bufSize );
+         }
+         memcpy( buf + total, tmp, n );
+         total += n;
+         buf[total] = 0;
+
+         /* Append to live log if present */
+         ProgressLogAppend( tmp, (int)n );
+
+         /* Pulse progress bar */
+         if( s_progressBar && s_progressSteps == 0 )
+            gtk_progress_bar_pulse( GTK_PROGRESS_BAR(s_progressBar) );
+      }
+      else if( n == 0 )
+         break;  /* EOF */
+      else if( errno == EAGAIN || errno == EWOULDBLOCK )
+      {
+         /* No data yet — pump GTK events to keep UI alive */
+         while( gtk_events_pending() )
+            gtk_main_iteration_do( FALSE );
+         g_usleep( 20000 );  /* 20ms */
+      }
+      else
+         break;  /* read error */
+   }
+
+   pclose( fp );
+   hb_retc( buf );
+   free( buf );
 }
 
 /* GTK_OpenFileDialog( cTitle, cExtension ) --> cPath */
@@ -9055,18 +9139,22 @@ HB_FUNC( SETDPIAWARE )
  * Build Progress Dialog
  * ====================================================================== */
 
-static GtkWidget * s_progressWnd   = NULL;
-static GtkWidget * s_progressBar   = NULL;
-static GtkWidget * s_progressLabel = NULL;
-static int         s_progressSteps = 7;
-static int         s_progressCur   = 0;
+static void on_progress_cancel( GtkWidget * btn, gpointer data )
+{
+   (void)btn; (void)data;
+   s_progressCancelled = 1;
+   if( s_progressLabel )
+      gtk_label_set_text( GTK_LABEL(s_progressLabel), "Cancelling..." );
+}
 
-/* GTK_ProgressOpen( cTitle, nSteps ) */
+/* GTK_ProgressOpen( cTitle, nSteps )
+ * nSteps=0 → indeterminate mode with live log output */
 HB_FUNC( GTK_PROGRESSOPEN )
 {
    const char * cTitle = HB_ISCHAR(1) ? hb_parc(1) : "Building...";
    s_progressSteps = HB_ISNUM(2) ? hb_parni(2) : 7;
    s_progressCur = 0;
+   s_progressCancelled = 0;
 
    EnsureGTK();
 
@@ -9075,16 +9163,19 @@ HB_FUNC( GTK_PROGRESSOPEN )
       return;
    }
 
+   int bLiveLog = ( s_progressSteps == 0 );
+
    s_progressWnd = gtk_window_new( GTK_WINDOW_TOPLEVEL );
    gtk_window_set_title( GTK_WINDOW(s_progressWnd), cTitle );
-   gtk_window_set_default_size( GTK_WINDOW(s_progressWnd), 420, 100 );
-   gtk_window_set_resizable( GTK_WINDOW(s_progressWnd), FALSE );
+   gtk_window_set_default_size( GTK_WINDOW(s_progressWnd),
+      bLiveLog ? 560 : 420, bLiveLog ? 420 : 100 );
+   gtk_window_set_resizable( GTK_WINDOW(s_progressWnd), bLiveLog );
    gtk_window_set_position( GTK_WINDOW(s_progressWnd), GTK_WIN_POS_CENTER );
    gtk_window_set_keep_above( GTK_WINDOW(s_progressWnd), TRUE );
    gtk_window_set_deletable( GTK_WINDOW(s_progressWnd), FALSE );
-   gtk_container_set_border_width( GTK_CONTAINER(s_progressWnd), 16 );
+   gtk_container_set_border_width( GTK_CONTAINER(s_progressWnd), 12 );
 
-   GtkWidget * vbox = gtk_box_new( GTK_ORIENTATION_VERTICAL, 8 );
+   GtkWidget * vbox = gtk_box_new( GTK_ORIENTATION_VERTICAL, 6 );
    gtk_container_add( GTK_CONTAINER(s_progressWnd), vbox );
 
    s_progressLabel = gtk_label_new( "Preparing..." );
@@ -9092,8 +9183,46 @@ HB_FUNC( GTK_PROGRESSOPEN )
    gtk_box_pack_start( GTK_BOX(vbox), s_progressLabel, FALSE, FALSE, 0 );
 
    s_progressBar = gtk_progress_bar_new();
-   gtk_progress_bar_set_fraction( GTK_PROGRESS_BAR(s_progressBar), 0.0 );
+   if( bLiveLog )
+      gtk_progress_bar_pulse( GTK_PROGRESS_BAR(s_progressBar) );
+   else
+      gtk_progress_bar_set_fraction( GTK_PROGRESS_BAR(s_progressBar), 0.0 );
    gtk_box_pack_start( GTK_BOX(vbox), s_progressBar, FALSE, FALSE, 0 );
+
+   s_progressLog = NULL;
+   if( bLiveLog )
+   {
+      /* Scrolled text view for live output */
+      GtkWidget * scroll = gtk_scrolled_window_new( NULL, NULL );
+      gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW(scroll),
+         GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
+
+      s_progressLog = gtk_text_view_new();
+      gtk_text_view_set_editable( GTK_TEXT_VIEW(s_progressLog), FALSE );
+      gtk_text_view_set_cursor_visible( GTK_TEXT_VIEW(s_progressLog), FALSE );
+      gtk_text_view_set_monospace( GTK_TEXT_VIEW(s_progressLog), TRUE );
+      gtk_text_view_set_wrap_mode( GTK_TEXT_VIEW(s_progressLog), GTK_WRAP_WORD_CHAR );
+      gtk_text_view_set_left_margin( GTK_TEXT_VIEW(s_progressLog), 6 );
+      gtk_text_view_set_top_margin( GTK_TEXT_VIEW(s_progressLog), 4 );
+
+      /* Dark background for log */
+      GtkCssProvider * css = gtk_css_provider_new();
+      gtk_css_provider_load_from_data( css,
+         "textview { background-color: #1e1e1e; color: #d4d4d4; }", -1, NULL );
+      gtk_style_context_add_provider( gtk_widget_get_style_context( s_progressLog ),
+         GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION );
+      g_object_unref( css );
+
+      gtk_container_add( GTK_CONTAINER(scroll), s_progressLog );
+      gtk_box_pack_start( GTK_BOX(vbox), scroll, TRUE, TRUE, 0 );
+
+      /* Cancel button */
+      GtkWidget * btnBox = gtk_box_new( GTK_ORIENTATION_HORIZONTAL, 0 );
+      gtk_box_pack_start( GTK_BOX(vbox), btnBox, FALSE, FALSE, 0 );
+      GtkWidget * cancelBtn = gtk_button_new_with_label( "Cancel" );
+      g_signal_connect( cancelBtn, "clicked", G_CALLBACK(on_progress_cancel), NULL );
+      gtk_box_pack_end( GTK_BOX(btnBox), cancelBtn, FALSE, FALSE, 0 );
+   }
 
    gtk_widget_show_all( s_progressWnd );
 
@@ -9129,6 +9258,8 @@ HB_FUNC( GTK_PROGRESSCLOSE )
       s_progressWnd = NULL;
       s_progressBar = NULL;
       s_progressLabel = NULL;
+      s_progressLog = NULL;
+      s_progressCancelled = 0;
 
       /* Flush events so the window disappears immediately */
       while( gtk_events_pending() ) gtk_main_iteration();

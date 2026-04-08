@@ -1,6 +1,20 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-08 (Session 20: Linux — Live build progress dialog)
+
+  PROGRESS DIALOG WITH LIVE LOG (GTK3):
+  - GTK_ProgressOpen with nSteps=0 creates an indeterminate progress dialog
+    (560x420) with GtkTextView log, dark background, monospace font, and
+    pulsing progress bar — matching macOS build output window.
+  - Cancel button sets s_progressCancelled flag; GTK_ShellExec checks it
+    and appends "*** Cancelled by user ***" to the log.
+  - GTK_ShellExec rewritten: uses popen + non-blocking read (O_NONBLOCK)
+    with gtk_events_pending()/gtk_main_iteration() pump to keep UI alive.
+    Output is appended line-by-line to the progress log with auto-scroll.
+  - EnsureHarbour now uses nSteps=0 (live log mode) for both git clone
+    and make install steps.
+
 2026-04-08 (Session 19: Linux — EnsureHarbour auto-install)
 
   HARBOUR AUTO-INSTALL (LINUX):
