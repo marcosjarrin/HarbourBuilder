@@ -2,6 +2,7 @@
 // User-facing classes: TForm, TLabel, TEdit, TButton, TCheckBox, TComboBox, TGroupBox
 
 #include "hbclass.ch"
+#include "hbide.ch"
 
 //----------------------------------------------------------------------------//
 // TControl - Base class
@@ -963,6 +964,7 @@ return ::lConnected
 
 CLASS TDBFTable INHERIT TDatabase
 
+   DATA cFileName   INIT ""        // DBF file path
    DATA cAlias      INIT ""        // Work area alias
    DATA cRDD        INIT "DBFCDX"  // RDD driver: DBFNTX, DBFCDX, DBFFPT
    DATA cIndexFile  INIT ""        // Index file (.ntx, .cdx)
@@ -1007,6 +1009,11 @@ return Self
 
 METHOD Open() CLASS TDBFTable
    local lOk := .F., nArea
+
+   // cFileName is the primary property; sync to cDatabase for TDatabase compat
+   if ! Empty( ::cFileName )
+      ::cDatabase := ::cFileName
+   endif
 
    if Empty( ::cDatabase )
       ::cLastError := "Database (file path) not specified"
@@ -1987,3 +1994,16 @@ function RPT_NewDataField( oBand, cField, nTop, nLeft, nW, nH, cFont, nFSize, lB
    if nAlign != nil; oFld:nAlignment := nAlign;  endif
    oBand:AddField( oFld )
 return oFld
+
+// Helper for COMPONENT xcommand - maps type number to class instance
+function HB_CreateComponent( nType )
+   do case
+      case nType == CT_DBFTABLE;   return TDBFTable():New()
+      case nType == CT_MYSQL;      return TMySQL():New()
+      case nType == CT_MARIADB;    return TMariaDB():New()
+      case nType == CT_POSTGRESQL; return TPostgreSQL():New()
+      case nType == CT_SQLITE;     return TSQLite():New()
+      case nType == CT_FIREBIRD;   return TFirebird():New()
+      case nType == CT_SQLSERVER;  return TSQLServer():New()
+   endcase
+return nil

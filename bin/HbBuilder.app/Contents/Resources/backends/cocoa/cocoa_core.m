@@ -291,6 +291,8 @@ void EnsureNSApp( void )
    char FClassName[32];
    char FName[64];
    char FText[256];
+   char FFileName[512];       /* Design-time file path (e.g. DBF file for TDBFTable) */
+   BOOL FActive;              /* Design-time Active flag (auto-open on form load) */
    int  FLeft, FTop, FWidth, FHeight;
    BOOL FVisible, FEnabled, FTabStop;
    int  FControlType;
@@ -578,7 +580,7 @@ void EnsureNSApp( void )
       FLeft = 0; FTop = 0; FWidth = 80; FHeight = 24;
       FVisible = YES; FEnabled = YES; FTabStop = YES;
       FControlType = 0; FView = nil; FFont = nil; FBgColor = nil;
-      FClrPane = 0xFFFFFFFF;
+      FClrPane = 0xFFFFFFFF; FFileName[0] = '\0'; FActive = NO;
       FOnClick = NULL; FOnChange = NULL; FOnInit = NULL; FOnClose = NULL;
       FCtrlParent = nil; FChildCount = 0;
       memset( FChildren, 0, sizeof(FChildren) );
@@ -755,12 +757,24 @@ void EnsureNSApp( void )
          v = sv; break;
       }
       default: {
-         /* Non-visual (Timer, Dialogs) or unknown: create a small placeholder */
-         NSTextField * tf = [[NSTextField alloc] initWithFrame:NSMakeRect(FLeft,FTop,32,32)];
-         [tf setStringValue:[NSString stringWithUTF8String:FClassName]];
-         [tf setEditable:NO]; [tf setBezeled:YES]; [tf setAlignment:NSTextAlignmentCenter];
-         NSFont * smallFont = [NSFont systemFontOfSize:7]; [tf setFont:smallFont];
-         v = tf; break;
+         /* Non-visual (Timer, Dialogs, DB components) or unknown */
+         int imgIdx = FControlType;
+         BOOL hasImage = ( s_palData && s_palData->palImages && imgIdx > 0 &&
+                           imgIdx <= (int)[s_palData->palImages count] );
+         if( hasImage ) {
+            NSImageView * iv = [[NSImageView alloc] initWithFrame:NSMakeRect(FLeft,FTop,32,32)];
+            [iv setImage:s_palData->palImages[imgIdx - 1]];
+            [iv setImageScaling:NSImageScaleProportionallyUpOrDown];
+            [iv setEditable:NO];
+            v = iv;
+         } else {
+            NSTextField * tf = [[NSTextField alloc] initWithFrame:NSMakeRect(FLeft,FTop,32,32)];
+            [tf setStringValue:[NSString stringWithUTF8String:FName[0] ? FName : FClassName]];
+            [tf setEditable:NO]; [tf setBezeled:YES]; [tf setAlignment:NSTextAlignmentCenter];
+            NSFont * smallFont = [NSFont systemFontOfSize:7]; [tf setFont:smallFont];
+            v = tf;
+         }
+         break;
       }
    }
    if( v ) {
@@ -2828,6 +2842,33 @@ HB_FUNC( UI_DROPNONVISUAL )
    strncpy( ctrl->FText, cName, sizeof(ctrl->FText) - 1 );
 
    [form addChild:ctrl];
+
+   /* Create the visual representation (bitmap icon or text fallback) */
+   if( form->FContentView ) {
+      int imgIdx = nType;
+      BOOL hasImage = ( s_palData && s_palData->palImages && imgIdx > 0 &&
+                        imgIdx <= (int)[s_palData->palImages count] );
+      if( hasImage ) {
+         NSImageView * iv = [[NSImageView alloc] initWithFrame:
+            NSMakeRect( x, y + form->FClientTop, 32, 32 )];
+         [iv setImage:s_palData->palImages[imgIdx - 1]];
+         [iv setImageScaling:NSImageScaleProportionallyUpOrDown];
+         [iv setEditable:NO];
+         ctrl->FView = (NSView *)iv;
+         [form->FContentView addSubview:iv];
+      } else {
+         NSTextField * lbl = [[NSTextField alloc] initWithFrame:
+            NSMakeRect( x, y + form->FClientTop, 32, 32 )];
+         [lbl setStringValue:[NSString stringWithUTF8String:cName]];
+         [lbl setEditable:NO]; [lbl setBezeled:YES];
+         [lbl setAlignment:NSTextAlignmentCenter];
+         [lbl setFont:[NSFont systemFontOfSize:9]];
+         [lbl setDrawsBackground:YES];
+         ctrl->FView = (NSView *)lbl;
+         [form->FContentView addSubview:lbl];
+      }
+   }
+
    RetCtrl( ctrl );
 }
 
@@ -2874,6 +2915,10 @@ HB_FUNC( UI_SETPROP )
       [(HBCheckBox *)p setChecked:hb_parl(3)];
    else if( strcasecmp(szProp,"cName")==0 && HB_ISCHAR(3) )
       strncpy( p->FName, hb_parc(3), sizeof(p->FName)-1 );
+   else if( strcasecmp(szProp,"cFileName")==0 && HB_ISCHAR(3) )
+      strncpy( p->FFileName, hb_parc(3), sizeof(p->FFileName)-1 );
+   else if( strcasecmp(szProp,"lActive")==0 )
+      p->FActive = hb_parl(3);
    else if( strcasecmp(szProp,"lSizable")==0 && p->FControlType == CT_FORM )
       ((HBForm *)p)->FSizable = hb_parl(3);
    else if( strcasecmp(szProp,"lAppBar")==0 && p->FControlType == CT_FORM )
@@ -2989,6 +3034,8 @@ HB_FUNC( UI_GETPROP )
       hb_retl( ((HBCheckBox *)p)->FChecked );
    else if( strcasecmp(szProp,"cName")==0 )      hb_retc( p->FName );
    else if( strcasecmp(szProp,"cClassName")==0 ) hb_retc( p->FClassName );
+   else if( strcasecmp(szProp,"cFileName")==0 )  hb_retc( p->FFileName );
+   else if( strcasecmp(szProp,"lActive")==0 )   hb_retl( p->FActive );
    else if( strcasecmp(szProp,"lSizable")==0 && p->FControlType==CT_FORM )
       hb_retl( ((HBForm *)p)->FSizable );
    else if( strcasecmp(szProp,"lAppBar")==0 && p->FControlType==CT_FORM )
@@ -3128,6 +3175,9 @@ HB_FUNC( UI_GETALLPROPS )
       hb_arraySetC(pRow,3,c); hb_arraySetC(pRow,4,"C"); hb_arrayAdd(pArray,pRow); hb_itemRelease(pRow);
    #define ADD_F(n,v,c) pRow=hb_itemArrayNew(4); hb_arraySetC(pRow,1,n); hb_arraySetC(pRow,2,v); \
       hb_arraySetC(pRow,3,c); hb_arraySetC(pRow,4,"F"); hb_arrayAdd(pArray,pRow); hb_itemRelease(pRow);
+   /* Path/file: shows "..." button that opens a file picker */
+   #define ADD_P(n,v,c) pRow=hb_itemArrayNew(4); hb_arraySetC(pRow,1,n); hb_arraySetC(pRow,2,v); \
+      hb_arraySetC(pRow,3,c); hb_arraySetC(pRow,4,"P"); hb_arrayAdd(pArray,pRow); hb_itemRelease(pRow);
    /* Dropdown: value stored as "index|opt0|opt1|opt2|..." */
    #define ADD_D(n,v,opts,c) { char _db[512]; snprintf(_db,sizeof(_db),"%d|%s",v,opts); \
       pRow=hb_itemArrayNew(4); hb_arraySetC(pRow,1,n); hb_arraySetC(pRow,2,_db); \
@@ -3182,6 +3232,9 @@ HB_FUNC( UI_GETALLPROPS )
       case CT_COMBOBOX:
          ADD_N("nItemIndex",((HBComboBox*)p)->FItemIndex,"Data");
          ADD_N("nItemCount",((HBComboBox*)p)->FItemCount,"Data"); break;
+      case CT_DBFTABLE:
+         ADD_P("cFileName",p->FFileName,"Data");
+         ADD_L("lActive",p->FActive,"Data"); break;
    }
    hb_itemReturnRelease(pArray);
 }

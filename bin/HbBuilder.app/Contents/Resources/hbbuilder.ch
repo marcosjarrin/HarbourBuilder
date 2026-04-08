@@ -5,6 +5,7 @@
 #define _IDECOMMANDS_CH
 
 #include "hbclass.ch"
+#include "hbide.ch"
 
 // BorderStyle constants (C++Builder TFormBorderStyle)
 #define bsNone           0
@@ -274,5 +275,9 @@
 #xcommand REPORT PREVIEW <oRpt> => <oRpt>:Preview()
 
 #xcommand REPORT PRINT <oRpt> => <oRpt>:Print()
+
+// Non-visual component (used in generated CreateForm code)
+#xcommand COMPONENT <oVar> TYPE <nType> OF <oParent> => ;
+   <oVar> := HB_CreateComponent( <nType> )
 
 #endif

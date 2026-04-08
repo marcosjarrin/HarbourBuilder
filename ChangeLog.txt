@@ -1,6 +1,38 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-08 (Session 27: macOS — Non-visual components: DBFTable support)
+
+  COMPONENT FRAMEWORK:
+  - Added COMPONENT xcommand to hbbuilder.ch for non-visual component
+    instantiation in generated form code (was IDE-only string, not compilable)
+  - Added HB_CreateComponent() helper mapping CT_* type IDs to class constructors
+  - Added CT_* numeric defines to hbide.ch (CT_DBFTABLE, CT_MYSQL, CT_TIMER, etc.)
+    mirroring C-side constants for use in Harbour code
+  - Code generator now emits CT_DBFTABLE instead of numeric 53 in COMPONENT lines
+  - hbbuilder.ch now includes hbide.ch; hbide.ch copied to app bundle for user projects
+
+  DBFTABLE COMPONENT:
+  - Added cFileName property (DATA) to TDBFTable class — primary file path property
+  - TDBFTable:Open() syncs cFileName to cDatabase for TDatabase compatibility
+  - Added lActive property — when .T., generates ::oDBFTable1:Open() in CreateForm()
+    (C++Builder TTable Active pattern: auto-open table on form load)
+  - Code generator emits :cFileName and :Open() lines for DBFTable components
+  - Form loader parses :cFileName, :cDatabase (backward compat), and :Open() lines
+
+  INSPECTOR:
+  - Added 'P' (path/file) property type with "..." button that opens NSOpenPanel
+  - cFileName shows file picker filtered to .dbf files
+  - lActive shows as checkbox in Data category
+  - Fixed InsBuildRows to handle 'P' type (was missing, value not displayed)
+  - Fixed willDisplayCell to show "..." button for 'P' type
+
+  DESIGNER — NON-VISUAL ICONS:
+  - UI_DropNonVisual now creates NSImageView with palette bitmap when form is visible
+  - createViewInParent default case uses palette bitmap for non-visual components
+    (previously only showed text label fallback)
+  - Components loaded from disk now display proper palette icons
+
 2026-04-08 (Session 26: macOS — Cross-file autocomplete + method hints)
 
   EDITOR — AUTOCOMPLETE:

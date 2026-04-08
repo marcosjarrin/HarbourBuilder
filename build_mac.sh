@@ -167,6 +167,7 @@ cp -R "$PROJDIR/resources/menu_icons" "$APP/Contents/Resources/" 2>/dev/null
 # Copy Harbour source files needed for building user projects
 cp "$PROJDIR/source/core/classes.prg" "$APP/Contents/Resources/" 2>/dev/null
 cp "$PROJDIR/include/hbbuilder.ch" "$APP/Contents/Resources/" 2>/dev/null
+cp "$PROJDIR/include/hbide.ch" "$APP/Contents/Resources/" 2>/dev/null
 cp "$PROJDIR/source/debugger/dbgclient.prg" "$APP/Contents/Resources/" 2>/dev/null
 cp "$PROJDIR/source/debugger/dbghook.c" "$APP/Contents/Resources/" 2>/dev/null
 # Copy backends for user project compilation

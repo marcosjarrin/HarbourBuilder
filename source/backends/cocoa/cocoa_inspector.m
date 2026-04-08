@@ -210,7 +210,7 @@ static HBFontPickerTarget * s_fontTarget = nil;
    else if( [[col identifier] isEqualToString:@"button"] )
    {
       if( d->rows[nReal].bIsCat ) return @"";
-      if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' ) return @"...";
+      if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'P' ) return @"...";
       return @"";
    }
    else
@@ -349,6 +349,12 @@ static HBFontPickerTarget * s_fontTarget = nil;
       [self openDropdownForRow:nReal inTableView:tableView atRow:row];
       return NO;
    }
+   /* For path/file properties, open file picker */
+   if( d->rows[nReal].cType == 'P' && [[col identifier] isEqualToString:@"value"] )
+   {
+      [self openFilePickerForRow:nReal];
+      return NO;
+   }
    return YES;
 }
 
@@ -409,6 +415,63 @@ static HBFontPickerTarget * s_fontTarget = nil;
 
    NSFontPanel * panel = [fm fontPanel:YES];
    [panel orderFront:nil];
+}
+
+- (void)openFilePickerForRow:(int)nReal
+{
+   NSOpenPanel * panel = [NSOpenPanel openPanel];
+   [panel setCanChooseFiles:YES];
+   [panel setCanChooseDirectories:NO];
+   [panel setAllowsMultipleSelection:NO];
+   [panel setTitle:@"Select File"];
+
+   /* Set allowed file types based on property name */
+   if( strcmp( d->rows[nReal].szName, "cFileName" ) == 0 )
+   {
+      [panel setAllowedFileTypes:@[@"dbf"]];
+      [panel setTitle:@"Select DBF File"];
+   }
+
+   /* Set initial directory from current value */
+   const char * curVal = d->rows[nReal].szValue;
+   if( curVal && strlen(curVal) > 0 )
+   {
+      NSString * curPath = [NSString stringWithUTF8String:curVal];
+      NSString * dir = [curPath stringByDeletingLastPathComponent];
+      if( [[NSFileManager defaultManager] fileExistsAtPath:dir] )
+         [panel setDirectoryURL:[NSURL fileURLWithPath:dir]];
+   }
+
+   [panel beginSheetModalForWindow:d->window completionHandler:^(NSModalResponse result) {
+      if( result == NSModalResponseOK )
+      {
+         NSString * path = [[panel URL] path];
+         const char * szPath = [path UTF8String];
+         strncpy( d->rows[nReal].szValue, szPath, sizeof(d->rows[nReal].szValue) - 1 );
+         d->rows[nReal].szValue[sizeof(d->rows[nReal].szValue) - 1] = '\0';
+
+         /* Push value to the control */
+         if( d->hCtrl )
+         {
+            hb_vmPushDynSym( hb_dynsymFind( "UI_SETPROP" ) );
+            hb_vmPushNil();
+            hb_vmPushNumInt( (HB_MAXINT) d->hCtrl );
+            hb_vmPushString( d->rows[nReal].szName, strlen(d->rows[nReal].szName) );
+            hb_vmPushString( szPath, strlen(szPath) );
+            hb_vmDo( 3 );
+         }
+
+         [d->tableView reloadData];
+
+         /* Notify property changed */
+         if( d->pOnPropChanged )
+         {
+            hb_vmPushEvalSym();
+            hb_vmPush( d->pOnPropChanged );
+            hb_vmSend( 0 );
+         }
+      }
+   }];
 }
 
 - (void)openDropdownForRow:(int)nReal inTableView:(NSTableView *)tv atRow:(NSInteger)row
@@ -520,7 +583,7 @@ static HBFontPickerTarget * s_fontTarget = nil;
       /* Show "..." button for color and font properties, hide for others */
       if( [[col identifier] isEqualToString:@"button"] )
       {
-         if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' )
+         if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'P' )
          {
             [cell setTitle:@"..."];
             [cell setTransparent:NO];
@@ -597,6 +660,8 @@ static HBFontPickerTarget * s_fontTarget = nil;
             [self openColorPickerForRow:nReal];
          else if( d->rows[nReal].cType == 'F' )
             [self openFontPickerForRow:nReal];
+         else if( d->rows[nReal].cType == 'P' )
+            [self openFilePickerForRow:nReal];
       }
    }
 }
@@ -919,6 +984,8 @@ static void InsBuildRows( INSDATA * d, PHB_ITEM pArray )
          else if( d->rows[d->nRows].cType == 'F' )
             strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
          else if( d->rows[d->nRows].cType == 'D' )
+            strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
+         else if( d->rows[d->nRows].cType == 'P' )
             strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
 
          d->nRows++;

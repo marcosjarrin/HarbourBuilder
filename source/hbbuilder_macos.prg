@@ -577,7 +577,7 @@ static function RegenerateFormCode( cName, hForm )
    local i, nCount, hCtrl, cCtrlName, cCtrlClass, nType
    local nW, nH, nFL, nFT, cTitle, nClr
    local nL, nT, nCW, nCH, cText
-   local cDatas := "", cCreate := "", cEvents := ""
+   local cDatas := "", cCreate := "", cEvents := "", cVal
    local cExistingCode, aEvents, j, cEvName, cEvSuffix, cHandlerName
 
    // Read existing code to find declared event handlers
@@ -665,7 +665,17 @@ static function RegenerateFormCode( cName, hForm )
             otherwise
                if nType >= 38  // Non-visual component
                   cCreate += '   COMPONENT ::o' + cCtrlName + ' TYPE ' + ;
-                     LTrim(Str(nType)) + ' OF Self  // ' + cCtrlClass + e
+                     ComponentTypeName( nType ) + ' OF Self  // ' + cCtrlClass + e
+                  // Component-specific properties
+                  if nType == 53  // DBFTable
+                     cVal := UI_GetProp( hCtrl, "cFileName" )
+                     if ! Empty( cVal )
+                        cCreate += '   ::o' + cCtrlName + ':cFileName := "' + cVal + '"' + e
+                     endif
+                     if UI_GetProp( hCtrl, "lActive" )
+                        cCreate += '   ::o' + cCtrlName + ':Open()' + e
+                     endif
+                  endif
                else
                   cCreate += '   // ::o' + cCtrlName + ' (' + cCtrlClass + ') at ' + ;
                      LTrim(Str(nL)) + ',' + LTrim(Str(nT)) + ' SIZE ' + ;
@@ -755,7 +765,7 @@ return cCode
 // Restore visual controls on a design form by parsing the form .prg code
 static function RestoreFormFromCode( hForm, cCode )
 
-   local aLines, cLine, cTrim, i, nType
+   local aLines, cLine, cTrim, i, j, nType, nCount
    local nT, nL, nW, nH, cText, cName, hCtrl
    local nPos, nPos2, cTitle
 
@@ -814,6 +824,50 @@ static function RestoreFormFromCode( hForm, cCode )
                   hCtrl := UI_DropNonVisual( hForm, nType, cName )
                endif
             endif
+         endif
+         loop
+      endif
+
+      // Parse component property: ::oName:cFileName := "value"
+      if Left( cTrim, 3 ) == "::o" .and. ( ":cFileName" $ cTrim .or. ":cDatabase" $ cTrim ) .and. ":=" $ cTrim
+         nPos := At( ":cFileName", cTrim )
+         if nPos == 0; nPos := At( ":cDatabase", cTrim ); endif
+         if nPos > 0
+            cName := SubStr( cTrim, 4, nPos - 4 )
+            nPos2 := At( '"', cTrim )
+            if nPos2 > 0
+               cText := SubStr( cTrim, nPos2 + 1 )
+               nPos2 := At( '"', cText )
+               if nPos2 > 0
+                  cText := Left( cText, nPos2 - 1 )
+                  // Find the child control by name and set cFileName
+                  nCount := UI_GetChildCount( hForm )
+                  for j := 1 to nCount
+                     hCtrl := UI_GetChild( hForm, j )
+                     if hCtrl != 0 .and. UI_GetProp( hCtrl, "cName" ) == cName
+                        UI_SetProp( hCtrl, "cFileName", cText )
+                        exit
+                     endif
+                  next
+               endif
+            endif
+         endif
+         loop
+      endif
+
+      // Parse component method: ::oName:Open()  -> set lActive
+      if Left( cTrim, 3 ) == "::o" .and. ":Open()" $ cTrim
+         nPos := At( ":Open()", cTrim )
+         if nPos > 0
+            cName := SubStr( cTrim, 4, nPos - 4 )
+            nCount := UI_GetChildCount( hForm )
+            for j := 1 to nCount
+               hCtrl := UI_GetChild( hForm, j )
+               if hCtrl != 0 .and. UI_GetProp( hCtrl, "cName" ) == cName
+                  UI_SetProp( hCtrl, "lActive", .t. )
+                  exit
+               endif
+            next
          endif
          loop
       endif
@@ -2675,6 +2729,102 @@ static function ResPath( cFile )
       return cBundle
    endif
 return "../resources/" + cFile
+
+// Map component type number to CT_* define name for code generation
+static function ComponentTypeName( nType )
+   do case
+      case nType == 38;  return "CT_TIMER"
+      case nType == 39;  return "CT_PAINTBOX"
+      case nType == 40;  return "CT_OPENDIALOG"
+      case nType == 41;  return "CT_SAVEDIALOG"
+      case nType == 42;  return "CT_FONTDIALOG"
+      case nType == 43;  return "CT_COLORDIALOG"
+      case nType == 44;  return "CT_FINDDIALOG"
+      case nType == 45;  return "CT_REPLACEDIALOG"
+      case nType == 46;  return "CT_OPENAI"
+      case nType == 47;  return "CT_GEMINI"
+      case nType == 48;  return "CT_CLAUDE"
+      case nType == 49;  return "CT_DEEPSEEK"
+      case nType == 50;  return "CT_GROK"
+      case nType == 51;  return "CT_OLLAMA"
+      case nType == 52;  return "CT_TRANSFORMER"
+      case nType == 53;  return "CT_DBFTABLE"
+      case nType == 54;  return "CT_MYSQL"
+      case nType == 55;  return "CT_MARIADB"
+      case nType == 56;  return "CT_POSTGRESQL"
+      case nType == 57;  return "CT_SQLITE"
+      case nType == 58;  return "CT_FIREBIRD"
+      case nType == 59;  return "CT_SQLSERVER"
+      case nType == 60;  return "CT_ORACLE"
+      case nType == 61;  return "CT_MONGODB"
+      case nType == 62;  return "CT_WEBVIEW"
+      case nType == 63;  return "CT_THREAD"
+      case nType == 64;  return "CT_MUTEX"
+      case nType == 65;  return "CT_SEMAPHORE"
+      case nType == 66;  return "CT_CRITICALSECTION"
+      case nType == 67;  return "CT_THREADPOOL"
+      case nType == 68;  return "CT_ATOMICINT"
+      case nType == 69;  return "CT_CONDVAR"
+      case nType == 70;  return "CT_CHANNEL"
+      case nType == 71;  return "CT_WEBSERVER"
+      case nType == 72;  return "CT_WEBSOCKET"
+      case nType == 73;  return "CT_HTTPCLIENT"
+      case nType == 74;  return "CT_FTPCLIENT"
+      case nType == 75;  return "CT_SMTPCLIENT"
+      case nType == 76;  return "CT_TCPSERVER"
+      case nType == 77;  return "CT_TCPCLIENT"
+      case nType == 78;  return "CT_UDPSOCKET"
+      case nType == 79;  return "CT_BROWSE"
+      case nType == 80;  return "CT_DBGRID"
+      case nType == 81;  return "CT_DBNAVIGATOR"
+      case nType == 82;  return "CT_DBTEXT"
+      case nType == 83;  return "CT_DBEDIT"
+      case nType == 84;  return "CT_DBCOMBOBOX"
+      case nType == 85;  return "CT_DBCHECKBOX"
+      case nType == 86;  return "CT_DBIMAGE"
+      case nType == 90;  return "CT_PREPROCESSOR"
+      case nType == 91;  return "CT_SCRIPTENGINE"
+      case nType == 92;  return "CT_REPORTDESIGNER"
+      case nType == 93;  return "CT_BARCODE"
+      case nType == 94;  return "CT_PDFGENERATOR"
+      case nType == 95;  return "CT_EXCELEXPORT"
+      case nType == 96;  return "CT_AUDITLOG"
+      case nType == 97;  return "CT_PERMISSIONS"
+      case nType == 98;  return "CT_CURRENCY"
+      case nType == 99;  return "CT_TAXENGINE"
+      case nType == 100; return "CT_DASHBOARD"
+      case nType == 101; return "CT_SCHEDULER"
+      case nType == 102; return "CT_PRINTER"
+      case nType == 103; return "CT_REPORT"
+      case nType == 104; return "CT_LABELS"
+      case nType == 105; return "CT_PRINTPREVIEW"
+      case nType == 106; return "CT_PAGESETUP"
+      case nType == 107; return "CT_PRINTDIALOG"
+      case nType == 108; return "CT_REPORTVIEWER"
+      case nType == 109; return "CT_BARCODEPRINTER"
+      case nType == 110; return "CT_WHISPER"
+      case nType == 111; return "CT_EMBEDDINGS"
+      case nType == 112; return "CT_PYTHON"
+      case nType == 113; return "CT_SWIFT"
+      case nType == 114; return "CT_GO"
+      case nType == 115; return "CT_NODE"
+      case nType == 116; return "CT_RUST"
+      case nType == 117; return "CT_JAVA"
+      case nType == 118; return "CT_DOTNET"
+      case nType == 119; return "CT_LUA"
+      case nType == 120; return "CT_RUBY"
+      case nType == 121; return "CT_GITREPO"
+      case nType == 122; return "CT_GITCOMMIT"
+      case nType == 123; return "CT_GITBRANCH"
+      case nType == 124; return "CT_GITLOG"
+      case nType == 125; return "CT_GITDIFF"
+      case nType == 126; return "CT_GITREMOTE"
+      case nType == 127; return "CT_GITSTASH"
+      case nType == 128; return "CT_GITTAG"
+      case nType == 129; return "CT_GITBLAME"
+      case nType == 130; return "CT_GITMERGE"
+   endcase
+return LTrim(Str(nType))
 
 // Framework
 #include "classes.prg"
