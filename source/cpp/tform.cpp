@@ -6,7 +6,7 @@
 #include <string.h>
 /* Global dark mode flag for forms — set from Harbour via W32_SetIDEDarkMode */
 /* Defined here, declared extern in tcontrols.cpp / inspector / hbbuilder_win */
-int g_bDarkIDE = 1;
+extern "C" { int g_bDarkIDE = 1; }
 
 /* Owner-draw dark menu item data */
 struct DARKMENUITM { char szText[64]; };
