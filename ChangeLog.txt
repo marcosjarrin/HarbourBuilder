@@ -71,6 +71,24 @@ HarbourBuilder - Cross-platform visual IDE for Harbour
   - Cancel button kills the build process and appends "Cancelled by user"
     to the output, matching Win32's cancel behavior.
 
+  STANDALONE .PRG TABS (MACOS):
+  - Three tab types: forms (with designer), modules (in project), open
+    files (view-only, not persisted). Tab order: Project1.prg, forms,
+    modules, open files.
+  - TabInfo(nTab) helper returns { cType, nIndex } for routing.
+  - OnEditorTabChange routes to SwitchToForm for form tabs, no-op for
+    module/openfile tabs.
+  - Menu: "Add Module..." adds .prg to project, "Open File..." opens
+    for viewing, "Close File" removes open-file tab.
+  - .hbp format: [modules] section after forms for backwards compat.
+  - TBSave/TBOpen read/write modules from .hbp and save .prg files.
+  - Build pipeline (TBRun/TBDebugRun): modules included in hash check,
+    saved to build dir, assembled into main.prg.
+  - INS_GetAllCode includes module code for event handler detection.
+  - RemoveFromProject handles both forms and modules.
+  - CodeEditorRemoveTab(hEditor, nTab) and CodeEditorGetActiveTab(hEditor)
+    added to cocoa_editor.mm.
+
   EDITOR CLEANUP (MACOS):
   - Removed messages panel (File/Line/Type/Message table) from bottom
     of code editor. Editor now uses full space between tab bar and

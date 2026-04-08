@@ -1631,6 +1631,60 @@ HB_FUNC( CODEEDITORSELECTTAB )
    SciMsg( ed->sciView, SCI_GOTOPOS, 0, 0 );
 }
 
+/* CodeEditorRemoveTab( hEditor, nTabIndex ) — 1-based */
+HB_FUNC( CODEEDITORREMOVETAB )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   int nTab = hb_parni(2) - 1;  /* 0-based */
+   if( !ed || !ed->tabBar || nTab < 1 || nTab >= ed->nTabs ) return;
+
+   /* Save current Scintilla text before manipulating tabs */
+   if( ed->nActiveTab >= 0 && ed->nActiveTab < ed->nTabs && ed->sciView )
+   {
+      sptr_t len = SciMsg0( ed->sciView, SCI_GETLENGTH );
+      char * buf = (char *) malloc( (size_t)len + 1 );
+      SciMsg( ed->sciView, SCI_GETTEXT, (uptr_t)(len + 1), (sptr_t) buf );
+      if( ed->tabTexts[ed->nActiveTab] ) free( ed->tabTexts[ed->nActiveTab] );
+      ed->tabTexts[ed->nActiveTab] = buf;
+   }
+
+   /* Free text for removed tab */
+   if( ed->tabTexts[nTab] ) { free( ed->tabTexts[nTab] ); ed->tabTexts[nTab] = NULL; }
+
+   /* Shift remaining tabs left */
+   for( int i = nTab; i < ed->nTabs - 1; i++ )
+   {
+      strncpy( ed->tabNames[i], ed->tabNames[i+1], 63 );
+      ed->tabTexts[i] = ed->tabTexts[i+1];
+   }
+   ed->tabTexts[ed->nTabs - 1] = NULL;
+   ed->tabNames[ed->nTabs - 1][0] = 0;
+   ed->nTabs--;
+
+   /* Update segment control */
+   [ed->tabBar setSegmentCount:ed->nTabs];
+   for( int i = 0; i < ed->nTabs; i++ )
+      [ed->tabBar setLabel:[NSString stringWithUTF8String:ed->tabNames[i]] forSegment:i];
+
+   /* Adjust active tab */
+   if( ed->nActiveTab >= ed->nTabs )
+      ed->nActiveTab = ed->nTabs - 1;
+   if( ed->nActiveTab < 0 ) ed->nActiveTab = 0;
+
+   [ed->tabBar setSelectedSegment:ed->nActiveTab];
+   const char * newText = ed->tabTexts[ed->nActiveTab] ? ed->tabTexts[ed->nActiveTab] : "";
+   SciMsg( ed->sciView, SCI_SETTEXT, 0, (sptr_t) newText );
+   SciMsg( ed->sciView, SCI_EMPTYUNDOBUFFER, 0, 0 );
+}
+
+/* CodeEditorGetActiveTab( hEditor ) → nTab (1-based) */
+HB_FUNC( CODEEDITORGETACTIVETAB )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed || !ed->tabBar ) { hb_retni(0); return; }
+   hb_retni( ed->nActiveTab + 1 );
+}
+
 HB_FUNC( CODEEDITORCLEARTABS )
 {
    CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);

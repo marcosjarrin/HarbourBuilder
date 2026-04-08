@@ -29,6 +29,8 @@ static cCurrentFile  // Current file path (empty = untitled)
 // Each entry: { cName, oForm, cCode, nFormX, nFormY }
 static aForms        // Array of form entries
 static nActiveForm   // Index of active form (1-based)
+static aModules      // Array of project modules: { { cName, cCode, cFilePath }, ... }
+static aOpenFiles    // Array of open files (not in project): { { cName, cCode, cFilePath }, ... }
 static aDbgOffsets   // Debug line offsets: { {startLine, "tabName", nTabIndex, nAdj}, ... }
 static oTB2          // Debug toolbar (for highlighting Debug button)
 
@@ -44,6 +46,8 @@ function Main()
    cCurrentFile := ""
    aForms := {}
    nActiveForm := 0
+   aModules := {}
+   aOpenFiles := {}
 
    // C++Builder classic proportions scaled to current screen
    // Reference: 1024x768 -> Inspector 250px (24.4%), Bar 100px (13%)
@@ -78,8 +82,11 @@ function Main()
    DEFINE POPUP oFile PROMPT "File" OF oIDE
    MENUITEM "New Application" OF oFile ACTION TBNew()               ACCEL "n"
    MENUITEM "New Form"        OF oFile ACTION MenuNewForm()
+   MENUITEM "Add Module..."   OF oFile ACTION MenuAddModule()
    MENUSEPARATOR OF oFile
-   MENUITEM "Open..."    OF oFile ACTION TBOpen()                   ACCEL "o"
+   MENUITEM "Open Project..." OF oFile ACTION TBOpen()               ACCEL "o"
+   MENUITEM "Open File..."    OF oFile ACTION MenuOpenFile()
+   MENUITEM "Close File"      OF oFile ACTION MenuCloseFile()
    MENUITEM "Save"       OF oFile ACTION TBSave()                   ACCEL "s"
    MENUITEM "Save As..." OF oFile ACTION TBSaveAs()
    MENUSEPARATOR OF oFile
@@ -914,6 +921,23 @@ static function SaveActiveFormCode()
 
 return nil
 
+// Determine what type of tab nTab refers to: { cType, nIndex }
+// cType: "project", "form", "module", "openfile"
+static function TabInfo( nTab )
+
+   local nF := Len( aForms )
+   local nM := Len( aModules )
+
+   if nTab == 1
+      return { "project", 0 }
+   elseif nTab <= nF + 1
+      return { "form", nTab - 1 }
+   elseif nTab <= nF + nM + 1
+      return { "module", nTab - nF - 1 }
+   endif
+
+return { "openfile", nTab - nF - nM - 1 }
+
 // Get all code from editor (called from C inspector to check handler existence)
 function INS_GetAllCode()
 
@@ -923,6 +947,9 @@ function INS_GetAllCode()
    for i := 1 to Len( aForms )
       cAll += aForms[i][3]  // Form code from memory
       cAll += CodeEditorGetTabText( hCodeEditor, i + 1 )  // Editor tab
+   next
+   for i := 1 to Len( aModules )
+      cAll += CodeEditorGetTabText( hCodeEditor, 1 + Len(aForms) + i )
    next
 
 return cAll
@@ -1198,19 +1225,20 @@ static function SyncDesignerToCode()
 
 return nil
 
-// Editor tab changed: switch to the corresponding form
+// Editor tab changed: route to form, module, or open file
 static function OnEditorTabChange( hEd, nTab )
 
-   local nFormIdx
+   local aInfo := TabInfo( nTab )
 
-   // Tab 1 = Project1.prg (no form switch needed)
-   // Tab 2+ = Form1.prg, Form2.prg...
-   if nTab > 1
-      nFormIdx := nTab - 1
-      if nFormIdx != nActiveForm .and. nFormIdx <= Len( aForms )
-         SwitchToForm( nFormIdx )
+   do case
+   case aInfo[1] == "form"
+      if aInfo[2] != nActiveForm .and. aInfo[2] <= Len( aForms )
+         SwitchToForm( aInfo[2] )
       endif
-   endif
+   case aInfo[1] == "module" .or. aInfo[1] == "openfile"
+      // Save current form code before switching away
+      SaveActiveFormCode()
+   endcase
 
 return nil
 
@@ -1291,6 +1319,108 @@ static function MenuNewForm()
 
 return nil
 
+// Add a standalone .prg module to the project
+static function MenuAddModule()
+
+   local cFile, cName, cCode, i, nTabPos
+
+   cFile := MAC_OpenFileDialog( "Add Module to Project", "prg" )
+   if Empty( cFile ); return nil; endif
+
+   cName := SubStr( cFile, RAt( "/", cFile ) + 1 )
+   if "." $ cName
+      cName := Left( cName, At( ".", cName ) - 1 )
+   endif
+
+   // Check duplicates in forms and modules
+   for i := 1 to Len( aForms )
+      if Lower( aForms[i][1] ) == Lower( cName )
+         MsgInfo( cName + " is already in the project (as a form)" )
+         return nil
+      endif
+   next
+   for i := 1 to Len( aModules )
+      if Lower( aModules[i][1] ) == Lower( cName )
+         MsgInfo( cName + " is already in the project (as a module)" )
+         return nil
+      endif
+   next
+
+   cCode := hb_MemoRead( cFile )
+   if Empty( cCode )
+      cCode := "// " + cName + ".prg" + Chr(10)
+   endif
+
+   AAdd( aModules, { cName, cCode, cFile } )
+
+   nTabPos := 1 + Len( aForms ) + Len( aModules )
+   CodeEditorAddTab( hCodeEditor, cName + ".prg" )
+   CodeEditorSetTabText( hCodeEditor, nTabPos, cCode )
+   CodeEditorSelectTab( hCodeEditor, nTabPos )
+
+return nil
+
+// Open a .prg file for viewing/editing (not added to project)
+static function MenuOpenFile()
+
+   local cFile, cName, cCode, i, nTabPos
+
+   cFile := MAC_OpenFileDialog( "Open File", "prg" )
+   if Empty( cFile ); return nil; endif
+
+   cName := SubStr( cFile, RAt( "/", cFile ) + 1 )
+   if "." $ cName
+      cName := Left( cName, At( ".", cName ) - 1 )
+   endif
+
+   // Check if already open
+   for i := 1 to Len( aOpenFiles )
+      if Lower( aOpenFiles[i][3] ) == Lower( cFile )
+         CodeEditorSelectTab( hCodeEditor, 1 + Len(aForms) + Len(aModules) + i )
+         return nil
+      endif
+   next
+
+   cCode := hb_MemoRead( cFile )
+   if Empty( cCode )
+      MsgInfo( "Could not read file: " + cFile )
+      return nil
+   endif
+
+   AAdd( aOpenFiles, { cName, cCode, cFile } )
+
+   nTabPos := 1 + Len( aForms ) + Len( aModules ) + Len( aOpenFiles )
+   CodeEditorAddTab( hCodeEditor, cName + ".prg" )
+   CodeEditorSetTabText( hCodeEditor, nTabPos, cCode )
+   CodeEditorSelectTab( hCodeEditor, nTabPos )
+
+return nil
+
+// Close the current open-file tab (only for open files, not forms/modules)
+static function MenuCloseFile()
+
+   local nTab, aInfo, nIdx
+
+   nTab := CodeEditorGetActiveTab( hCodeEditor )
+   aInfo := TabInfo( nTab )
+
+   if aInfo[1] != "openfile"
+      MsgInfo( "Only open files can be closed. Use 'Remove from Project' for forms and modules." )
+      return nil
+   endif
+
+   nIdx := aInfo[2]
+   if nIdx < 1 .or. nIdx > Len( aOpenFiles )
+      return nil
+   endif
+
+   CodeEditorRemoveTab( hCodeEditor, nTab )
+
+   ADel( aOpenFiles, nIdx )
+   ASize( aOpenFiles, Len(aOpenFiles) - 1 )
+
+return nil
+
 // View > Forms... (Shift+F12): show list dialog and switch
 static function MenuViewForms()
 
@@ -1349,6 +1479,8 @@ static function TBNew()
    next
    aForms := {}
    nActiveForm := 0
+   aModules := {}
+   aOpenFiles := {}
 
    // Calculate position for Form1
    nInsW := Int( nScreenW * 0.18 )
@@ -1388,6 +1520,7 @@ static function TBOpen()
    local cFile, cContent, cDir, cLine, aLines, i, nAns
    local cFormName, cFormCode, nFormX, nFormY
    local nInsW, nInsTop, nEditorTop, nEditorX, nEditorW, nEditorH
+   local lInModules
 
    // Ask to save current work if there are forms open
    if Len( aForms ) > 0
@@ -1421,6 +1554,8 @@ static function TBOpen()
    next
    aForms := {}
    nActiveForm := 0
+   aModules := {}
+   aOpenFiles := {}
    oDesignForm := nil
 
    // Clear editor tabs
@@ -1444,10 +1579,11 @@ static function TBOpen()
       CodeEditorSetTabText( hCodeEditor, 1, cFormCode )
    endif
 
-   // Load each form
+   // Load each form (stop at [modules] marker)
    for i := 2 to Len( aLines )
       cFormName := AllTrim( aLines[i] )
       if Empty( cFormName ); loop; endif
+      if Lower( cFormName ) == "[modules]"; exit; endif
 
       // Read form code
       cFormCode := MemoRead( cDir + cFormName + ".prg" )
@@ -1475,6 +1611,25 @@ static function TBOpen()
          { |hCtrl| OnDesignSelChange( hCtrl ) } )
       UI_FormOnComponentDrop( oDesignForm:hCpp, ;
          { |hForm, nType, nL, nT, nW, nH| OnComponentDrop( hForm, nType, nL, nT, nW, nH ) } )
+   next
+
+   // Load modules (after [modules] marker)
+   aModules := {}
+   lInModules := .F.
+   for i := 2 to Len( aLines )
+      cFormName := AllTrim( aLines[i] )
+      if Empty( cFormName ); loop; endif
+      if Lower( cFormName ) == "[modules]"
+         lInModules := .T.
+         loop
+      endif
+      if lInModules
+         cFormCode := MemoRead( cDir + cFormName + ".prg" )
+         if Empty( cFormCode ); loop; endif
+         AAdd( aModules, { cFormName, cFormCode, cDir + cFormName + ".prg" } )
+         CodeEditorAddTab( hCodeEditor, cFormName + ".prg" )
+         CodeEditorSetTabText( hCodeEditor, 1 + Len(aForms) + Len(aModules), cFormCode )
+      endif
    next
 
    // Activate first form
@@ -1515,6 +1670,12 @@ static function TBSave()
    for i := 1 to Len( aForms )
       cHbp += aForms[i][1] + Chr(10)
    next
+   if Len( aModules ) > 0
+      cHbp += "[modules]" + Chr(10)
+      for i := 1 to Len( aModules )
+         cHbp += aModules[i][1] + Chr(10)
+      next
+   endif
    MemoWrit( cCurrentFile, cHbp )
 
    // Write Project1.prg
@@ -1523,6 +1684,12 @@ static function TBSave()
    // Write each form .prg
    for i := 1 to Len( aForms )
       MemoWrit( cDir + aForms[i][1] + ".prg", aForms[i][3] )
+   next
+
+   // Write each module .prg
+   for i := 1 to Len( aModules )
+      aModules[i][2] := CodeEditorGetTabText( hCodeEditor, 1 + Len(aForms) + i )
+      MemoWrit( cDir + aModules[i][1] + ".prg", aModules[i][2] )
    next
 
 return nil
@@ -1671,6 +1838,9 @@ static function TBRun()
    for i := 1 to Len( aForms )
       cAllCode += aForms[i][3]
    next
+   for i := 1 to Len( aModules )
+      cAllCode += CodeEditorGetTabText( hCodeEditor, 1 + Len(aForms) + i )
+   next
    nHash := Len( cAllCode )
    for i := 1 to Min( Len( cAllCode ), 5000 )
       nHash := nHash + Asc( SubStr( cAllCode, i, 1 ) ) * i
@@ -1694,6 +1864,11 @@ static function TBRun()
       MemoWrit( cBuildDir + "/" + aForms[i][1] + ".prg", aForms[i][3] )
       cLog += "    " + aForms[i][1] + ".prg" + Chr(10)
    next
+   for i := 1 to Len( aModules )
+      aModules[i][2] := CodeEditorGetTabText( hCodeEditor, 1 + Len(aForms) + i )
+      MemoWrit( cBuildDir + "/" + aModules[i][1] + ".prg", aModules[i][2] )
+      cLog += "    " + aModules[i][1] + ".prg (module)" + Chr(10)
+   next
    // Copy framework files (bundle Resources/ or source tree harbour/)
    if File( HB_DirBase() + "../Resources/classes.prg" )
       MAC_ShellExec( "cp " + HB_DirBase() + "../Resources/classes.prg " + cBuildDir + "/" )
@@ -1712,6 +1887,9 @@ static function TBRun()
                        '#include "hbbuilder.ch"', "" ) + Chr(10)
    for i := 1 to Len( aForms )
       cAllPrg += MemoRead( cBuildDir + "/" + aForms[i][1] + ".prg" ) + Chr(10)
+   next
+   for i := 1 to Len( aModules )
+      cAllPrg += MemoRead( cBuildDir + "/" + aModules[i][1] + ".prg" ) + Chr(10)
    next
    MemoWrit( cBuildDir + "/main.prg", cAllPrg )
 
@@ -2357,54 +2535,54 @@ return nil
 // === Add/Remove from Project ===
 
 static function AddToProject()
-   local cFile := MAC_OpenFileDialog( "Add File to Project", "prg" )
-   local cName, cCode, i
-   if Empty( cFile ); return nil; endif
-   cName := SubStr( cFile, RAt( "/", cFile ) + 1 )
-   if "." $ cName
-      cName := Left( cName, At( ".", cName ) - 1 )
-   endif
-   for i := 1 to Len( aForms )
-      if Lower( aForms[i][1] ) == Lower( cName )
-         MsgInfo( cName + " is already in the project" )
-         return nil
-      endif
-   next
-   cCode := hb_MemoRead( cFile )
-   if Empty( cCode )
-      cCode := "// " + cName + ".prg" + Chr(10)
-   endif
-   CodeEditorAddTab( hCodeEditor, cName + ".prg" )
-   CodeEditorSetTabText( hCodeEditor, Len(aForms) + 2, cCode )
-   CodeEditorSelectTab( hCodeEditor, Len(aForms) + 2 )
-   CodeEditorSetTabText( hCodeEditor, 1, GenerateProjectCode() )
+   MenuAddModule()
 return nil
 
 static function RemoveFromProject()
+
    local aNames := {}, i, nSel
-   if Len( aForms ) <= 1
-      MsgInfo( "Cannot remove the last form" )
+
+   for i := 1 to Len( aForms )
+      AAdd( aNames, aForms[i][1] + ".prg (Form)" )
+   next
+   for i := 1 to Len( aModules )
+      AAdd( aNames, aModules[i][1] + ".prg (Module)" )
+   next
+
+   if Len( aNames ) == 0
+      MsgInfo( "No items to remove" )
       return nil
    endif
-   for i := 1 to Len( aForms )
-      AAdd( aNames, aForms[i][1] + ".prg" )
-   next
+
    nSel := MAC_SelectFromList( "Remove from Project", aNames )
-   if nSel > 0 .and. nSel <= Len( aForms )
+   if nSel < 1; return nil; endif
+
+   if nSel <= Len( aForms )
+      // Removing a form
+      if Len( aForms ) <= 1 .and. Len( aModules ) == 0
+         MsgInfo( "Cannot remove the last item from the project" )
+         return nil
+      endif
       aForms[nSel][2]:Destroy()
+      CodeEditorRemoveTab( hCodeEditor, nSel + 1 )
       ADel( aForms, nSel )
       ASize( aForms, Len(aForms) - 1 )
       if nActiveForm > Len( aForms )
-         nActiveForm := Len( aForms )
+         nActiveForm := Max( Len( aForms ), 1 )
       endif
-      CodeEditorClearTabs( hCodeEditor )
-      CodeEditorSetTabText( hCodeEditor, 1, GenerateProjectCode() )
-      for i := 1 to Len( aForms )
-         CodeEditorAddTab( hCodeEditor, aForms[i][1] + ".prg" )
-         CodeEditorSetTabText( hCodeEditor, i + 1, aForms[i][3] )
-      next
-      SwitchToForm( nActiveForm )
+      if nActiveForm > 0 .and. Len( aForms ) > 0
+         SwitchToForm( nActiveForm )
+      endif
+   else
+      // Removing a module
+      i := nSel - Len( aForms )
+      CodeEditorRemoveTab( hCodeEditor, 1 + Len(aForms) + i )
+      ADel( aModules, i )
+      ASize( aModules, Len(aModules) - 1 )
    endif
+
+   CodeEditorSetTabText( hCodeEditor, 1, GenerateProjectCode() )
+
 return nil
 
 // === Environment Options ===
