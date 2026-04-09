@@ -578,12 +578,28 @@ return nil
 
 static function OnComboSelect( nSel )
 
-   local hTarget
+   local hTarget, aMap, aEntry
 
-   if nSel == 0
-      hTarget := oDesignForm:hCpp
+   aMap := InspectorGetComboMap()
+
+   if ! Empty( aMap ) .and. nSel >= 0 .and. nSel < Len( aMap )
+      aEntry := aMap[ nSel + 1 ]  // 0-based -> 1-based
+
+      if aEntry[1] == 2  // Browse column
+         // aEntry = { 2, hBrowse, nColIdx }
+         UI_FormSelectCtrl( oDesignForm:hCpp, aEntry[2] )
+         InspectorRefreshColumn( aEntry[2], aEntry[3] )
+         return nil
+      endif
+
+      // Form or control
+      hTarget := aEntry[2]
    else
-      hTarget := UI_GetChild( oDesignForm:hCpp, nSel )
+      if nSel == 0
+         hTarget := oDesignForm:hCpp
+      else
+         hTarget := UI_GetChild( oDesignForm:hCpp, nSel )
+      endif
    endif
 
    if hTarget != 0

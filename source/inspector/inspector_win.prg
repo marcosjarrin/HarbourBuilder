@@ -92,7 +92,7 @@ function InspectorPopulateCombo( hForm )
          if UI_GetType( hChild ) == 79  // CT_BROWSE
             nColCount := UI_BrowseColCount( hChild )
             for j := 1 to nColCount
-               cEntry := "  o" + cName + "Col" + LTrim( Str( j ) ) + " AS TBrwColumn"
+               cEntry := "o" + cName + "Col" + LTrim( Str( j ) ) + " AS TBrwColumn"
                INS_ComboAdd( h, cEntry )
                AAdd( aMap, { 2, hChild, j - 1 } )  // 0-based col index
             next
