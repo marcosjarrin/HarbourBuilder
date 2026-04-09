@@ -406,6 +406,8 @@ static INT_PTR CALLBACK ArrayDlgProc( HWND hDlg, UINT msg, WPARAM wParam, LPARAM
          const char * src = (const char *) lParam;
          char buf[2048] = {0};
          int i = 0;
+         RECT rc;
+         int sw, sh;
          if( src ) {
             while( *src && i < (int)sizeof(buf) - 3 ) {
                if( *src == '|' ) { buf[i++] = '\r'; buf[i++] = '\n'; }
@@ -415,6 +417,14 @@ static INT_PTR CALLBACK ArrayDlgProc( HWND hDlg, UINT msg, WPARAM wParam, LPARAM
             buf[i] = 0;
          }
          SetDlgItemTextA( hDlg, 101, buf );
+         /* Center dialog on screen */
+         GetWindowRect( hDlg, &rc );
+         sw = GetSystemMetrics( SM_CXSCREEN );
+         sh = GetSystemMetrics( SM_CYSCREEN );
+         SetWindowPos( hDlg, NULL,
+            ( sw - (rc.right - rc.left) ) / 2,
+            ( sh - (rc.bottom - rc.top) ) / 2,
+            0, 0, SWP_NOSIZE | SWP_NOZORDER );
          if( s_bDarkIDE ) {
             BOOL bDark = TRUE;
             DwmSetWindowAttribute( hDlg, DWMWA_USE_IMMERSIVE_DARK_MODE, &bDark, sizeof(bDark) );
@@ -535,6 +545,18 @@ static void InsArrayEdit( INSDATA * d, int nLVRow )
       lstrcpynA( d->rows[nReal].szValue, s_arrayResult, sizeof(d->rows[0].szValue) );
       InsApplyValue( d, nReal, s_arrayResult );
       InsRebuild( d );
+
+      /* If this was aColumns, repopulate the combo to show TBrwColumn entries */
+      if( lstrcmpiA( d->rows[nReal].szName, "aColumns" ) == 0 && d->hFormCtrl )
+      {
+         PHB_DYNS pDyn = hb_dynsymFindName( "INSPECTORPOPULATECOMBO" );
+         if( pDyn && hb_vmRequestReenter() ) {
+            hb_vmPushDynSym( pDyn ); hb_vmPushNil();
+            hb_vmPushNumInt( d->hFormCtrl );
+            hb_vmDo( 1 );
+            hb_vmRequestRestore();
+         }
+      }
    }
 }
 
@@ -1165,6 +1187,8 @@ static void InsApplyValue( INSDATA * d, int nReal, const char * szVal )
    else if( d->rows[nReal].cType == 'C' )
       hb_vmPushNumInt( (HB_MAXINT) strtoul(szVal, NULL, 10) );
    else if( d->rows[nReal].cType == 'F' )
+      hb_vmPushString( szVal, lstrlenA(szVal) );
+   else if( d->rows[nReal].cType == 'A' )
       hb_vmPushString( szVal, lstrlenA(szVal) );
    else
       hb_vmPushNil();
