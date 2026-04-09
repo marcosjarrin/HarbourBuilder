@@ -265,6 +265,7 @@ static void InsColorPick( INSDATA * d, int nLVRow );
 static void InsFontPick( INSDATA * d, int nLVRow );
 static void InsPopulateEvents( INSDATA * d );
 static void InsUpdateCombo( INSDATA * d );  /* updates combo from current rows data */
+static void InsArrayEdit( INSDATA * d, int nLVRow );
 
 static LRESULT CALLBACK InsBtnProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
@@ -281,6 +282,8 @@ static LRESULT CALLBACK InsBtnProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
          InsColorPick( d, nLV );
       else if( cType == 'F' )
          InsFontPick( d, nLV );
+      else if( cType == 'A' )
+         InsArrayEdit( d, nLV );
       return r;
    }
    return CallWindowProc( oldProc, hWnd, msg, wParam, lParam );
@@ -387,6 +390,150 @@ static void InsFontPick( INSDATA * d, int nLVRow )
       sprintf( szVal, "%s,%d", lf.lfFaceName, lf.lfHeight < 0 ? -lf.lfHeight : lf.lfHeight );
       lstrcpynA( d->rows[nReal].szValue, szVal, sizeof(d->rows[0].szValue) );
       InsApplyValue( d, nReal, szVal );
+      InsRebuild( d );
+   }
+}
+
+/* Array editor dialog: pipe-separated items in a multiline edit */
+static char s_arrayResult[2048];  /* shared buffer for dialog result */
+
+static INT_PTR CALLBACK ArrayDlgProc( HWND hDlg, UINT msg, WPARAM wParam, LPARAM lParam )
+{
+   switch( msg )
+   {
+      case WM_INITDIALOG:
+      {
+         const char * src = (const char *) lParam;
+         char buf[2048] = {0};
+         int i = 0;
+         if( src ) {
+            while( *src && i < (int)sizeof(buf) - 3 ) {
+               if( *src == '|' ) { buf[i++] = '\r'; buf[i++] = '\n'; }
+               else buf[i++] = *src;
+               src++;
+            }
+            buf[i] = 0;
+         }
+         SetDlgItemTextA( hDlg, 101, buf );
+         if( s_bDarkIDE ) {
+            BOOL bDark = TRUE;
+            DwmSetWindowAttribute( hDlg, DWMWA_USE_IMMERSIVE_DARK_MODE, &bDark, sizeof(bDark) );
+         }
+         return TRUE;
+      }
+      case WM_CTLCOLOREDIT:
+      case WM_CTLCOLORSTATIC:
+      case WM_CTLCOLORDLG:
+         if( s_bDarkIDE ) {
+            HDC hdc = (HDC) wParam;
+            static HBRUSH s_hBr = NULL;
+            if( s_hBr ) DeleteObject( s_hBr );
+            s_hBr = CreateSolidBrush( RGB(45,45,48) );
+            SetTextColor( hdc, RGB(212,212,212) );
+            SetBkColor( hdc, RGB(45,45,48) );
+            return (INT_PTR) s_hBr;
+         }
+         break;
+      case WM_COMMAND:
+         if( LOWORD(wParam) == IDOK )
+         {
+            /* Capture multiline text, convert lines to pipe-separated */
+            char szBuf[2048] = {0};
+            int len, i, o = 0;
+            GetDlgItemTextA( hDlg, 101, szBuf, sizeof(szBuf) );
+            len = (int)strlen( szBuf );
+            s_arrayResult[0] = 0;
+            for( i = 0; i < len && o < (int)sizeof(s_arrayResult) - 1; i++ )
+            {
+               if( szBuf[i] == '\r' ) continue;
+               if( szBuf[i] == '\n' ) s_arrayResult[o++] = '|';
+               else s_arrayResult[o++] = szBuf[i];
+            }
+            /* Trim trailing pipes */
+            while( o > 0 && s_arrayResult[o-1] == '|' ) o--;
+            s_arrayResult[o] = 0;
+            EndDialog( hDlg, IDOK );
+            return TRUE;
+         }
+         if( LOWORD(wParam) == IDCANCEL ) { EndDialog( hDlg, IDCANCEL ); return TRUE; }
+         break;
+      case WM_CLOSE:
+         EndDialog( hDlg, IDCANCEL );
+         return TRUE;
+   }
+   return FALSE;
+}
+
+static void InsArrayEdit( INSDATA * d, int nLVRow )
+{
+   int nReal;
+   HINSTANCE hInst = GetModuleHandle(NULL);
+   INT_PTR nRet;
+
+   /* In-memory dialog template */
+   static BYTE tplBuf[512];
+   DLGTEMPLATE * pDT = (DLGTEMPLATE *) tplBuf;
+   WORD * pw;
+   DLGITEMTEMPLATE * pDI;
+   int w = 260, h = 200;
+
+   if( nLVRow < 0 || nLVRow >= d->nVisible ) return;
+   nReal = d->map[nLVRow];
+
+   memset( tplBuf, 0, sizeof(tplBuf) );
+   pDT->style = DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU;
+   pDT->cdit = 3;
+   pDT->cx = (short)w; pDT->cy = (short)h;
+
+   pw = (WORD *)(pDT + 1);
+   *pw++ = 0; /* menu */
+   *pw++ = 0; /* class */
+   /* title: "Array Editor" as wide chars */
+   { const char * t = "Array Editor";
+     while( *t ) *pw++ = (WORD)(unsigned char)*t++;
+     *pw++ = 0; }
+
+   /* Edit control (id=101) — multiline */
+   pw = (WORD *)(((ULONG_PTR)pw + 3) & ~3);  /* align to DWORD */
+   pDI = (DLGITEMTEMPLATE *) pw;
+   pDI->style = WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN;
+   pDI->x = 8; pDI->y = 8; pDI->cx = (short)(w-16); pDI->cy = (short)(h-40);
+   pDI->id = 101;
+   pw = (WORD *)(pDI + 1);
+   *pw++ = 0xFFFF; *pw++ = 0x0081; /* Edit class */
+   *pw++ = 0; /* title */
+   *pw++ = 0; /* extra */
+
+   /* OK button */
+   pw = (WORD *)(((ULONG_PTR)pw + 3) & ~3);
+   pDI = (DLGITEMTEMPLATE *) pw;
+   pDI->style = WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON;
+   pDI->x = (short)(w-120); pDI->y = (short)(h-24); pDI->cx = 50; pDI->cy = 14;
+   pDI->id = IDOK;
+   pw = (WORD *)(pDI + 1);
+   *pw++ = 0xFFFF; *pw++ = 0x0080; /* Button class */
+   *pw++ = 'O'; *pw++ = 'K'; *pw++ = 0;
+   *pw++ = 0;
+
+   /* Cancel button */
+   pw = (WORD *)(((ULONG_PTR)pw + 3) & ~3);
+   pDI = (DLGITEMTEMPLATE *) pw;
+   pDI->style = WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON;
+   pDI->x = (short)(w-60); pDI->y = (short)(h-24); pDI->cx = 50; pDI->cy = 14;
+   pDI->id = IDCANCEL;
+   pw = (WORD *)(pDI + 1);
+   *pw++ = 0xFFFF; *pw++ = 0x0080;
+   *pw++ = 'C'; *pw++ = 'a'; *pw++ = 'n'; *pw++ = 'c'; *pw++ = 'e'; *pw++ = 'l'; *pw++ = 0;
+   *pw++ = 0;
+
+   s_arrayResult[0] = 0;
+   nRet = DialogBoxIndirectParamA( hInst, pDT, d->hWnd, ArrayDlgProc,
+      (LPARAM) d->rows[nReal].szValue );
+
+   if( nRet == IDOK )
+   {
+      lstrcpynA( d->rows[nReal].szValue, s_arrayResult, sizeof(d->rows[0].szValue) );
+      InsApplyValue( d, nReal, s_arrayResult );
       InsRebuild( d );
    }
 }
@@ -919,7 +1066,7 @@ static void InsStartEdit( INSDATA * d, int nLVRow )
       return;
    }
 
-   nBtnW = ( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' ) ? 22 : 0;
+   nBtnW = ( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'A' ) ? 22 : 0;
 
    d->hEdit = CreateWindowExA( 0, "EDIT", d->rows[nReal].szValue,
       WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, rc.left, rc.top, rc.right-rc.left-nBtnW, rc.bottom-rc.top,
@@ -931,7 +1078,7 @@ static void InsStartEdit( INSDATA * d, int nLVRow )
    d->oldEditProc = (WNDPROC) SetWindowLongPtr( d->hEdit, GWLP_WNDPROC, (LONG_PTR) InsEditProc );
 
    /* Color/Font property: add "..." button to the right */
-   if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' )
+   if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'A' )
    {
       d->hBtn = CreateWindowExA( 0, "BUTTON", "...",
          WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
@@ -1109,6 +1256,8 @@ static void InsPopulate( INSDATA * d )
             sprintf( d->rows[d->nRows].szValue, "%u", (unsigned) hb_arrayGetNInt(pRow,2) );
          else if( d->rows[d->nRows].cType == 'F' )
             lstrcpynA( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 256 );
+         else if( d->rows[d->nRows].cType == 'A' )
+            lstrcpynA( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 256 );
 
          d->nRows++;
       }
@@ -1158,7 +1307,19 @@ static void InsRebuild( INSDATA * d )
          if( !d->rows[i].bIsCat )
          {
             lvi.iSubItem = 1;
-            lvi.pszText = d->rows[i].szValue;
+            if( d->rows[i].cType == 'A' ) {
+               /* Show "(N items)" for array properties */
+               int cnt = 0;
+               if( d->rows[i].szValue[0] ) {
+                  const char * pp; cnt = 1;
+                  for( pp = d->rows[i].szValue; *pp; pp++ )
+                     if( *pp == '|' ) cnt++;
+               }
+               sprintf( buf, "(%d items)", cnt );
+               lvi.pszText = buf;
+            } else {
+               lvi.pszText = d->rows[i].szValue;
+            }
             SendMessageA( d->hList, LVM_SETITEMA, 0, (LPARAM) &lvi );
          }
          d->nVisible++;
@@ -1179,9 +1340,21 @@ static void InsRebuild( INSDATA * d )
 
          if( !d->rows[i].bIsCat )
          {
+            char szDisp[256];
+            char * pDisp = d->rows[i].szValue;
+            if( d->rows[i].cType == 'A' ) {
+               int cnt = 0;
+               if( d->rows[i].szValue[0] ) {
+                  const char * pp; cnt = 1;
+                  for( pp = d->rows[i].szValue; *pp; pp++ )
+                     if( *pp == '|' ) cnt++;
+               }
+               sprintf( szDisp, "(%d items)", cnt );
+               pDisp = szDisp;
+            }
             ListView_GetItemText( d->hList, nVis, 1, szOld, sizeof(szOld) );
-            if( lstrcmpA( szOld, d->rows[i].szValue ) != 0 )
-               ListView_SetItemText( d->hList, nVis, 1, d->rows[i].szValue );
+            if( lstrcmpA( szOld, pDisp ) != 0 )
+               ListView_SetItemText( d->hList, nVis, 1, pDisp );
          }
 
          nVis++;
@@ -1374,6 +1547,8 @@ HB_FUNC( INS_REFRESHWITHDATA )
          else if( d->rows[d->nRows].cType == 'C' )
             sprintf( d->rows[d->nRows].szValue, "%u", (unsigned) hb_arrayGetNInt(pRow,2) );
          else if( d->rows[d->nRows].cType == 'F' )
+            lstrcpynA( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 256 );
+         else if( d->rows[d->nRows].cType == 'A' )
             lstrcpynA( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 256 );
 
          d->nRows++;
