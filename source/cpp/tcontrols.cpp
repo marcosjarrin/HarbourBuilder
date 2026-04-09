@@ -1073,17 +1073,84 @@ TBrowse::TBrowse()
    FOnColumnResize = NULL;
    FDataSource = NULL;
    FDataSourceName[0] = 0;
+   FFooterWnd = NULL;
    memset( FCols, 0, sizeof(FCols) );
 }
 
 TBrowse::~TBrowse()
 {
+   if( FFooterWnd ) { DestroyWindow( FFooterWnd ); FFooterWnd = NULL; }
    #define RELB(e) if( e ) { hb_itemRelease( e ); e = NULL; }
    RELB(FOnCellClick);   RELB(FOnCellDblClick); RELB(FOnHeaderClick);
    RELB(FOnSort);        RELB(FOnScroll);        RELB(FOnCellEdit);
    RELB(FOnCellPaint);   RELB(FOnRowSelect);     RELB(FOnKeyDown);
    RELB(FOnColumnResize); RELB(FDataSource);
    #undef RELB
+}
+
+/* Footer bar WndProc — paints column footer texts */
+static LRESULT CALLBACK BrowseFooterProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
+{
+   TBrowse * br = (TBrowse *) GetWindowLongPtr( hWnd, GWLP_USERDATA );
+   if( msg == WM_PAINT && br )
+   {
+      PAINTSTRUCT ps;
+      HDC hDC = BeginPaint( hWnd, &ps );
+      RECT rc;
+      int i, x;
+      HFONT hFont = (HFONT) SendMessage( br->FHandle, WM_GETFONT, 0, 0 );
+      HFONT hOld = hFont ? (HFONT) SelectObject( hDC, hFont ) : NULL;
+      HBRUSH hBg;
+      HPEN hPen;
+
+      GetClientRect( hWnd, &rc );
+
+      /* Background: light gray */
+      hBg = CreateSolidBrush( RGB(240, 240, 240) );
+      FillRect( hDC, &rc, hBg );
+      DeleteObject( hBg );
+
+      /* Top border line */
+      hPen = CreatePen( PS_SOLID, 1, RGB(200, 200, 200) );
+      SelectObject( hDC, hPen );
+      MoveToEx( hDC, 0, 0, NULL );
+      LineTo( hDC, rc.right, 0 );
+      DeleteObject( hPen );
+
+      SetBkMode( hDC, TRANSPARENT );
+      SetTextColor( hDC, RGB(60, 60, 60) );
+
+      /* Draw each column footer aligned with ListView columns */
+      x = 0;
+      for( i = 0; i < br->FColCount; i++ )
+      {
+         int cw = (int) SendMessageA( br->FHandle, LVM_GETCOLUMNWIDTH, i, 0 );
+         if( br->FCols[i].szFooterText[0] )
+         {
+            RECT rcCol;
+            rcCol.left = x + 4;
+            rcCol.top = 2;
+            rcCol.right = x + cw - 2;
+            rcCol.bottom = rc.bottom;
+            DrawTextA( hDC, br->FCols[i].szFooterText, -1, &rcCol,
+               DT_SINGLELINE | DT_VCENTER | DT_LEFT | DT_NOPREFIX );
+         }
+         /* Column separator */
+         hPen = CreatePen( PS_SOLID, 1, RGB(210, 210, 210) );
+         SelectObject( hDC, hPen );
+         MoveToEx( hDC, x + cw - 1, 2, NULL );
+         LineTo( hDC, x + cw - 1, rc.bottom );
+         DeleteObject( hPen );
+
+         x += cw;
+      }
+
+      if( hOld ) SelectObject( hDC, hOld );
+      EndPaint( hWnd, &ps );
+      return 0;
+   }
+   if( msg == WM_ERASEBKGND ) return 1;
+   return DefWindowProc( hWnd, msg, wParam, lParam );
 }
 
 void TBrowse::CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass )
@@ -1124,6 +1191,29 @@ void TBrowse::CreateHandle( HWND hParent )
       }
       SendMessageA( FHandle, LVM_INSERTCOLUMNA, i, (LPARAM) &lvc );
    }
+
+   /* Create footer bar below ListView */
+   {
+      static BOOL bFooterReg = FALSE;
+      HWND hParent = GetParent( FHandle );
+      if( !bFooterReg ) {
+         WNDCLASSA wc = {0};
+         wc.lpfnWndProc = BrowseFooterProc;
+         wc.hInstance = GetModuleHandle(NULL);
+         wc.lpszClassName = "HBBrowseFooter";
+         wc.hCursor = LoadCursor( NULL, IDC_ARROW );
+         RegisterClassA( &wc );
+         bFooterReg = TRUE;
+      }
+      FFooterWnd = CreateWindowExA( 0, "HBBrowseFooter", NULL,
+         WS_CHILD | WS_VISIBLE,
+         FLeft, FTop + FHeight - FFooterHeight, FWidth, FFooterHeight,
+         hParent, NULL, GetModuleHandle(NULL), NULL );
+      SetWindowLongPtr( FFooterWnd, GWLP_USERDATA, (LONG_PTR) this );
+      /* Shrink ListView to make room for footer */
+      SetWindowPos( FHandle, NULL, FLeft, FTop, FWidth, FHeight - FFooterHeight,
+         SWP_NOZORDER );
+   }
 }
 
 int TBrowse::AddColumn( const char * szTitle, const char * szField, int nWidth, int nAlign )
@@ -1147,7 +1237,16 @@ int TBrowse::AddColumn( const char * szTitle, const char * szField, int nWidth, 
 void TBrowse::SetFooterText( int nCol, const char * szText )
 {
    if( nCol >= 0 && nCol < FColCount )
+   {
       lstrcpynA( FCols[nCol].szFooterText, szText, 64 );
+      UpdateFooter();
+   }
+}
+
+void TBrowse::UpdateFooter()
+{
+   if( FFooterWnd )
+      InvalidateRect( FFooterWnd, NULL, TRUE );
 }
 
 void TBrowse::SetCellText( int nRow, int nCol, const char * szText )

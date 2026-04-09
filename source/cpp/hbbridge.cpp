@@ -650,6 +650,7 @@ HB_FUNC( UI_BROWSESETCOLPROP )
    else if( lstrcmpiA( szProp, "cFooterText" ) == 0 && HB_ISCHAR(4) )
    {
       lstrcpynA( br->FCols[nCol].szFooterText, hb_parc(4), 64 );
+      br->UpdateFooter();
    }
 }
 

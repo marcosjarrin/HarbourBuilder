@@ -838,6 +838,7 @@ public:
    PHB_ITEM     FOnColumnResize;
    PHB_ITEM     FDataSource;    /* block that returns data for virtual mode */
    char         FDataSourceName[64]; /* name of data component for code gen */
+   HWND         FFooterWnd;   /* footer bar below ListView */
 
    TBrowse();
    virtual ~TBrowse();
@@ -848,6 +849,7 @@ public:
    void SetCellText( int nRow, int nCol, const char * szText );
    const char * GetCellText( int nRow, int nCol );
    void Refresh();
+   void UpdateFooter();
    const PROPDESC * GetPropDescs( int * pnCount );
 };
 
