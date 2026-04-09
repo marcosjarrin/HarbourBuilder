@@ -858,9 +858,9 @@ static function RegenerateFormCode( cName, hForm )
                endif
          endcase
 
-         // nClrPane for any control (CLR_INVALID = 4294967295 = default/inherit)
+         // nClrPane for any control (CLR_INVALID = -1 on 32-bit or 4294967295 on 64-bit)
          nCtrlClr := UI_GetProp( hCtrl, "nClrPane" )
-         if nCtrlClr != 4294967295 .and. nCtrlClr != 0
+         if nCtrlClr != -1 .and. nCtrlClr != 4294967295 .and. nCtrlClr > 0
             cCreate += '   ::o' + cCtrlName + ':nClrPane := ' + LTrim( Str( nCtrlClr ) ) + e
          endif
 
@@ -2255,6 +2255,29 @@ static function TBRun()
    cAllPrg += 'HB_FUNC( UI_MSGYESNO )      { hb_retl( MessageBoxA( GetActiveWindow(), hb_parc(1), hb_parc(2) ? hb_parc(2) : "Confirm", 0x24 ) == 6 ); }' + Chr(10)
    cAllPrg += 'HB_FUNC( MAC_RUNTIMEERRORDIALOG ) { hb_retni( 0 ); }' + Chr(10)
    cAllPrg += 'HB_FUNC( MAC_APPTERMINATE )  { }' + Chr(10)
+   cAllPrg += 'HB_FUNC( W32_ERRORDIALOG ) {' + Chr(10)
+   cAllPrg += '  const char * msg = hb_parc(1);' + Chr(10)
+   cAllPrg += '  HWND hDlg, hEdit, hBtn;' + Chr(10)
+   cAllPrg += '  MSG m; HFONT hF;' + Chr(10)
+   cAllPrg += '  hDlg = CreateWindowExA(0,"STATIC","Runtime Error",' + Chr(10)
+   cAllPrg += '    WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_VISIBLE,' + Chr(10)
+   cAllPrg += '    100,100,600,400,NULL,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
+   cAllPrg += '  hF = (HFONT)GetStockObject(DEFAULT_GUI_FONT);' + Chr(10)
+   cAllPrg += '  hEdit = CreateWindowExA(WS_EX_CLIENTEDGE,"EDIT",msg,' + Chr(10)
+   cAllPrg += '    WS_CHILD|WS_VISIBLE|WS_VSCROLL|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL,' + Chr(10)
+   cAllPrg += '    8,8,576,320,hDlg,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
+   cAllPrg += '  SendMessage(hEdit,WM_SETFONT,(WPARAM)hF,TRUE);' + Chr(10)
+   cAllPrg += '  hBtn = CreateWindowExA(0,"BUTTON","OK",' + Chr(10)
+   cAllPrg += '    WS_CHILD|WS_VISIBLE|BS_DEFPUSHBUTTON,' + Chr(10)
+   cAllPrg += '    260,340,80,28,hDlg,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
+   cAllPrg += '  SendMessage(hBtn,WM_SETFONT,(WPARAM)hF,TRUE);' + Chr(10)
+   cAllPrg += '  while(GetMessage(&m,NULL,0,0)) {' + Chr(10)
+   cAllPrg += '    TranslateMessage(&m); DispatchMessage(&m);' + Chr(10)
+   cAllPrg += '    if(m.message==WM_LBUTTONUP && m.hwnd==hBtn) break;' + Chr(10)
+   cAllPrg += '    if(m.message==WM_CLOSE || m.message==WM_DESTROY) break;' + Chr(10)
+   cAllPrg += '  }' + Chr(10)
+   cAllPrg += '  DestroyWindow(hDlg);' + Chr(10)
+   cAllPrg += '}' + Chr(10)
    cAllPrg += '#pragma ENDDUMP' + Chr(10)
    MemoWrit( cBuildDir + "\main.prg", cAllPrg )
 
@@ -2775,6 +2798,29 @@ static function TBDebugRun()
    cAllPrg += 'HB_FUNC( UI_MSGYESNO )      { hb_retl( MessageBoxA( GetActiveWindow(), hb_parc(1), hb_parc(2) ? hb_parc(2) : "Confirm", 0x24 ) == 6 ); }' + Chr(10)
    cAllPrg += 'HB_FUNC( MAC_RUNTIMEERRORDIALOG ) { hb_retni( 0 ); }' + Chr(10)
    cAllPrg += 'HB_FUNC( MAC_APPTERMINATE )  { }' + Chr(10)
+   cAllPrg += 'HB_FUNC( W32_ERRORDIALOG ) {' + Chr(10)
+   cAllPrg += '  const char * msg = hb_parc(1);' + Chr(10)
+   cAllPrg += '  HWND hDlg, hEdit, hBtn;' + Chr(10)
+   cAllPrg += '  MSG m; HFONT hF;' + Chr(10)
+   cAllPrg += '  hDlg = CreateWindowExA(0,"STATIC","Runtime Error",' + Chr(10)
+   cAllPrg += '    WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_VISIBLE,' + Chr(10)
+   cAllPrg += '    100,100,600,400,NULL,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
+   cAllPrg += '  hF = (HFONT)GetStockObject(DEFAULT_GUI_FONT);' + Chr(10)
+   cAllPrg += '  hEdit = CreateWindowExA(WS_EX_CLIENTEDGE,"EDIT",msg,' + Chr(10)
+   cAllPrg += '    WS_CHILD|WS_VISIBLE|WS_VSCROLL|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL,' + Chr(10)
+   cAllPrg += '    8,8,576,320,hDlg,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
+   cAllPrg += '  SendMessage(hEdit,WM_SETFONT,(WPARAM)hF,TRUE);' + Chr(10)
+   cAllPrg += '  hBtn = CreateWindowExA(0,"BUTTON","OK",' + Chr(10)
+   cAllPrg += '    WS_CHILD|WS_VISIBLE|BS_DEFPUSHBUTTON,' + Chr(10)
+   cAllPrg += '    260,340,80,28,hDlg,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
+   cAllPrg += '  SendMessage(hBtn,WM_SETFONT,(WPARAM)hF,TRUE);' + Chr(10)
+   cAllPrg += '  while(GetMessage(&m,NULL,0,0)) {' + Chr(10)
+   cAllPrg += '    TranslateMessage(&m); DispatchMessage(&m);' + Chr(10)
+   cAllPrg += '    if(m.message==WM_LBUTTONUP && m.hwnd==hBtn) break;' + Chr(10)
+   cAllPrg += '    if(m.message==WM_CLOSE || m.message==WM_DESTROY) break;' + Chr(10)
+   cAllPrg += '  }' + Chr(10)
+   cAllPrg += '  DestroyWindow(hDlg);' + Chr(10)
+   cAllPrg += '}' + Chr(10)
    cAllPrg += '#pragma ENDDUMP' + Chr(10)
 
    MemoWrit( cBuildDir + "\debug_main.prg", cAllPrg )
@@ -7617,5 +7663,6 @@ HB_FUNC( CODEEDITORREFRESHTHEME )
 HB_FUNC( UI_MEMONEW )        { hb_retnint( 0 ); }
 HB_FUNC( MAC_RUNTIMEERRORDIALOG ) { hb_retni( 0 ); }
 HB_FUNC( MAC_APPTERMINATE )  { }
+HB_FUNC( W32_ERRORDIALOG ) { /* IDE shows errors via its own dialog */ }
 
 #pragma ENDDUMP

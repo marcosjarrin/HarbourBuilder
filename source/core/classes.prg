@@ -38,6 +38,12 @@ CLASS TControl
    ASSIGN OnChange( b ) INLINE UI_OnEvent( ::hCpp, "OnChange", b )
    ASSIGN OnClose( b )  INLINE UI_OnEvent( ::hCpp, "OnClose", b )
 
+   // Color / nClrPane (available on all controls, not just forms)
+   ACCESS Color            INLINE UI_GetProp( ::hCpp, "nClrPane" )
+   ASSIGN Color( n )       INLINE UI_SetProp( ::hCpp, "nClrPane", n )
+   ACCESS nClrPane         INLINE UI_GetProp( ::hCpp, "nClrPane" )
+   ASSIGN nClrPane( n )    INLINE UI_SetProp( ::hCpp, "nClrPane", n )
+
 ENDCLASS
 
 //----------------------------------------------------------------------------//
@@ -103,14 +109,6 @@ CLASS TForm INHERIT TControl
 
    ACCESS DoubleBuffered       INLINE UI_GetProp( ::hCpp, "lDoubleBuffered" )
    ASSIGN DoubleBuffered( l )  INLINE UI_SetProp( ::hCpp, "lDoubleBuffered", l )
-
-   DATA _nPendingClr INIT -1   // pending color to apply after activation
-
-   // Color / nClrPane
-   ACCESS Color         INLINE ::_nPendingClr
-   ASSIGN Color( n )    INLINE ::_nPendingClr := n
-   ACCESS nClrPane      INLINE ::_nPendingClr
-   ASSIGN nClrPane( n ) INLINE ::_nPendingClr := n
 
    // Transparency
    ACCESS AlphaBlend          INLINE UI_GetProp( ::hCpp, "lAlphaBlend" )
@@ -821,9 +819,13 @@ static function AppShowError( oError )
       AAdd( aOptions, "Default" )
    endif
 
-   // Show error dialog with Copy + action buttons
-   // Returns: 1=Quit, 2=Retry(if present), 3=Default(if present)
+   // Show error dialog - use platform-appropriate dialog
+   // MAC_RuntimeErrorDialog returns 0 on Windows (stub), use Win32 fallback
    nChoice := MAC_RuntimeErrorDialog( "Runtime Error", cMsg, aOptions )
+   if nChoice == 0
+      W32_ErrorDialog( cMsg )
+      nChoice := 1  // Quit
+   endif
 
    if nChoice > 1 .and. nChoice <= Len( aOptions )
       if aOptions[ nChoice ] == "Retry"
