@@ -4,6 +4,9 @@
 #include "hbclass.ch"
 #include "hbide.ch"
 
+EXTERNAL UI_STORECLRPANE
+EXTERNAL UI_HASHANDLE
+
 //----------------------------------------------------------------------------//
 // TControl - Base class
 //----------------------------------------------------------------------------//
@@ -40,11 +43,12 @@ CLASS TControl
 ENDCLASS
 
 METHOD _SetClrPane( n ) CLASS TControl
-   if ::hCpp != 0
+   ::_nPendingClr := n
+   // Only apply to C++ if handle exists (avoids crash before Activate)
+   if ::hCpp != 0 .and. UI_HasHandle( ::hCpp )
+      UI_SetProp( ::hCpp, "nClrPane", n )
+   elseif ::hCpp != 0
       UI_StoreClrPane( ::hCpp, n )
-      if UI_HasHandle( ::hCpp )
-         UI_SetProp( ::hCpp, "nClrPane", n )
-      endif
    endif
 return Self
 
@@ -112,11 +116,12 @@ CLASS TForm INHERIT TControl
    ACCESS DoubleBuffered       INLINE UI_GetProp( ::hCpp, "lDoubleBuffered" )
    ASSIGN DoubleBuffered( l )  INLINE UI_SetProp( ::hCpp, "lDoubleBuffered", l )
 
-   // Color / nClrPane — StoreClrPane is safe before HWND exists;
-   // SetProp applies live (LVM_SETBKCOLOR etc.) when HWND already exists
-   ACCESS Color   INLINE iif( ::hCpp != 0, UI_GetProp( ::hCpp, "nClrPane" ), 0 )
+   DATA _nPendingClr INIT -1   // pending color to apply after activation
+
+   // Color / nClrPane
+   ACCESS Color   INLINE iif( ::hCpp != 0, UI_GetProp( ::hCpp, "nClrPane" ), ::_nPendingClr )
    ASSIGN Color( n )    INLINE ::_SetClrPane( n )
-   ACCESS nClrPane      INLINE iif( ::hCpp != 0, UI_GetProp( ::hCpp, "nClrPane" ), 0 )
+   ACCESS nClrPane      INLINE iif( ::hCpp != 0, UI_GetProp( ::hCpp, "nClrPane" ), ::_nPendingClr )
    ASSIGN nClrPane( n ) INLINE ::_SetClrPane( n )
 
    // Transparency
