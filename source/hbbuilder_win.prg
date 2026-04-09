@@ -1553,7 +1553,7 @@ return nil
 // Restore visual controls on a design form by parsing the form .prg code
 static function RestoreFormFromCode( hForm, cCode )
 
-   local aLines, cLine, cTrim, i, nType
+   local aLines, cLine, cTrim, i, nType, kk
    local nT, nL, nW, nH, cText, cName, hCtrl, cVal
    local nPos, nPos2, cTitle
 
@@ -1704,6 +1704,21 @@ static function RestoreFormFromCode( hForm, cCode )
                if hCtrl != 0 .and. ! Empty( cVal )
                   UI_SetProp( hCtrl, "aColumns", cVal )
                endif
+            endif
+            // Extract COLSIZES n1, n2, n3
+            nPos := At( "COLSIZES ", Upper( cTrim ) )
+            if nPos > 0 .and. hCtrl != 0
+               cText := SubStr( cTrim, nPos + 9 )
+               kk := 0
+               do while ! Empty( cText )
+                  cText := LTrim( cText )
+                  if ! IsDigit( Left( cText, 1 ) ); exit; endif
+                  UI_BrowseSetColProp( hCtrl, kk, "nWidth", Val( cText ) )
+                  kk++
+                  nPos2 := At( ",", cText )
+                  if nPos2 == 0; exit; endif
+                  cText := SubStr( cText, nPos2 + 1 )
+               enddo
             endif
       endcase
 
