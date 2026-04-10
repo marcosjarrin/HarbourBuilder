@@ -65,6 +65,8 @@ typedef struct {
    /* Callbacks */
    PHB_ITEM     pOnEventDblClick;  /* double-click on event row */
    PHB_ITEM     pOnPropChanged;    /* after property edit (two-way sync) */
+   /* Browse column editing */
+   int          nBrowseCol;  /* -1 = not editing column, >= 0 = column index */
    /* Debug mode */
    int          bDebugMode;
    IROW         dbgLocalsRows[MAX_ROWS];
@@ -151,6 +153,11 @@ static void InsBuildRows( INSDATA * d, PHB_ITEM pArray )
             sprintf( d->rows[d->nRows].szValue, "%u", (unsigned) hb_arrayGetNInt(pRow,2) );
          else if( d->rows[d->nRows].cType == 'F' )
             strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
+         else if( d->rows[d->nRows].cType == 'A' )
+         {
+            /* Store raw pipe-separated value; InsRebuildStore shows "(N items)" */
+            strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
+         }
 
          d->nRows++;
       }
@@ -226,12 +233,26 @@ static void InsRebuildStore( INSDATA * d )
          }
 
          /* Events tab: not editable (double-click generates handler) */
+         /* Array/Color/Font: not inline-editable (use dialog via double-click) */
          gboolean editable = (d->nTab == 0) &&
-            (d->rows[nReal].cType != 'C' && d->rows[nReal].cType != 'F');
+            (d->rows[nReal].cType != 'C' && d->rows[nReal].cType != 'F' &&
+             d->rows[nReal].cType != 'A');
+
+         /* Array properties: display "(N items)" instead of raw pipe string */
+         const char * dispValue = d->rows[nReal].szValue;
+         char arrayDisp[32];
+         if( d->rows[nReal].cType == 'A' )
+         {
+            const char * raw = d->rows[nReal].szValue;
+            int nItems = 0;
+            if( raw[0] ) { nItems = 1; for( const char * p = raw; *p; p++ ) if( *p == '|' ) nItems++; }
+            snprintf( arrayDisp, sizeof(arrayDisp), "(%d items)  ...", nItems );
+            dispValue = arrayDisp;
+         }
 
          gtk_list_store_set( d->store, &iter,
             COL_NAME, dispName,
-            COL_VALUE, d->rows[nReal].szValue,
+            COL_VALUE, dispValue,
             COL_EDITABLE, editable,
             COL_WEIGHT, PANGO_WEIGHT_NORMAL,
             COL_BG_COLOR, hasBg ? bgColor : NULL,
@@ -248,25 +269,44 @@ static void InsRebuildStore( INSDATA * d )
 
 static void InsApplyValue( INSDATA * d, int nReal )
 {
-   PHB_DYNS pDyn = hb_dynsymFindName( "UI_SETPROP" );
-   if( !pDyn ) return;
-
-   hb_vmPushDynSym( pDyn ); hb_vmPushNil();
-   hb_vmPushNumInt( d->hCtrl );
-   hb_vmPushString( d->rows[nReal].szName, strlen(d->rows[nReal].szName) );
-
-   if( d->rows[nReal].cType == 'S' || d->rows[nReal].cType == 'F' )
-      hb_vmPushString( d->rows[nReal].szValue, strlen(d->rows[nReal].szValue) );
-   else if( d->rows[nReal].cType == 'N' )
-      hb_vmPushInteger( atoi(d->rows[nReal].szValue) );
-   else if( d->rows[nReal].cType == 'L' )
-      hb_vmPushLogical( strcasecmp(d->rows[nReal].szValue,".T.")==0 );
-   else if( d->rows[nReal].cType == 'C' )
-      hb_vmPushNumInt( (HB_MAXINT) strtoul(d->rows[nReal].szValue, NULL, 10) );
+   /* If editing a browse column, use UI_BrowseSetColProp instead of UI_SetProp */
+   if( d->nBrowseCol >= 0 )
+   {
+      PHB_DYNS pDyn = hb_dynsymFindName( "UI_BROWSESETCOLPROP" );
+      if( !pDyn ) return;
+      hb_vmPushDynSym( pDyn ); hb_vmPushNil();
+      hb_vmPushNumInt( d->hCtrl );
+      hb_vmPushInteger( d->nBrowseCol );
+      hb_vmPushString( d->rows[nReal].szName, strlen(d->rows[nReal].szName) );
+      if( d->rows[nReal].cType == 'N' )
+         hb_vmPushInteger( atoi(d->rows[nReal].szValue) );
+      else
+         hb_vmPushString( d->rows[nReal].szValue, strlen(d->rows[nReal].szValue) );
+      hb_vmDo( 4 );
+   }
    else
-      hb_vmPushNil();
+   {
+      PHB_DYNS pDyn = hb_dynsymFindName( "UI_SETPROP" );
+      if( !pDyn ) return;
 
-   hb_vmDo( 3 );
+      hb_vmPushDynSym( pDyn ); hb_vmPushNil();
+      hb_vmPushNumInt( d->hCtrl );
+      hb_vmPushString( d->rows[nReal].szName, strlen(d->rows[nReal].szName) );
+
+      if( d->rows[nReal].cType == 'S' || d->rows[nReal].cType == 'F' ||
+          d->rows[nReal].cType == 'A' )
+         hb_vmPushString( d->rows[nReal].szValue, strlen(d->rows[nReal].szValue) );
+      else if( d->rows[nReal].cType == 'N' )
+         hb_vmPushInteger( atoi(d->rows[nReal].szValue) );
+      else if( d->rows[nReal].cType == 'L' )
+         hb_vmPushLogical( strcasecmp(d->rows[nReal].szValue,".T.")==0 );
+      else if( d->rows[nReal].cType == 'C' )
+         hb_vmPushNumInt( (HB_MAXINT) strtoul(d->rows[nReal].szValue, NULL, 10) );
+      else
+         hb_vmPushNil();
+
+      hb_vmDo( 3 );
+   }
 
    /* Notify property changed (two-way sync) */
    if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) )
@@ -470,6 +510,91 @@ static void on_row_activated( GtkTreeView * treeView, GtkTreePath * path,
       return;
    }
 
+   /* Array property: open multiline editor (pipe-separated items) */
+   if( d->rows[nReal].cType == 'A' )
+   {
+      GtkWidget * dialog = gtk_dialog_new_with_buttons( "Array Editor",
+         GTK_WINDOW(d->window),
+         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+         "OK", GTK_RESPONSE_OK,
+         "Cancel", GTK_RESPONSE_CANCEL,
+         NULL );
+      gtk_window_set_default_size( GTK_WINDOW(dialog), 360, 300 );
+      gtk_window_set_position( GTK_WINDOW(dialog), GTK_WIN_POS_CENTER );
+
+      GtkWidget * content = gtk_dialog_get_content_area( GTK_DIALOG(dialog) );
+      GtkWidget * scroll = gtk_scrolled_window_new( NULL, NULL );
+      gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW(scroll),
+         GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
+
+      GtkWidget * textView = gtk_text_view_new();
+      gtk_text_view_set_monospace( GTK_TEXT_VIEW(textView), TRUE );
+      gtk_text_view_set_left_margin( GTK_TEXT_VIEW(textView), 6 );
+      gtk_text_view_set_top_margin( GTK_TEXT_VIEW(textView), 6 );
+
+      /* Convert pipe-separated to newline-separated for editing */
+      {
+         const char * raw = d->rows[nReal].szValue;
+         char buf[2048] = {0};
+         int o = 0;
+         for( const char * p = raw; *p && o < (int)sizeof(buf) - 2; p++ )
+         {
+            if( *p == '|' ) buf[o++] = '\n';
+            else buf[o++] = *p;
+         }
+         buf[o] = 0;
+         GtkTextBuffer * tbuf = gtk_text_view_get_buffer( GTK_TEXT_VIEW(textView) );
+         gtk_text_buffer_set_text( tbuf, buf, -1 );
+      }
+
+      gtk_container_add( GTK_CONTAINER(scroll), textView );
+      gtk_box_pack_start( GTK_BOX(content), scroll, TRUE, TRUE, 0 );
+      gtk_widget_show_all( content );
+
+      if( gtk_dialog_run( GTK_DIALOG(dialog) ) == GTK_RESPONSE_OK )
+      {
+         GtkTextBuffer * tbuf = gtk_text_view_get_buffer( GTK_TEXT_VIEW(textView) );
+         GtkTextIter start, end;
+         gtk_text_buffer_get_bounds( tbuf, &start, &end );
+         gchar * text = gtk_text_buffer_get_text( tbuf, &start, &end, FALSE );
+
+         /* Convert newlines back to pipes */
+         char result[256] = {0};
+         int o = 0;
+         if( text )
+         {
+            for( const char * p = text; *p && o < (int)sizeof(result) - 1; p++ )
+            {
+               if( *p == '\r' ) continue;
+               if( *p == '\n' ) result[o++] = '|';
+               else result[o++] = *p;
+            }
+            /* Trim trailing pipes */
+            while( o > 0 && result[o-1] == '|' ) o--;
+            result[o] = 0;
+            g_free( text );
+         }
+
+         strncpy( d->rows[nReal].szValue, result, 255 );
+         InsApplyValue( d, nReal );
+         InsRebuildStore( d );
+
+         /* If aColumns changed, repopulate combo to show TBrwColumn entries */
+         if( strcasecmp( d->rows[nReal].szName, "aColumns" ) == 0 && d->hFormCtrl )
+         {
+            PHB_DYNS pDyn = hb_dynsymFindName( "INSPECTORPOPULATECOMBO" );
+            if( pDyn && hb_vmRequestReenter() ) {
+               hb_vmPushDynSym( pDyn ); hb_vmPushNil();
+               hb_vmPushNumInt( d->hFormCtrl );
+               hb_vmDo( 1 );
+               hb_vmRequestRestore();
+            }
+         }
+      }
+      gtk_widget_destroy( dialog );
+      return;
+   }
+
    /* Events tab: double-click fires event handler callback */
    if( d->nTab == 1 )
    {
@@ -586,6 +711,27 @@ static HB_PTRUINT s_insData = 0;
 HB_FUNC( _INSGETDATA ) { hb_retnint( s_insData ); }
 HB_FUNC( _INSSETDATA ) { s_insData = (HB_PTRUINT) hb_parnint(1); }
 
+/* Combo map: maps combo index to { nType, hCtrl, nColIdx } */
+static PHB_ITEM s_comboMap = NULL;
+
+HB_FUNC( _INSSETCOMBOMAP ) {
+   if( s_comboMap ) hb_itemRelease( s_comboMap );
+   s_comboMap = hb_itemClone( hb_param(1, HB_IT_ARRAY) );
+}
+HB_FUNC( _INSGETCOMBOMAP ) {
+   if( s_comboMap )
+      hb_itemReturn( s_comboMap );
+   else
+      hb_reta( 0 );
+}
+
+/* INS_SetBrowseCol( hInsData, nCol ) - set column index for property editing */
+HB_FUNC( INS_SETBROWSECOL )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   if( d ) d->nBrowseCol = hb_parni(2);
+}
+
 /* ======================================================================
  * INS_Create() --> hInsData
  * ====================================================================== */
@@ -595,6 +741,7 @@ HB_FUNC( INS_CREATE )
    EnsureGTK();
 
    INSDATA * d = (INSDATA *) calloc( 1, sizeof(INSDATA) );
+   d->nBrowseCol = -1;
 
    /* Create window */
    d->window = gtk_window_new( GTK_WINDOW_TOPLEVEL );
@@ -702,6 +849,7 @@ HB_FUNC( INS_REFRESHWITHDATA )
    if( !d ) return;
 
    d->hCtrl = (HB_PTRUINT) hb_parnint(2);
+   d->nBrowseCol = -1;  /* reset; InspectorRefreshColumn sets it after */
 
    if( d->hCtrl == 0 || !pArray || hb_arrayLen(pArray) == 0 )
    {

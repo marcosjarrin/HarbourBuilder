@@ -318,15 +318,28 @@ typedef struct {
    int  FColumnWidths[16];
 } HBListView;
 
+#define MAX_BROWSE_COLS 16
+
 typedef struct {
-   HBControl base;
-   int  FReadOnly;
-   int  FGridLines;
-   int  FRowHeight;
-   int  FColumnCount;
-   char FColumns[16][64];
-   int  FColumnWidths[16];
-   char FColumnTypes[16];  /* S=string, N=number, L=logical, D=date */
+   char szTitle[64];
+   char szFieldName[64];
+   int  nWidth;
+   int  nAlign;        /* 0=left, 1=center, 2=right */
+   char szFooterText[64];
+} HBBrowseCol;
+
+typedef struct {
+   HBControl    base;
+   int          FReadOnly;
+   int          FGridLines;
+   int          FRowHeight;
+   int          FColumnCount;
+   int          FRowCount;
+   HBBrowseCol  FCols[MAX_BROWSE_COLS];
+   GtkListStore * FStore;
+   GtkWidget    * FTreeView;
+   GtkWidget    * FFooterBar;    /* GtkDrawingArea for per-column footer */
+   char         FDataSourceName[64];
 } HBBrowse;
 
 #define MAX_TOOLBTNS  64
@@ -1172,33 +1185,172 @@ static void HBPaintBox_CreateWidget( HBControl * p, GtkWidget * container )
  * Data Controls - DB-aware visual widgets
  * ====================================================================== */
 
-/* TBrowse / TDBGrid - scrollable data table */
-static void HBDBGrid_CreateWidget( HBControl * p, GtkWidget * container )
+/* Footer draw callback: renders each column's footer text aligned with
+ * the TreeView column widths, similar to Windows BrowseFooterProc. */
+static gboolean on_browse_footer_draw( GtkWidget * widget, cairo_t * cr, gpointer data )
 {
+   HBBrowse * br = (HBBrowse *)data;
+   if( !br->FTreeView ) return FALSE;
+
+   int w = gtk_widget_get_allocated_width( widget );
+   int h = gtk_widget_get_allocated_height( widget );
+   int isDark = GTK_IsDark();
+
+   /* Background */
+   if( isDark )
+      cairo_set_source_rgb( cr, 0.20, 0.20, 0.22 );
+   else
+      cairo_set_source_rgb( cr, 0.94, 0.94, 0.94 );
+   cairo_rectangle( cr, 0, 0, w, h );
+   cairo_fill( cr );
+
+   /* Top border line */
+   if( isDark )
+      cairo_set_source_rgb( cr, 0.35, 0.35, 0.35 );
+   else
+      cairo_set_source_rgb( cr, 0.78, 0.78, 0.78 );
+   cairo_move_to( cr, 0, 0.5 );
+   cairo_line_to( cr, w, 0.5 );
+   cairo_set_line_width( cr, 1.0 );
+   cairo_stroke( cr );
+
+   /* Draw each column's footer text */
+   cairo_select_font_face( cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL );
+   cairo_set_font_size( cr, 11 );
+   if( isDark )
+      cairo_set_source_rgb( cr, 0.80, 0.80, 0.80 );
+   else
+      cairo_set_source_rgb( cr, 0.23, 0.23, 0.23 );
+
+   int x = 0;
+   for( int i = 0; i < br->FColumnCount; i++ )
+   {
+      GtkTreeViewColumn * col = gtk_tree_view_get_column( GTK_TREE_VIEW(br->FTreeView), i );
+      int cw = col ? gtk_tree_view_column_get_width( col ) : 100;
+
+      if( br->FCols[i].szFooterText[0] )
+      {
+         cairo_move_to( cr, x + 4, h - 5 );
+         cairo_show_text( cr, br->FCols[i].szFooterText );
+      }
+
+      /* Column separator */
+      if( isDark )
+         cairo_set_source_rgb( cr, 0.35, 0.35, 0.35 );
+      else
+         cairo_set_source_rgb( cr, 0.82, 0.82, 0.82 );
+      cairo_move_to( cr, x + cw - 0.5, 2 );
+      cairo_line_to( cr, x + cw - 0.5, h );
+      cairo_stroke( cr );
+
+      /* Restore text color for next column */
+      if( isDark )
+         cairo_set_source_rgb( cr, 0.80, 0.80, 0.80 );
+      else
+         cairo_set_source_rgb( cr, 0.23, 0.23, 0.23 );
+
+      x += cw;
+   }
+
+   return TRUE;
+}
+
+/* TBrowse / TDBGrid - scrollable data table with dynamic columns.
+ * FStore is created eagerly in UI_BrowseNew so data can be populated before
+ * the widget exists. This function creates the GtkTreeView and attaches
+ * the already-populated store. */
+static void HBBrowse_CreateWidget( HBControl * p, GtkWidget * container )
+{
+   HBBrowse * br = (HBBrowse *)p;
+
    GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
    gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW(sw),
       GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
    gtk_scrolled_window_set_shadow_type( GTK_SCROLLED_WINDOW(sw), GTK_SHADOW_IN );
 
-   /* Default 4-column grid (user configures via code) */
-   GtkListStore * store = gtk_list_store_new( 4,
-      G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING );
-   GtkWidget * tv = gtk_tree_view_new_with_model( GTK_TREE_MODEL(store) );
-   g_object_unref( store );
-
-   GtkCellRenderer * r = gtk_cell_renderer_text_new();
-   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Field 1", r, "text", 0, NULL );
-   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Field 2", r, "text", 1, NULL );
-   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Field 3", r, "text", 2, NULL );
-   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Field 4", r, "text", 3, NULL );
-
-   gtk_tree_view_set_grid_lines( GTK_TREE_VIEW(tv), GTK_TREE_VIEW_GRID_LINES_BOTH );
-   { int c; for( c = 0; c < 4; c++ )
-      gtk_tree_view_column_set_resizable( gtk_tree_view_get_column(GTK_TREE_VIEW(tv), c), TRUE );
+   /* Create store lazily if not already created (designer path) */
+   if( !br->FStore )
+   {
+      GType types[MAX_BROWSE_COLS];
+      for( int i = 0; i < MAX_BROWSE_COLS; i++ )
+         types[i] = G_TYPE_STRING;
+      br->FStore = gtk_list_store_newv( MAX_BROWSE_COLS, types );
    }
 
-   gtk_container_add( GTK_CONTAINER(sw), tv );
-   HBGeneric_CreateWidget( p, container, sw );
+   br->FTreeView = gtk_tree_view_new_with_model( GTK_TREE_MODEL(br->FStore) );
+
+   /* Add columns from struct */
+   int nCols = br->FColumnCount > 0 ? br->FColumnCount : 0;
+   for( int i = 0; i < nCols; i++ )
+   {
+      GtkCellRenderer * r = gtk_cell_renderer_text_new();
+      float xalign = 0.0;
+      if( br->FCols[i].nAlign == 1 ) xalign = 0.5;
+      else if( br->FCols[i].nAlign == 2 ) xalign = 1.0;
+      g_object_set( r, "xalign", xalign, NULL );
+
+      GtkTreeViewColumn * col = gtk_tree_view_column_new_with_attributes(
+         br->FCols[i].szTitle, r, "text", i, NULL );
+      gtk_tree_view_column_set_resizable( col, TRUE );
+      if( br->FCols[i].nWidth > 0 )
+         gtk_tree_view_column_set_fixed_width( col, br->FCols[i].nWidth );
+      gtk_tree_view_column_set_sizing( col, GTK_TREE_VIEW_COLUMN_FIXED );
+      gtk_tree_view_append_column( GTK_TREE_VIEW(br->FTreeView), col );
+   }
+
+   /* Grid lines */
+   if( br->FGridLines )
+      gtk_tree_view_set_grid_lines( GTK_TREE_VIEW(br->FTreeView),
+         GTK_TREE_VIEW_GRID_LINES_BOTH );
+
+   /* Headers visible */
+   gtk_tree_view_set_headers_visible( GTK_TREE_VIEW(br->FTreeView), TRUE );
+
+   gtk_container_add( GTK_CONTAINER(sw), br->FTreeView );
+   gtk_widget_show( br->FTreeView );
+
+   /* Apply background color if set (default = 0xFFFFFFFF) */
+   if( br->base.FClrPane != 0xFFFFFFFF )
+   {
+      int r = br->base.FClrPane & 0xFF, g = (br->base.FClrPane >> 8) & 0xFF,
+          b = (br->base.FClrPane >> 16) & 0xFF;
+      char css[256];
+      snprintf( css, sizeof(css),
+         "treeview { background-color: #%02X%02X%02X; }"
+         "treeview:selected { background-color: @theme_selected_bg_color; }",
+         r, g, b );
+      GtkCssProvider * provider = gtk_css_provider_new();
+      gtk_css_provider_load_from_data( provider, css, -1, NULL );
+      GtkStyleContext * ctx = gtk_widget_get_style_context( br->FTreeView );
+      gtk_style_context_add_provider( ctx, GTK_STYLE_PROVIDER(provider),
+         GTK_STYLE_PROVIDER_PRIORITY_APPLICATION );
+      g_object_unref( provider );
+   }
+
+   /* Footer bar: per-column footer drawn below the TreeView.
+    * Always create the VBox wrapper so footer can be added later. */
+   GtkWidget * vbox = gtk_box_new( GTK_ORIENTATION_VERTICAL, 0 );
+   gtk_box_pack_start( GTK_BOX(vbox), sw, TRUE, TRUE, 0 );
+
+   br->FFooterBar = gtk_drawing_area_new();
+   gtk_widget_set_size_request( br->FFooterBar, -1, 22 );
+   g_signal_connect( br->FFooterBar, "draw", G_CALLBACK(on_browse_footer_draw), br );
+   gtk_box_pack_start( GTK_BOX(vbox), br->FFooterBar, FALSE, FALSE, 0 );
+
+   /* Only show footer if any column has footer text */
+   {
+      int hasFooter = 0;
+      for( int i = 0; i < nCols; i++ )
+         if( br->FCols[i].szFooterText[0] ) { hasFooter = 1; break; }
+      if( hasFooter )
+         gtk_widget_show( br->FFooterBar );
+      else
+         gtk_widget_hide( br->FFooterBar );
+   }
+
+   gtk_widget_show( sw );
+   gtk_widget_show( vbox );
+   HBGeneric_CreateWidget( p, container, vbox );
 }
 
 /* TDBNavigator - record navigation buttons */
@@ -1356,8 +1508,8 @@ static void HBControl_CreateWidget( HBControl * child, GtkWidget * fixed, const 
       /* System */
       case CT_PAINTBOX: HBPaintBox_CreateWidget( child, fixed ); break;
       /* Data Controls */
-      case CT_BROWSE:      HBDBGrid_CreateWidget( child, fixed ); break;
-      case CT_DBGRID:      HBDBGrid_CreateWidget( child, fixed ); break;
+      case CT_BROWSE:      HBBrowse_CreateWidget( child, fixed ); break;
+      case CT_DBGRID:      HBBrowse_CreateWidget( child, fixed ); break;
       case CT_DBNAVIGATOR: HBDBNavigator_CreateWidget( child, fixed ); break;
       case CT_DBTEXT:      HBDBText_CreateWidget( child, fixed ); break;
       case CT_DBEDIT:      HBDBEdit_CreateWidget( child, fixed ); break;
@@ -1519,7 +1671,27 @@ static HBControl * HBForm_CreateControlOfType( HBForm * form, int ctrlType,
          int i;
          for( i = 0; defs[i].cls; i++ ) {
             if( defs[i].type == ctrlType ) {
-               HBControl * p = (HBControl*)calloc(1,sizeof(HBControl));
+               /* Allocate the correct struct size for types with extra fields */
+               size_t sz = sizeof(HBControl);
+               switch( ctrlType ) {
+                  case CT_BROWSE: case CT_DBGRID: sz = sizeof(HBBrowse); break;
+                  case CT_LABEL:    sz = sizeof(HBLabel); break;
+                  case CT_EDIT: case CT_MASKEDIT2: case CT_LABELEDEDIT:
+                                    sz = sizeof(HBEdit); break;
+                  case CT_BUTTON: case CT_BITBTN:
+                                    sz = sizeof(HBButton); break;
+                  case CT_CHECKBOX: sz = sizeof(HBCheckBox); break;
+                  case CT_COMBOBOX: sz = sizeof(HBComboBox); break;
+                  case CT_GROUPBOX: sz = sizeof(HBGroupBox); break;
+                  case CT_LISTVIEW: sz = sizeof(HBListView); break;
+                  case CT_RICHEDIT: sz = sizeof(HBRichEdit); break;
+                  case CT_RADIO:    sz = sizeof(HBRadioButton); break;
+                  case CT_IMAGE:    sz = sizeof(HBImage); break;
+                  case CT_SHAPE:    sz = sizeof(HBShape); break;
+                  case CT_BEVEL:    sz = sizeof(HBBevel); break;
+                  /* CT_SPEEDBTN uses base HBControl */
+               }
+               HBControl * p = (HBControl*)calloc(1, sz);
                HBControl_Init(p);
                strcpy(p->FClassName, defs[i].cls);
                p->FControlType = ctrlType;
@@ -1808,6 +1980,8 @@ static void HBForm_CreateAllChildren( HBForm * form )
          case CT_BUTTON:   HBButton_CreateWidget( (HBButton *)child, form->FFixed ); break;
          case CT_CHECKBOX: HBCheckBox_CreateWidget( (HBCheckBox *)child, form->FFixed ); break;
          case CT_COMBOBOX: HBComboBox_CreateWidget( (HBComboBox *)child, form->FFixed ); break;
+         case CT_BROWSE:   HBBrowse_CreateWidget( child, form->FFixed ); break;
+         case CT_DBGRID:   HBBrowse_CreateWidget( child, form->FFixed ); break;
       }
    }
 }
@@ -2458,35 +2632,262 @@ HB_FUNC( UI_LISTVIEWADDCOLUMN )
    lv->FColumnCount++;
 }
 
+/* UI_BrowseNew( hParent, nLeft, nTop, nWidth, nHeight ) --> hCtrl
+ * Creates the GtkListStore eagerly so SetCell/SetArray can populate data
+ * before the form is activated and the TreeView widget is created. */
 HB_FUNC( UI_BROWSENEW )
 {
    HBForm * pForm = GetForm(1);
    HBBrowse * p = (HBBrowse *) calloc( 1, sizeof(HBBrowse) );
    HBControl_Init( &p->base );
    strcpy( p->base.FClassName, "TBrowse" );
-   p->base.FControlType = CT_BROWSE; p->base.FWidth = 300; p->base.FHeight = 200;
-   p->FReadOnly = 0; p->FGridLines = 1; p->FRowHeight = 22; p->FColumnCount = 0;
-   memset( p->FColumns, 0, sizeof(p->FColumns) );
-   memset( p->FColumnWidths, 0, sizeof(p->FColumnWidths) );
-   memset( p->FColumnTypes, 'S', sizeof(p->FColumnTypes) );
-   if( HB_ISNUM(2) ) p->base.FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->base.FTop = hb_parni(3);
-   if( HB_ISNUM(4) ) p->base.FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->base.FHeight = hb_parni(5);
+   p->base.FControlType = CT_BROWSE;
+   p->base.FWidth = 400; p->base.FHeight = 200;
+   p->FReadOnly = 0;
+   p->FGridLines = 1;
+   p->FRowHeight = 22;
+   p->FColumnCount = 0;
+   p->FRowCount = 0;
+   p->FTreeView = NULL;
+   p->FDataSourceName[0] = 0;
+   memset( p->FCols, 0, sizeof(p->FCols) );
+
+   /* Pre-allocate ListStore so SetCell works before widget creation */
+   EnsureGTK();
+   GType types[MAX_BROWSE_COLS];
+   for( int i = 0; i < MAX_BROWSE_COLS; i++ )
+      types[i] = G_TYPE_STRING;
+   p->FStore = gtk_list_store_newv( MAX_BROWSE_COLS, types );
+
+   if( HB_ISNUM(2) ) p->base.FLeft = hb_parni(2);
+   if( HB_ISNUM(3) ) p->base.FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->base.FWidth = hb_parni(4);
+   if( HB_ISNUM(5) ) p->base.FHeight = hb_parni(5);
    if( pForm ) HBControl_AddChild( &pForm->base, &p->base );
    KeepAlive( &p->base );
    RetCtrl( &p->base );
 }
 
+/* UI_BrowseAddCol( hBrowse, cTitle, cField, nWidth, nAlign ) --> nColIdx */
 HB_FUNC( UI_BROWSEADDCOL )
+{
+   HBControl * p = GetCtrl(1);
+   if( !p || p->FControlType != CT_BROWSE ) { hb_retni(-1); return; }
+   HBBrowse * br = (HBBrowse*)p;
+   if( br->FColumnCount >= MAX_BROWSE_COLS ) { hb_retni(-1); return; }
+
+   int idx = br->FColumnCount++;
+   if( HB_ISCHAR(2) ) strncpy( br->FCols[idx].szTitle, hb_parc(2), 63 );
+   if( HB_ISCHAR(3) ) strncpy( br->FCols[idx].szFieldName, hb_parc(3), 63 );
+   br->FCols[idx].nWidth = HB_ISNUM(4) ? hb_parni(4) : 100;
+   br->FCols[idx].nAlign = HB_ISNUM(5) ? hb_parni(5) : 0;
+   br->FCols[idx].szFooterText[0] = 0;
+
+   /* If widget already exists (live form), add column dynamically */
+   if( br->FTreeView )
+   {
+      GtkCellRenderer * r = gtk_cell_renderer_text_new();
+      float xalign = 0.0;
+      if( br->FCols[idx].nAlign == 1 ) xalign = 0.5;
+      else if( br->FCols[idx].nAlign == 2 ) xalign = 1.0;
+      g_object_set( r, "xalign", xalign, NULL );
+
+      GtkTreeViewColumn * col = gtk_tree_view_column_new_with_attributes(
+         br->FCols[idx].szTitle, r, "text", idx, NULL );
+      gtk_tree_view_column_set_resizable( col, TRUE );
+      if( br->FCols[idx].nWidth > 0 )
+         gtk_tree_view_column_set_fixed_width( col, br->FCols[idx].nWidth );
+      gtk_tree_view_column_set_sizing( col, GTK_TREE_VIEW_COLUMN_FIXED );
+      gtk_tree_view_append_column( GTK_TREE_VIEW(br->FTreeView), col );
+   }
+
+   hb_retni( idx );
+}
+
+/* UI_BrowseSetCell( hBrowse, nRow, nCol, cText ) */
+HB_FUNC( UI_BROWSESETCELL )
+{
+   HBControl * p = GetCtrl(1);
+   if( !p || p->FControlType != CT_BROWSE || !HB_ISCHAR(4) ) return;
+   HBBrowse * br = (HBBrowse*)p;
+   int nRow = hb_parni(2);
+   int nCol = hb_parni(3);
+   const char * szText = hb_parc(4);
+
+   if( !br->FStore || nCol < 0 || nCol >= br->FColumnCount ) return;
+
+   /* Ensure row exists — append empty rows as needed */
+   GtkTreeIter iter;
+   while( br->FRowCount <= nRow )
+   {
+      gtk_list_store_append( br->FStore, &iter );
+      br->FRowCount++;
+   }
+
+   /* Navigate to the target row */
+   GtkTreePath * path = gtk_tree_path_new_from_indices( nRow, -1 );
+   if( gtk_tree_model_get_iter( GTK_TREE_MODEL(br->FStore), &iter, path ) )
+      gtk_list_store_set( br->FStore, &iter, nCol, szText, -1 );
+   gtk_tree_path_free( path );
+}
+
+/* UI_BrowseGetCell( hBrowse, nRow, nCol ) --> cText */
+HB_FUNC( UI_BROWSEGETCELL )
+{
+   HBControl * p = GetCtrl(1);
+   if( !p || p->FControlType != CT_BROWSE ) { hb_retc(""); return; }
+   HBBrowse * br = (HBBrowse*)p;
+   int nRow = hb_parni(2);
+   int nCol = hb_parni(3);
+
+   if( !br->FStore || nRow < 0 || nRow >= br->FRowCount ||
+       nCol < 0 || nCol >= br->FColumnCount ) { hb_retc(""); return; }
+
+   GtkTreeIter iter;
+   GtkTreePath * path = gtk_tree_path_new_from_indices( nRow, -1 );
+   if( gtk_tree_model_get_iter( GTK_TREE_MODEL(br->FStore), &iter, path ) )
+   {
+      gchar * val = NULL;
+      gtk_tree_model_get( GTK_TREE_MODEL(br->FStore), &iter, nCol, &val, -1 );
+      hb_retc( val ? val : "" );
+      g_free( val );
+   }
+   else
+      hb_retc( "" );
+   gtk_tree_path_free( path );
+}
+
+/* UI_BrowseColCount( hBrowse ) --> nCols */
+HB_FUNC( UI_BROWSECOLCOUNT )
+{
+   HBControl * p = GetCtrl(1);
+   if( p && p->FControlType == CT_BROWSE )
+      hb_retni( ((HBBrowse*)p)->FColumnCount );
+   else
+      hb_retni( 0 );
+}
+
+/* UI_BrowseSetColProp( hBrowse, nCol, cPropName, xValue ) */
+HB_FUNC( UI_BROWSESETCOLPROP )
 {
    HBControl * p = GetCtrl(1);
    if( !p || p->FControlType != CT_BROWSE ) return;
    HBBrowse * br = (HBBrowse*)p;
-   if( br->FColumnCount >= 16 ) return;
-   if( HB_ISCHAR(2) )
-      strncpy( br->FColumns[br->FColumnCount], hb_parc(2), 63 );
-   br->FColumnWidths[br->FColumnCount] = HB_ISNUM(3) ? hb_parni(3) : 100;
-   br->FColumnTypes[br->FColumnCount] = HB_ISCHAR(4) ? hb_parc(4)[0] : 'S';
-   br->FColumnCount++;
+   int nCol = HB_ISNUM(2) ? hb_parni(2) : -1;
+   const char * szProp = HB_ISCHAR(3) ? hb_parc(3) : NULL;
+   if( nCol < 0 || nCol >= br->FColumnCount || !szProp ) return;
+
+   if( strcasecmp( szProp, "cTitle" ) == 0 && HB_ISCHAR(4) )
+   {
+      strncpy( br->FCols[nCol].szTitle, hb_parc(4), 63 );
+      if( br->FTreeView )
+      {
+         GtkTreeViewColumn * col = gtk_tree_view_get_column(
+            GTK_TREE_VIEW(br->FTreeView), nCol );
+         if( col )
+            gtk_tree_view_column_set_title( col, br->FCols[nCol].szTitle );
+      }
+   }
+   else if( strcasecmp( szProp, "nWidth" ) == 0 && HB_ISNUM(4) )
+   {
+      br->FCols[nCol].nWidth = hb_parni(4);
+      if( br->FTreeView )
+      {
+         GtkTreeViewColumn * col = gtk_tree_view_get_column(
+            GTK_TREE_VIEW(br->FTreeView), nCol );
+         if( col )
+            gtk_tree_view_column_set_fixed_width( col, br->FCols[nCol].nWidth );
+      }
+   }
+   else if( strcasecmp( szProp, "nAlign" ) == 0 && HB_ISNUM(4) )
+   {
+      br->FCols[nCol].nAlign = hb_parni(4);
+   }
+   else if( strcasecmp( szProp, "cFieldName" ) == 0 && HB_ISCHAR(4) )
+   {
+      strncpy( br->FCols[nCol].szFieldName, hb_parc(4), 63 );
+   }
+   else if( strcasecmp( szProp, "cFooterText" ) == 0 && HB_ISCHAR(4) )
+   {
+      strncpy( br->FCols[nCol].szFooterText, hb_parc(4), 63 );
+      if( br->FFooterBar )
+      {
+         /* Show footer bar if any column has footer text, hide otherwise */
+         int hasFooter = 0;
+         for( int i = 0; i < br->FColumnCount; i++ )
+            if( br->FCols[i].szFooterText[0] ) { hasFooter = 1; break; }
+         if( hasFooter )
+            gtk_widget_show( br->FFooterBar );
+         else
+            gtk_widget_hide( br->FFooterBar );
+         gtk_widget_queue_draw( br->FFooterBar );
+      }
+   }
+}
+
+/* UI_BrowseGetColProps( hBrowse, nCol ) --> aProps (same format as Windows) */
+HB_FUNC( UI_BROWSEGETCOLPROPS )
+{
+   HBControl * p = GetCtrl(1);
+   int nCol = hb_parni(2);
+   if( !p || p->FControlType != CT_BROWSE ) { hb_reta(0); return; }
+   HBBrowse * br = (HBBrowse*)p;
+   if( nCol < 0 || nCol >= br->FColumnCount ) { hb_reta(0); return; }
+
+   PHB_ITEM aResult = hb_itemArrayNew( 5 );
+   PHB_ITEM aProp;
+
+   aProp = hb_itemArrayNew( 4 );
+   hb_arraySetC( aProp, 1, "cTitle" );
+   hb_arraySetC( aProp, 2, br->FCols[nCol].szTitle );
+   hb_arraySetC( aProp, 3, "Column" );
+   hb_arraySetC( aProp, 4, "S" );
+   hb_arraySet( aResult, 1, aProp );
+   hb_itemRelease( aProp );
+
+   aProp = hb_itemArrayNew( 4 );
+   hb_arraySetC( aProp, 1, "cFieldName" );
+   hb_arraySetC( aProp, 2, br->FCols[nCol].szFieldName );
+   hb_arraySetC( aProp, 3, "Column" );
+   hb_arraySetC( aProp, 4, "S" );
+   hb_arraySet( aResult, 2, aProp );
+   hb_itemRelease( aProp );
+
+   aProp = hb_itemArrayNew( 4 );
+   hb_arraySetC( aProp, 1, "nWidth" );
+   hb_arraySetNI( aProp, 2, br->FCols[nCol].nWidth );
+   hb_arraySetC( aProp, 3, "Column" );
+   hb_arraySetC( aProp, 4, "N" );
+   hb_arraySet( aResult, 3, aProp );
+   hb_itemRelease( aProp );
+
+   aProp = hb_itemArrayNew( 4 );
+   hb_arraySetC( aProp, 1, "nAlign" );
+   hb_arraySetNI( aProp, 2, br->FCols[nCol].nAlign );
+   hb_arraySetC( aProp, 3, "Column" );
+   hb_arraySetC( aProp, 4, "N" );
+   hb_arraySet( aResult, 4, aProp );
+   hb_itemRelease( aProp );
+
+   aProp = hb_itemArrayNew( 4 );
+   hb_arraySetC( aProp, 1, "cFooterText" );
+   hb_arraySetC( aProp, 2, br->FCols[nCol].szFooterText );
+   hb_arraySetC( aProp, 3, "Column" );
+   hb_arraySetC( aProp, 4, "S" );
+   hb_arraySet( aResult, 5, aProp );
+   hb_itemRelease( aProp );
+
+   hb_itemReturnRelease( aResult );
+}
+
+/* UI_BrowseRefresh( hBrowse ) */
+HB_FUNC( UI_BROWSEREFRESH )
+{
+   HBControl * p = GetCtrl(1);
+   if( !p || p->FControlType != CT_BROWSE ) return;
+   HBBrowse * br = (HBBrowse*)p;
+   if( br->FTreeView )
+      gtk_widget_queue_draw( br->FTreeView );
 }
 
 /* --- Property access --- */
@@ -2626,6 +3027,25 @@ HB_FUNC( UI_SETPROP )
             g_object_unref( provider );
          }
       }
+      else if( p->FControlType == CT_BROWSE || p->FControlType == CT_DBGRID )
+      {
+         HBBrowse * br = (HBBrowse *)p;
+         if( br->FTreeView )
+         {
+            int r = p->FClrPane & 0xFF, g = (p->FClrPane >> 8) & 0xFF, b = (p->FClrPane >> 16) & 0xFF;
+            char css[256];
+            snprintf( css, sizeof(css),
+               "treeview { background-color: #%02X%02X%02X; }"
+               "treeview:selected { background-color: @theme_selected_bg_color; }",
+               r, g, b );
+            GtkCssProvider * provider = gtk_css_provider_new();
+            gtk_css_provider_load_from_data( provider, css, -1, NULL );
+            GtkStyleContext * ctx = gtk_widget_get_style_context( br->FTreeView );
+            gtk_style_context_add_provider( ctx, GTK_STYLE_PROVIDER(provider),
+               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION );
+            g_object_unref( provider );
+         }
+      }
    }
    else if( strcasecmp(szProp,"oFont")==0 && HB_ISCHAR(3) )
    {
@@ -2699,6 +3119,63 @@ HB_FUNC( UI_SETPROP )
    {
       if( p->FControlType == CT_BROWSE ) ((HBBrowse*)p)->FGridLines = hb_parl(3);
       else ((HBListView*)p)->FGridLines = hb_parl(3);
+   }
+   else if( strcasecmp( szProp, "cDataSource" ) == 0 && HB_ISCHAR(3) && p->FControlType == CT_BROWSE )
+      strncpy( ((HBBrowse*)p)->FDataSourceName, hb_parc(3), 63 );
+   else if( strcasecmp( szProp, "aColumns" ) == 0 && HB_ISCHAR(3) && p->FControlType == CT_BROWSE )
+   {
+      /* Parse pipe-separated column titles, rebuild FCols[] */
+      HBBrowse * br = (HBBrowse*)p;
+      const char * val = hb_parc(3);
+      int ci = 0;
+      while( *val && ci < MAX_BROWSE_COLS )
+      {
+         const char * pipe = strchr( val, '|' );
+         int len = pipe ? (int)(pipe - val) : (int)strlen(val);
+         if( len > 63 ) len = 63;
+         if( ci < br->FColumnCount )
+         {
+            /* Update existing column title */
+            memcpy( br->FCols[ci].szTitle, val, len );
+            br->FCols[ci].szTitle[len] = 0;
+         }
+         else
+         {
+            /* Add new column */
+            memset( &br->FCols[ci], 0, sizeof(HBBrowseCol) );
+            memcpy( br->FCols[ci].szTitle, val, len );
+            br->FCols[ci].szTitle[len] = 0;
+            br->FCols[ci].nWidth = 100;
+         }
+         ci++;
+         if( !pipe ) break;
+         val = pipe + 1;
+      }
+      br->FColumnCount = ci;
+      /* Update live TreeView column titles if widget exists */
+      if( br->FTreeView )
+      {
+         int existing = (int) gtk_tree_view_get_n_columns( GTK_TREE_VIEW(br->FTreeView) );
+         for( int i = 0; i < ci; i++ )
+         {
+            if( i < existing )
+            {
+               GtkTreeViewColumn * col = gtk_tree_view_get_column(
+                  GTK_TREE_VIEW(br->FTreeView), i );
+               if( col ) gtk_tree_view_column_set_title( col, br->FCols[i].szTitle );
+            }
+            else
+            {
+               GtkCellRenderer * r = gtk_cell_renderer_text_new();
+               GtkTreeViewColumn * col = gtk_tree_view_column_new_with_attributes(
+                  br->FCols[i].szTitle, r, "text", i, NULL );
+               gtk_tree_view_column_set_resizable( col, TRUE );
+               gtk_tree_view_column_set_fixed_width( col, br->FCols[i].nWidth );
+               gtk_tree_view_column_set_sizing( col, GTK_TREE_VIEW_COLUMN_FIXED );
+               gtk_tree_view_append_column( GTK_TREE_VIEW(br->FTreeView), col );
+            }
+         }
+      }
    }
 }
 
@@ -2801,6 +3278,19 @@ HB_FUNC( UI_GETPROP )
    }
    else if( strcasecmp(szProp,"nItemIndex")==0 && p->FControlType==CT_COMBOBOX )
       hb_retni( ((HBComboBox *)p)->FItemIndex );
+   else if( strcasecmp(szProp,"cDataSource")==0 && p->FControlType==CT_BROWSE )
+      hb_retc( ((HBBrowse *)p)->FDataSourceName );
+   else if( strcasecmp(szProp,"aColumns")==0 && p->FControlType==CT_BROWSE )
+   {
+      /* Return pipe-separated column titles */
+      HBBrowse * br = (HBBrowse *)p;
+      char szCols[1024] = "";
+      for( int ci = 0; ci < br->FColumnCount; ci++ ) {
+         if( ci > 0 ) strcat( szCols, "|" );
+         strncat( szCols, br->FCols[ci].szTitle, sizeof(szCols) - strlen(szCols) - 1 );
+      }
+      hb_retc( szCols );
+   }
    else if( strcasecmp(szProp,"nClrPane")==0 )   hb_retnint( (HB_MAXINT)p->FClrPane );
    else if( strcasecmp(szProp,"oFont")==0 )
    {
@@ -3041,7 +3531,23 @@ HB_FUNC( UI_GETALLPROPS )
          ADD_L("lReadOnly",br->FReadOnly,"Behavior");
          ADD_L("lGridLines",br->FGridLines,"Appearance");
          ADD_N("nRowHeight",br->FRowHeight,"Appearance");
-         ADD_N("nColumnCount",br->FColumnCount,"Data");
+         /* aColumns as "|"-separated string from column titles */
+         {
+            char szCols[1024] = "";
+            int ci;
+            for( ci = 0; ci < br->FColumnCount; ci++ ) {
+               if( ci > 0 ) strcat( szCols, "|" );
+               strncat( szCols, br->FCols[ci].szTitle, sizeof(szCols) - strlen(szCols) - 1 );
+            }
+            pRow = hb_itemArrayNew(4);
+            hb_arraySetC( pRow, 1, "aColumns" );
+            hb_arraySetC( pRow, 2, szCols );
+            hb_arraySetC( pRow, 3, "Data" );
+            hb_arraySetC( pRow, 4, "A" );
+            hb_arrayAdd( pArray, pRow );
+            hb_itemRelease( pRow );
+         }
+         ADD_S("cDataSource",br->FDataSourceName,"Data");
          break;
       }
    }
@@ -9334,5 +9840,98 @@ HB_FUNC( GTK_BUILDERRORDIALOG )
    }
 
    gtk_widget_destroy( dialog );
+}
+
+/* GTK_RuntimeErrorDialog( cTitle, cMsg, aButtons ) --> nChoice
+ * Shows runtime error text in a scrollable monospaced GtkTextView with dynamic
+ * action buttons from aButtons (e.g., {"Quit","Retry","Default"}) plus a
+ * "Copy to Clipboard" button that copies without closing.
+ * Returns the 1-based index of the pressed action button (Copy does not close).
+ * Mirrors MAC_RuntimeErrorDialog in cocoa_core.m. */
+HB_FUNC( GTK_RUNTIMEERRORDIALOG )
+{
+   const char * cTitle = HB_ISCHAR(1) ? hb_parc(1) : "Runtime Error";
+   const char * cMsg   = HB_ISCHAR(2) ? hb_parc(2) : "";
+   PHB_ITEM pButtons   = hb_param(3, HB_IT_ARRAY);
+
+   EnsureGTK();
+
+   GtkWidget * dialog = gtk_dialog_new_with_buttons( cTitle, NULL,
+      GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+      NULL );
+   gtk_window_set_default_size( GTK_WINDOW(dialog), 620, 400 );
+   gtk_window_set_position( GTK_WINDOW(dialog), GTK_WIN_POS_CENTER );
+
+   /* Add dynamic action buttons from aButtons (1-based responses) */
+   int nBtns = pButtons ? (int) hb_arrayLen( pButtons ) : 0;
+   for( int i = 1; i <= nBtns; i++ )
+      gtk_dialog_add_button( GTK_DIALOG(dialog),
+         hb_arrayGetCPtr( pButtons, i ), i );
+   if( nBtns == 0 )
+      gtk_dialog_add_button( GTK_DIALOG(dialog), "OK", 1 );
+
+   /* Copy to Clipboard button at end (response 1001, does not close) */
+   gtk_dialog_add_button( GTK_DIALOG(dialog), "Copy to Clipboard", 1001 );
+
+   GtkWidget * content = gtk_dialog_get_content_area( GTK_DIALOG(dialog) );
+
+   /* Scrolled monospaced text view — read-only, selectable */
+   GtkWidget * scroll = gtk_scrolled_window_new( NULL, NULL );
+   gtk_scrolled_window_set_policy( GTK_SCROLLED_WINDOW(scroll),
+      GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC );
+
+   GtkWidget * textView = gtk_text_view_new();
+   gtk_text_view_set_editable( GTK_TEXT_VIEW(textView), FALSE );
+   gtk_text_view_set_cursor_visible( GTK_TEXT_VIEW(textView), TRUE );
+   gtk_text_view_set_monospace( GTK_TEXT_VIEW(textView), TRUE );
+   gtk_text_view_set_wrap_mode( GTK_TEXT_VIEW(textView), GTK_WRAP_WORD_CHAR );
+   gtk_text_view_set_left_margin( GTK_TEXT_VIEW(textView), 8 );
+   gtk_text_view_set_right_margin( GTK_TEXT_VIEW(textView), 8 );
+   gtk_text_view_set_top_margin( GTK_TEXT_VIEW(textView), 8 );
+
+   GtkTextBuffer * buf = gtk_text_view_get_buffer( GTK_TEXT_VIEW(textView) );
+   gtk_text_buffer_set_text( buf, cMsg, -1 );
+
+   gtk_container_add( GTK_CONTAINER(scroll), textView );
+   gtk_box_pack_start( GTK_BOX(content), scroll, TRUE, TRUE, 0 );
+   gtk_widget_show_all( content );
+
+   /* Run modal loop — Copy button copies text without closing */
+   gint nChoice = 1;
+   int done = 0;
+   while( !done )
+   {
+      gint resp = gtk_dialog_run( GTK_DIALOG(dialog) );
+      if( resp == 1001 )
+      {
+         GtkClipboard * clip = gtk_clipboard_get( GDK_SELECTION_CLIPBOARD );
+         GtkTextIter start, end;
+         gtk_text_buffer_get_bounds( buf, &start, &end );
+         gchar * text = gtk_text_buffer_get_text( buf, &start, &end, FALSE );
+         gtk_clipboard_set_text( clip, text, -1 );
+         g_free( text );
+
+         GtkWidget * copyBtn = gtk_dialog_get_widget_for_response( GTK_DIALOG(dialog), 1001 );
+         if( copyBtn )
+            gtk_button_set_label( GTK_BUTTON(copyBtn), "Copied!" );
+      }
+      else
+      {
+         /* Action button (1-based) or window closed (GTK_RESPONSE_DELETE_EVENT = -4) */
+         nChoice = ( resp >= 1 && resp <= nBtns ) ? resp : 1;
+         done = 1;
+      }
+   }
+
+   gtk_widget_destroy( dialog );
+   hb_retni( nChoice );
+}
+
+/* GTK_AppTerminate() — cleanly shut down the GTK main loop and exit.
+ * Mirrors MAC_AppTerminate. Called from AppShowError after user chooses Quit. */
+HB_FUNC( GTK_APPTERMINATE )
+{
+   if( gtk_main_level() > 0 )
+      gtk_main_quit();
 }
 

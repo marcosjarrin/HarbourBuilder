@@ -51,7 +51,8 @@ return nil
 // Populate combo with all controls from the design form
 function InspectorPopulateCombo( hForm )
    local h := _InsGetData()
-   local i, nCount, hChild, cName, cClass, cEntry
+   local i, j, nCount, nColCount, hChild, cName, cClass, cEntry
+   local aMap
 
    if h == 0 .or. hForm == 0
       return nil
@@ -59,15 +60,17 @@ function InspectorPopulateCombo( hForm )
 
    INS_ComboClear( h )
    INS_SetFormCtrl( h, hForm )
+   aMap := {}
 
-   // Add the form itself
+   // Add the form itself: "oForm1 AS TForm1"
    cName  := UI_GetProp( hForm, "cName" )
    cClass := UI_GetProp( hForm, "cClassName" )
    if Empty( cName ); cName := "Form1"; endif
-   cEntry := cName + " AS " + cClass
+   cEntry := "o" + cName + " AS T" + cName
    INS_ComboAdd( h, cEntry )
+   AAdd( aMap, { 0, hForm, 0 } )
 
-   // Add all child controls
+   // Add all child controls: "oButton1 AS TButton"
    nCount := UI_GetChildCount( hForm )
    for i := 1 to nCount
       hChild := UI_GetChild( hForm, i )
@@ -75,14 +78,44 @@ function InspectorPopulateCombo( hForm )
          cName  := UI_GetProp( hChild, "cName" )
          cClass := UI_GetProp( hChild, "cClassName" )
          if Empty( cName ); cName := "ctrl" + LTrim( Str( i ) ); endif
-         cEntry := cName + " AS " + cClass
+         cEntry := "o" + cName + " AS " + cClass
          INS_ComboAdd( h, cEntry )
+         AAdd( aMap, { 1, hChild, 0 } )
+
+         // If it's a Browse, add its columns as sub-entries
+         if UI_GetType( hChild ) == 79  // CT_BROWSE
+            nColCount := UI_BrowseColCount( hChild )
+            for j := 1 to nColCount
+               cEntry := "o" + cName + "Col" + LTrim( Str( j ) ) + " AS TBrwColumn"
+               INS_ComboAdd( h, cEntry )
+               AAdd( aMap, { 2, hChild, j - 1 } )  // 0-based col index
+            next
+         endif
       endif
    next
+
+   _InsSetComboMap( aMap )
 
    // Select form (first entry)
    INS_ComboSelect( h, 0 )
 
+return nil
+
+function InspectorGetComboMap()
+return _InsGetComboMap()
+
+// Refresh inspector showing column properties
+function InspectorRefreshColumn( hBrowse, nCol )
+   local h := _InsGetData()
+   local aProps
+   if h != 0 .and. hBrowse != 0
+      aProps := UI_BrowseGetColProps( hBrowse, nCol )
+      if ! Empty( aProps )
+         INS_RefreshWithData( h, hBrowse, aProps )
+         INS_SetBrowseCol( h, nCol )  // Tell inspector we're editing a column
+         INS_SetEvents( h, {} )       // Columns have no events
+      endif
+   endif
 return nil
 
 function InspectorClose()

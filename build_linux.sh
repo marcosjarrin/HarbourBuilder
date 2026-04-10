@@ -69,15 +69,14 @@ fi
 
 # [1/6] Harbour -> C (only if .prg changed)
 if needs_rebuild "${PROG}.prg" "${PROG}.c" || \
-   needs_rebuild "$PROJDIR/source/common/classes.prg" "${PROG}.c" || \
+   needs_rebuild "$PROJDIR/source/core/classes.prg" "${PROG}.c" || \
    needs_rebuild "$PROJDIR/source/inspector/inspector_gtk.prg" "${PROG}.c" || \
    needs_rebuild "$PROJDIR/include/hbbuilder.ch" "${PROG}.c"; then
    echo "[1/6] Compiling ${PROG}.prg..."
    "$HBBIN/harbour" ${PROG}.prg -n -w -q \
       -I"$HBINC" \
       -I"$PROJDIR/include" \
-      -I"$PROJDIR/source/common" \
-      -I"$PROJDIR/source/inspector" \
+      -I"$PROJDIR/source" \
       -o${PROG}.c
    NEED_LINK=1
 else

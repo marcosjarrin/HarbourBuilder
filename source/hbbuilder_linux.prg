@@ -489,12 +489,28 @@ return nil
 
 static function OnComboSelect( nSel )
 
-   local hTarget
+   local hTarget, aMap, aEntry
 
-   if nSel == 0
-      hTarget := oDesignForm:hCpp
+   aMap := InspectorGetComboMap()
+
+   if ! Empty( aMap ) .and. nSel >= 0 .and. nSel < Len( aMap )
+      aEntry := aMap[ nSel + 1 ]  // 0-based -> 1-based
+
+      if aEntry[1] == 2  // Browse column
+         // aEntry = { 2, hBrowse, nColIdx }
+         UI_FormSelectCtrl( oDesignForm:hCpp, aEntry[2] )
+         InspectorRefreshColumn( aEntry[2], aEntry[3] )
+         return nil
+      endif
+
+      // Form or control
+      hTarget := aEntry[2]
    else
-      hTarget := UI_GetChild( oDesignForm:hCpp, nSel )
+      if nSel == 0
+         hTarget := oDesignForm:hCpp
+      else
+         hTarget := UI_GetChild( oDesignForm:hCpp, nSel )
+      endif
    endif
 
    if hTarget != 0
@@ -569,6 +585,7 @@ static function RegenerateFormCode( cName, hForm )
    local nL, nT, nCW, nCH, cText
    local cDatas := "", cCreate := "", cEvents := ""
    local cExistingCode, aEvents, j, cEvName, cEvSuffix, cHandlerName
+   local cVal, aHdrs, kk, nColCount, aColProps, nColW, nCtrlClr
 
    // Read existing code to find declared event handlers
    cExistingCode := ""
@@ -633,11 +650,65 @@ static function RegenerateFormCode( cName, hForm )
                cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
                   ' GROUPBOX ::o' + cCtrlName + ' PROMPT "' + cText + '" OF Self SIZE ' + ;
                   LTrim(Str(nCW)) + ", " + LTrim(Str(nCH)) + e
+            case nType == 79  // Browse
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' BROWSE ::o' + cCtrlName + ' OF Self SIZE ' + ;
+                  LTrim(Str(nCW)) + ", " + LTrim(Str(nCH))
+               cVal := UI_GetProp( hCtrl, "aColumns" )
+               if ! Empty( cVal )
+                  aHdrs := hb_ATokens( cVal, "|" )
+                  cCreate += ' HEADERS '
+                  for kk := 1 to Len( aHdrs )
+                     if kk > 1; cCreate += ', '; endif
+                     cCreate += '"' + AllTrim( aHdrs[kk] ) + '"'
+                  next
+               endif
+               nColCount := UI_BrowseColCount( hCtrl )
+               if nColCount > 0
+                  cCreate += ' COLSIZES '
+                  for kk := 1 to nColCount
+                     if kk > 1; cCreate += ', '; endif
+                     aColProps := UI_BrowseGetColProps( hCtrl, kk - 1 )
+                     nColW := 100
+                     if Len( aColProps ) >= 3; nColW := aColProps[3][2]; endif
+                     cCreate += LTrim( Str( nColW ) )
+                  next
+                  // Emit FOOTERS if any column has footer text
+                  cVal := ""
+                  for kk := 1 to nColCount
+                     aColProps := UI_BrowseGetColProps( hCtrl, kk - 1 )
+                     if Len( aColProps ) >= 5 .and. ! Empty( aColProps[5][2] )
+                        cVal := "x"  // flag: has footers
+                        exit
+                     endif
+                  next
+                  if ! Empty( cVal )
+                     cCreate += ' FOOTERS '
+                     for kk := 1 to nColCount
+                        if kk > 1; cCreate += ', '; endif
+                        aColProps := UI_BrowseGetColProps( hCtrl, kk - 1 )
+                        cVal := ""
+                        if Len( aColProps ) >= 5; cVal := aColProps[5][2]; endif
+                        cCreate += '"' + cVal + '"'
+                     next
+                  endif
+               endif
+               cCreate += e
+               cVal := UI_GetProp( hCtrl, "cDataSource" )
+               if ! Empty( cVal )
+                  cCreate += '   ::o' + cCtrlName + ':cDataSource := "' + cVal + '"' + e
+               endif
             otherwise
                cCreate += '   // ::o' + cCtrlName + ' (' + cCtrlClass + ') at ' + ;
                   LTrim(Str(nL)) + ',' + LTrim(Str(nT)) + ' SIZE ' + ;
                   LTrim(Str(nCW)) + ',' + LTrim(Str(nCH)) + e
          endcase
+
+         // Emit nClrPane if non-default (default = 0xFFFFFFFF = 4294967295)
+         nCtrlClr := UI_GetProp( hCtrl, "nClrPane" )
+         if nCtrlClr != 4294967295 .and. nCtrlClr != 0
+            cCreate += '   ::o' + cCtrlName + ':nClrPane := ' + LTrim( Str( nCtrlClr ) ) + e
+         endif
 
          // Scan for event handlers matching this control
          // Pattern: METHOD ControlName + EventSuffix (e.g. Button1Click)
@@ -1142,7 +1213,7 @@ static function RestoreFormFromCode( hForm, cCode )
 
    local aLines, cLine, cTrim, i, nType
    local nT, nL, nW, nH, cText, cName, hCtrl
-   local nPos, nPos2, cTitle
+   local nPos, nPos2, cTitle, cVal, kk
 
    if Empty( cCode ) .or. hForm == 0
       return nil
@@ -1272,11 +1343,99 @@ static function RestoreFormFromCode( hForm, cCode )
             hCtrl := UI_RadioButtonNew( hForm, cText, nL, nT, nW, nH )
          case " MEMO " $ Upper( cTrim )
             hCtrl := UI_MemoNew( hForm, "", nL, nT, nW, nH )
+         case " BROWSE " $ Upper( cTrim )
+            hCtrl := UI_BrowseNew( hForm, nL, nT, nW, nH )
+            // Extract HEADERS "col1", "col2", "col3"
+            nPos := At( "HEADERS ", Upper( cTrim ) )
+            if nPos > 0
+               cText := SubStr( cTrim, nPos + 8 )
+               cVal := ""
+               do while ! Empty( cText )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  cText := SubStr( cText, nPos2 + 1 )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  if ! Empty( cVal ); cVal += "|"; endif
+                  cVal += Left( cText, nPos2 - 1 )
+                  cText := SubStr( cText, nPos2 + 1 )
+               enddo
+               if hCtrl != 0 .and. ! Empty( cVal )
+                  UI_SetProp( hCtrl, "aColumns", cVal )
+               endif
+            endif
+            // Extract COLSIZES n1, n2, n3
+            nPos := At( "COLSIZES ", Upper( cTrim ) )
+            if nPos > 0 .and. hCtrl != 0
+               cText := SubStr( cTrim, nPos + 9 )
+               kk := 0
+               do while ! Empty( cText )
+                  cText := LTrim( cText )
+                  if ! IsDigit( Left( cText, 1 ) ); exit; endif
+                  UI_BrowseSetColProp( hCtrl, kk, "nWidth", Val( cText ) )
+                  kk++
+                  nPos2 := At( ",", cText )
+                  if nPos2 == 0; exit; endif
+                  cText := SubStr( cText, nPos2 + 1 )
+               enddo
+            endif
+            // Extract FOOTERS "text1", "text2", "text3"
+            nPos := At( "FOOTERS ", Upper( cTrim ) )
+            if nPos > 0 .and. hCtrl != 0
+               cText := SubStr( cTrim, nPos + 8 )
+               kk := 0
+               do while ! Empty( cText )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  cText := SubStr( cText, nPos2 + 1 )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  UI_BrowseSetColProp( hCtrl, kk, "cFooterText", Left( cText, nPos2 - 1 ) )
+                  kk++
+                  cText := SubStr( cText, nPos2 + 1 )
+               enddo
+            endif
       endcase
 
       // Set the control name
       if hCtrl != 0
          UI_SetProp( hCtrl, "cName", cName )
+      endif
+   next
+
+   // Second pass: apply property assignments like ::oCtrlName:prop := value
+   for i := 1 to Len( aLines )
+      cTrim := StrTran( AllTrim( aLines[i] ), Chr(13), "" )
+      if Left( cTrim, 2 ) == "//"; loop; endif
+      if ! ( Left( cTrim, 3 ) == "::o" ) .or. ! ( ":=" $ cTrim ); loop; endif
+      // Must have a second ":" for the property (::oName:prop := value)
+      nPos := At( ":", SubStr( cTrim, 4 ) )
+      if nPos == 0; loop; endif
+      cName := SubStr( cTrim, 4, nPos - 1 )
+      cText := SubStr( cTrim, 4 + nPos )
+      nPos2 := At( ":=", cText )
+      if nPos2 == 0; loop; endif
+      cVal := AllTrim( Left( cText, nPos2 - 1 ) )
+      cText := AllTrim( SubStr( cText, nPos2 + 2 ) )
+
+      // Find the control by name
+      hCtrl := 0
+      nCount := UI_GetChildCount( hForm )
+      for kk := 1 to nCount
+         if AllTrim( UI_GetProp( UI_GetChild( hForm, kk ), "cName" ) ) == cName
+            hCtrl := UI_GetChild( hForm, kk )
+            exit
+         endif
+      next
+      if hCtrl == 0; loop; endif
+
+      if cVal == "nClrPane" .or. cVal == "Color"
+         UI_SetProp( hCtrl, "nClrPane", Val( cText ) )
+      elseif cVal == "cDataSource"
+         if Left( cText, 1 ) == '"'
+            cText := SubStr( cText, 2, Len( cText ) - 2 )
+         endif
+         UI_SetProp( hCtrl, "cDataSource", cText )
       endif
    next
 
@@ -1535,8 +1694,9 @@ static function TBRun()
       MemoWrit( cBuildDir + "/" + aForms[i][1] + ".prg", aForms[i][3] )
       cLog += "    " + aForms[i][1] + ".prg" + Chr(10)
    next
-   GTK_ShellExec( "cp " + cProjDir + "/source/common/classes.prg " + cBuildDir + "/" )
+   GTK_ShellExec( "cp " + cProjDir + "/source/core/classes.prg " + cBuildDir + "/" )
    GTK_ShellExec( "cp " + cProjDir + "/include/hbbuilder.ch " + cBuildDir + "/" )
+   GTK_ShellExec( "cp " + cProjDir + "/include/hbide.ch " + cBuildDir + "/" )
 
    // Step 2: Assemble main.prg
    GTK_ProgressStep( "Assembling main.prg..." )
@@ -1689,8 +1849,9 @@ static function TBDebugRun()
       MemoWrit( cBuildDir + "/" + aForms[i][1] + ".prg", ;
          CodeEditorGetTabText( hCodeEditor, i + 1 ) )
    next
-   GTK_ShellExec( "cp " + cProjDir + "/source/common/classes.prg " + cBuildDir + "/" )
+   GTK_ShellExec( "cp " + cProjDir + "/source/core/classes.prg " + cBuildDir + "/" )
    GTK_ShellExec( "cp " + cProjDir + "/include/hbbuilder.ch " + cBuildDir + "/" )
+   GTK_ShellExec( "cp " + cProjDir + "/include/hbide.ch " + cBuildDir + "/" )
    GTK_ShellExec( "cp " + cProjDir + "/source/debugger/dbgclient.prg " + cBuildDir + "/" )
 
    // Step 2: Assemble debug_main.prg (tracking line offsets for each section)
@@ -2319,5 +2480,5 @@ function _InsGetEditorCode()
 return ""
 
 // Framework
-#include "common/classes.prg"
+#include "core/classes.prg"
 #include "inspector/inspector_gtk.prg"

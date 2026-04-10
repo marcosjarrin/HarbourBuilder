@@ -822,14 +822,18 @@ static function AppShowError( oError )
    endif
 
    // Show error dialog - use platform-appropriate dialog
-   // MAC_RuntimeErrorDialog returns 0 on Windows (stub), use Win32 fallback
-   nChoice := MAC_RuntimeErrorDialog( "Runtime Error", cMsg, aOptions )
-   if nChoice == 0
+   nChoice := 1  // default: Quit
 #ifdef __PLATFORM__WINDOWS
-      W32_ErrorDialog( cMsg )
+   // Windows: rich Win32 dialog (stack + source view)
+   W32_ErrorDialog( cMsg )
+#else
+#ifdef __PLATFORM__DARWIN
+   nChoice := MAC_RuntimeErrorDialog( "Runtime Error", cMsg, aOptions )
+#else
+   // Linux / other Unix: GTK scrollable mono dialog with Copy to Clipboard
+   nChoice := GTK_RuntimeErrorDialog( "Runtime Error", cMsg, aOptions )
 #endif
-      nChoice := 1  // Quit
-   endif
+#endif
 
    if nChoice > 1 .and. nChoice <= Len( aOptions )
       if aOptions[ nChoice ] == "Retry"
@@ -841,7 +845,13 @@ static function AppShowError( oError )
 
    // "Quit" or dialog closed — terminate the application
    ErrorLevel( 1 )
+#ifdef __PLATFORM__DARWIN
    MAC_AppTerminate()   // force NSApp terminate (ends Cocoa run loop)
+#else
+#ifndef __PLATFORM__WINDOWS
+   GTK_AppTerminate()   // force gtk_main_quit (ends GTK main loop)
+#endif
+#endif
    QUIT
 
 return .f.
