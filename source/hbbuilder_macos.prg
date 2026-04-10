@@ -601,7 +601,7 @@ static function RegenerateFormCode( cName, hForm )
    local nL, nT, nCW, nCH, cText
    local cDatas := "", cCreate := "", cEvents := "", cVal
    local cExistingCode, aEvents, j, cEvName, cEvSuffix, cHandlerName
-   local aHdrs, kk, nColCount, aColProps, nColW
+   local aHdrs, kk, nColCount, aColProps, nColW, nCtrlClr
 
    // Read existing code to find declared event handlers
    cExistingCode := ""
@@ -749,6 +749,12 @@ static function RegenerateFormCode( cName, hForm )
                endif
          endcase
 
+         // Emit nClrPane if non-default (default = 0xFFFFFFFF = 4294967295)
+         nCtrlClr := UI_GetProp( hCtrl, "nClrPane" )
+         if nCtrlClr != 4294967295 .and. nCtrlClr != 0
+            cCreate += '   ::o' + cCtrlName + ':nClrPane := ' + LTrim( Str( nCtrlClr ) ) + e
+         endif
+
          // Scan for event handlers matching this control
          aEvents := { "OnClick", "OnChange", "OnDblClick", "OnCreate", ;
                        "OnClose", "OnResize", "OnKeyDown", "OnKeyUp", ;
@@ -833,7 +839,7 @@ static function RestoreFormFromCode( hForm, cCode )
 
    local aLines, cLine, cTrim, i, j, nType, nCount
    local nT, nL, nW, nH, cText, cName, hCtrl
-   local nPos, nPos2, cTitle, cVal, cPropName
+   local nPos, nPos2, cTitle, cVal, cPropName, kk
 
    if Empty( cCode ) .or. hForm == 0
       return nil
@@ -1113,6 +1119,42 @@ static function RestoreFormFromCode( hForm, cCode )
       // Set the control name
       if hCtrl != 0
          UI_SetProp( hCtrl, "cName", cName )
+      endif
+   next
+
+   // Second pass: apply property assignments like ::oCtrlName:prop := value
+   for i := 1 to Len( aLines )
+      cTrim := StrTran( AllTrim( aLines[i] ), Chr(13), "" )
+      if Left( cTrim, 2 ) == "//"; loop; endif
+      if ! ( Left( cTrim, 3 ) == "::o" ) .or. ! ( ":=" $ cTrim ); loop; endif
+      // Must have a second ":" for the property (::oName:prop := value)
+      nPos := At( ":", SubStr( cTrim, 4 ) )
+      if nPos == 0; loop; endif
+      cName := SubStr( cTrim, 4, nPos - 1 )
+      cText := SubStr( cTrim, 4 + nPos )
+      nPos2 := At( ":=", cText )
+      if nPos2 == 0; loop; endif
+      cVal := AllTrim( Left( cText, nPos2 - 1 ) )
+      cText := AllTrim( SubStr( cText, nPos2 + 2 ) )
+
+      // Find the control by name
+      hCtrl := 0
+      nCount := UI_GetChildCount( hForm )
+      for kk := 1 to nCount
+         if AllTrim( UI_GetProp( UI_GetChild( hForm, kk ), "cName" ) ) == cName
+            hCtrl := UI_GetChild( hForm, kk )
+            exit
+         endif
+      next
+      if hCtrl == 0; loop; endif
+
+      if cVal == "nClrPane" .or. cVal == "Color"
+         UI_SetProp( hCtrl, "nClrPane", Val( cText ) )
+      elseif cVal == "cDataSource"
+         if Left( cText, 1 ) == '"'
+            cText := SubStr( cText, 2, Len( cText ) - 2 )
+         endif
+         UI_SetProp( hCtrl, "cDataSource", cText )
       endif
    next
 
@@ -2107,7 +2149,7 @@ static function TBRun()
       MAC_ShellExec( "cp " + HB_DirBase() + "../Resources/hbbuilder.ch " + cBuildDir + "/" )
       MAC_ShellExec( "cp " + HB_DirBase() + "../Resources/hbide.ch " + cBuildDir + "/" )
    else
-      MAC_ShellExec( "cp " + cProjDir + "/source/common/classes.prg " + cBuildDir + "/" )
+      MAC_ShellExec( "cp " + cProjDir + "/source/core/classes.prg " + cBuildDir + "/" )
       MAC_ShellExec( "cp " + cProjDir + "/include/hbbuilder.ch " + cBuildDir + "/" )
       MAC_ShellExec( "cp " + cProjDir + "/include/hbide.ch " + cBuildDir + "/" )
    endif
@@ -2152,7 +2194,12 @@ static function TBRun()
               " -I" + cHbInc + " -I" + cBuildDir + ;
               " -o" + cBuildDir + "/classes.c 2>&1"
       cOutput := MAC_ShellExec( cCmd )
-      cLog += "    OK" + Chr(10)
+      if ! Empty( cOutput ) .and. "error" $ Lower( cOutput )
+         cLog += "    FAILED:" + Chr(10) + cOutput + Chr(10)
+         lError := .T.
+      else
+         cLog += "    OK" + Chr(10)
+      endif
    endif
 
    // Step 5: Compile C
@@ -2170,8 +2217,13 @@ static function TBRun()
       endif
       cCmd := "clang -c -O2 -Wno-unused-value -I" + cHbInc + ;
               " " + cBuildDir + "/classes.c -o " + cBuildDir + "/classes.o 2>&1"
-      MAC_ShellExec( cCmd )
-      cLog += "    OK" + Chr(10)
+      cOutput := MAC_ShellExec( cCmd )
+      if ! Empty( cOutput ) .and. "error" $ Lower( cOutput )
+         cLog += "    FAILED:" + Chr(10) + cOutput + Chr(10)
+         lError := .T.
+      else
+         cLog += "    OK" + Chr(10)
+      endif
    endif
 
    // Step 6: Compile Cocoa backend + editor + GT dummy
@@ -2336,7 +2388,7 @@ static function TBDebugRun()
       MAC_ShellExec( "cp " + cResDir + "/hbide.ch " + cBuildDir + "/" )
       MAC_ShellExec( "cp " + cResDir + "/dbgclient.prg " + cBuildDir + "/" )
    else
-      MAC_ShellExec( "cp " + cProjDir + "/source/common/classes.prg " + cBuildDir + "/" )
+      MAC_ShellExec( "cp " + cProjDir + "/source/core/classes.prg " + cBuildDir + "/" )
       MAC_ShellExec( "cp " + cProjDir + "/include/hbbuilder.ch " + cBuildDir + "/" )
       MAC_ShellExec( "cp " + cProjDir + "/include/hbide.ch " + cBuildDir + "/" )
       MAC_ShellExec( "cp " + cProjDir + "/source/debugger/dbgclient.prg " + cBuildDir + "/" )

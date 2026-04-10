@@ -792,6 +792,16 @@ void EnsureNSApp( void )
             }
          }
 
+         /* Apply nClrPane if it was set before the view was created */
+         if( FClrPane != 0xFFFFFFFF && FBgColor ) {
+            [tv setBackgroundColor:FBgColor];
+            [tv setUsesAlternatingRowBackgroundColors:NO];
+            [sv setDrawsBackground:YES];
+            [sv setBackgroundColor:FBgColor];
+            [[sv contentView] setDrawsBackground:YES];
+            [(NSClipView *)[sv contentView] setBackgroundColor:FBgColor];
+         }
+
          v = sv; break;
       }
       default: {
@@ -3255,6 +3265,29 @@ HB_FUNC( UI_SETPROP )
                   break;
                }
          }
+      }
+      else if( p->FControlType == CT_BROWSE )
+      {
+         BrowseData * bd = FindBrowse( p );
+         if( bd && bd->tableView ) {
+            [bd->tableView setBackgroundColor:p->FBgColor];
+            [bd->tableView setUsesAlternatingRowBackgroundColors:NO];
+            [bd->tableView setNeedsDisplay:YES];
+            if( bd->scrollView ) {
+               [bd->scrollView setDrawsBackground:YES];
+               [bd->scrollView setBackgroundColor:p->FBgColor];
+               [[bd->scrollView contentView] setDrawsBackground:YES];
+               [(NSClipView *)[bd->scrollView contentView] setBackgroundColor:p->FBgColor];
+               [bd->scrollView setNeedsDisplay:YES];
+            }
+         }
+      }
+      else if( p->FView )
+      {
+         if( [p->FView isKindOfClass:[NSTextField class]] )
+            [(NSTextField *)p->FView setBackgroundColor:p->FBgColor];
+         else
+            [p->FView setNeedsDisplay:YES];
       }
    }
    else if( strcasecmp(szProp,"oFont")==0 && HB_ISCHAR(3) ) {

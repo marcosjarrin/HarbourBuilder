@@ -1,6 +1,27 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-10 (macOS: TBrowse nClrPane fix, build error handling)
+
+  TBROWSE nClrPane (macOS):
+  - Code gen: emits ::oCtrlName:nClrPane := value for controls with
+    non-default color (0xFFFFFFFF), matching Linux/Windows behavior
+  - Restore: second-pass parser in RestoreFormFromCode for
+    ::oName:prop := value lines — handles nClrPane, Color, cDataSource
+  - UI_SetProp nClrPane: applies backgroundColor to NSTableView,
+    NSScrollView and NSClipView for CT_BROWSE controls; disables
+    alternating row colors when custom color is set
+  - createViewInParent: applies FClrPane/FBgColor at NSTableView
+    creation time, fixing the timing issue where color was set before
+    the view existed (RestoreFormFromCode runs before Show)
+  - Inspector color changes now take effect immediately on browses
+
+  BUILD PIPELINE (macOS):
+  - Fixed classes.prg fallback path: source/common/ → source/core/
+    (fixes "no such file: classes.o" linker error when running from bin/)
+  - Added error checking for harbour compile of classes.prg (step 4)
+  - Added error checking for clang compile of classes.c (step 5)
+
 2026-04-10 (Linux: full dark mode toggle, nClrPane persist, footer persist)
 
   DARK MODE (Linux):
