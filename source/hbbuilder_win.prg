@@ -683,7 +683,7 @@ static function RegenerateFormCode( cName, hForm )
    local nL, nT, nCW, nCH, cText, nCtrlClr
    local cDatas := "", cCreate := "", cEvents := ""
    local cExistingCode, aEvents, j, cEvName, cEvSuffix, cHandlerName
-   local cVal, aHdrs, kk, nColCount, aColProps, nColW
+   local cVal, aHdrs, kk, nColCount, aColProps, nColW, nInterval
 
    // Read existing code to find declared event handlers
    cExistingCode := ""
@@ -850,6 +850,11 @@ static function RegenerateFormCode( cName, hForm )
                      if ! Empty( cVal )
                         cCreate += '   ::o' + cCtrlName + ':aData := "' + cVal + '"' + e
                      endif
+                  elseif nType == CT_TIMER
+                     nInterval := UI_GetProp( hCtrl, "nInterval" )
+                     if ValType( nInterval ) == "N" .and. nInterval != 1000
+                        cCreate += '   ::o' + cCtrlName + ':nInterval := ' + LTrim( Str( nInterval ) ) + e
+                     endif
                   endif
                else
                   cCreate += '   // ::o' + cCtrlName + ' (' + cCtrlClass + ') at ' + ;
@@ -867,7 +872,8 @@ static function RegenerateFormCode( cName, hForm )
          // Scan for event handlers matching this control
          aEvents := { "OnClick", "OnChange", "OnDblClick", "OnCreate", ;
                        "OnClose", "OnResize", "OnKeyDown", "OnKeyUp", ;
-                       "OnMouseDown", "OnMouseUp", "OnEnter", "OnExit" }
+                       "OnMouseDown", "OnMouseUp", "OnEnter", "OnExit", ;
+                       "OnTimer" }
          for j := 1 to Len( aEvents )
             cEvName := aEvents[j]
             cEvSuffix := SubStr( cEvName, 3 )

@@ -309,6 +309,9 @@ void EnsureNSApp( void )
    unsigned int FClrPane;
 
    PHB_ITEM FOnClick, FOnChange, FOnInit, FOnClose;
+   PHB_ITEM FOnTimer;
+   int      FInterval;       /* Timer interval in milliseconds (default 1000) */
+   NSTimer * FTimer;         /* NSTimer for CT_TIMER controls */
 
    HBControl * FCtrlParent;
    HBControl * FChildren[MAX_CHILDREN];
@@ -322,6 +325,9 @@ void EnsureNSApp( void )
 - (void)fireEvent:(PHB_ITEM)block;
 - (void)releaseEvents;
 - (void)applyFont;
+- (void)startTimer;
+- (void)stopTimer;
+- (void)timerFired:(NSTimer *)timer;
 @end
 
 /* BorderStyle constants (match C++Builder) */
@@ -590,6 +596,7 @@ void EnsureNSApp( void )
       FClrPane = 0xFFFFFFFF; FFileName[0] = '\0'; strcpy(FRdd, "DBFCDX");
       FHeaders[0] = '\0'; FData[0] = '\0'; FDataSource[0] = '\0'; FActive = NO;
       FOnClick = NULL; FOnChange = NULL; FOnInit = NULL; FOnClose = NULL;
+      FOnTimer = NULL; FInterval = 1000; FTimer = nil;
       FCtrlParent = nil; FChildCount = 0;
       memset( FChildren, 0, sizeof(FChildren) );
    }
@@ -852,6 +859,7 @@ void EnsureNSApp( void )
    else if( strcasecmp( event, "OnChange" ) == 0 )  ppTarget = &FOnChange;
    else if( strcasecmp( event, "OnInit" ) == 0 )    ppTarget = &FOnInit;
    else if( strcasecmp( event, "OnClose" ) == 0 )   ppTarget = &FOnClose;
+   else if( strcasecmp( event, "OnTimer" ) == 0 )   ppTarget = &FOnTimer;
    /* Form-specific events */
    else if( FControlType == CT_FORM ) {
       HBForm * f = (HBForm *)self;
@@ -877,6 +885,9 @@ void EnsureNSApp( void )
       if( *ppTarget ) hb_itemRelease( *ppTarget );
       *ppTarget = hb_itemNew( block );
    }
+   /* Auto-start timer when OnTimer is assigned */
+   if( FControlType == CT_TIMER && FOnTimer && FEnabled && FInterval > 0 )
+      [self startTimer];
 }
 
 - (void)fireEvent:(PHB_ITEM)block
@@ -897,6 +908,31 @@ void EnsureNSApp( void )
    if( FOnChange ) { hb_itemRelease( FOnChange ); FOnChange = NULL; }
    if( FOnInit )   { hb_itemRelease( FOnInit );   FOnInit = NULL; }
    if( FOnClose )  { hb_itemRelease( FOnClose );  FOnClose = NULL; }
+   if( FOnTimer )  { hb_itemRelease( FOnTimer );  FOnTimer = NULL; }
+   [self stopTimer];
+}
+
+- (void)startTimer
+{
+   [self stopTimer];
+   if( FControlType == CT_TIMER && FEnabled && FInterval > 0 && FOnTimer )
+   {
+      FTimer = [NSTimer scheduledTimerWithTimeInterval:FInterval / 1000.0
+                                               target:self
+                                             selector:@selector(timerFired:)
+                                             userInfo:nil
+                                              repeats:YES];
+   }
+}
+
+- (void)stopTimer
+{
+   if( FTimer ) { [FTimer invalidate]; FTimer = nil; }
+}
+
+- (void)timerFired:(NSTimer *)timer
+{
+   if( FOnTimer ) [self fireEvent:FOnTimer];
 }
 
 @end
@@ -2298,7 +2334,8 @@ static HBPaletteTarget * s_palTarget = nil;
       }
    for( int i = 0; i < FChildCount; i++ )
       if( FChildren[i]->FControlType != CT_GROUPBOX &&
-          FChildren[i]->FControlType != CT_TOOLBAR ) {
+          FChildren[i]->FControlType != CT_TOOLBAR &&
+          !( FChildren[i]->FControlType >= CT_TIMER && !FDesignMode ) ) {
          FChildren[i]->FFont = FFormFont;
          FChildren[i]->FTop += FClientTop;
          [FChildren[i] createViewInParent:FContentView];
@@ -3098,6 +3135,24 @@ HB_FUNC( UI_DROPNONVISUAL )
    RetCtrl( ctrl );
 }
 
+/* UI_TimerNew( hForm, nInterval ) - create runtime timer (no view, no icon) */
+HB_FUNC( UI_TIMERNEW )
+{
+   HBForm * form = GetForm(1);
+   int nInterval = HB_ISNUM(2) ? hb_parni(2) : 1000;
+   if( !form ) return;
+
+   HBControl * ctrl = [[HBControl alloc] init];
+   ctrl->FControlType = CT_TIMER;
+   ctrl->FInterval = nInterval;
+   ctrl->FWidth = 0; ctrl->FHeight = 0;
+   ctrl->FView = nil;  /* No visual representation at runtime */
+   strncpy( ctrl->FClassName, "TTimer", sizeof(ctrl->FClassName) - 1 );
+   strncpy( ctrl->FName, "Timer", sizeof(ctrl->FName) - 1 );
+   [form addChild:ctrl];
+   RetCtrl( ctrl );
+}
+
 /* --- Property access --- */
 
 HB_FUNC( UI_SETPROP )
@@ -3131,7 +3186,10 @@ HB_FUNC( UI_SETPROP )
       p->FVisible = hb_parl(3); if( p->FView ) [p->FView setHidden:!p->FVisible]; }
    else if( strcasecmp(szProp,"lEnabled")==0 ) {
       p->FEnabled = hb_parl(3);
-      if( p->FView && [p->FView respondsToSelector:@selector(setEnabled:)] )
+      if( p->FControlType == CT_TIMER ) {
+         if( p->FEnabled ) [p startTimer]; else [p stopTimer];
+      }
+      else if( p->FView && [p->FView respondsToSelector:@selector(setEnabled:)] )
          [(id)p->FView setEnabled:p->FEnabled]; }
    else if( strcasecmp(szProp,"lDefault")==0 && p->FControlType == CT_BUTTON )
       ((HBButton *)p)->FDefault = hb_parl(3);
@@ -3222,6 +3280,10 @@ HB_FUNC( UI_SETPROP )
       strncpy( p->FDataSource, hb_parc(3), sizeof(p->FDataSource)-1 );
    else if( strcasecmp(szProp,"lActive")==0 )
       p->FActive = hb_parl(3);
+   else if( strcasecmp(szProp,"nInterval")==0 && p->FControlType == CT_TIMER ) {
+      p->FInterval = hb_parni(3);
+      if( p->FEnabled && p->FOnTimer ) [p startTimer];
+   }
    else if( strcasecmp(szProp,"lSizable")==0 && p->FControlType == CT_FORM )
       ((HBForm *)p)->FSizable = hb_parl(3);
    else if( strcasecmp(szProp,"lAppBar")==0 && p->FControlType == CT_FORM )
@@ -3366,6 +3428,8 @@ HB_FUNC( UI_GETPROP )
    else if( strcasecmp(szProp,"aData")==0 )     hb_retc( p->FData );
    else if( strcasecmp(szProp,"cDataSource")==0 ) hb_retc( p->FDataSource );
    else if( strcasecmp(szProp,"lActive")==0 )   hb_retl( p->FActive );
+   else if( strcasecmp(szProp,"nInterval")==0 && p->FControlType==CT_TIMER )
+      hb_retni( p->FInterval );
    else if( strcasecmp(szProp,"lSizable")==0 && p->FControlType==CT_FORM )
       hb_retl( ((HBForm *)p)->FSizable );
    else if( strcasecmp(szProp,"lAppBar")==0 && p->FControlType==CT_FORM )
@@ -3579,6 +3643,8 @@ HB_FUNC( UI_GETALLPROPS )
       case CT_BROWSE:
          ADD_A("aColumns",p->FHeaders,"Data");
          ADD_S("cDataSource",p->FDataSource,"Data"); break;
+      case CT_TIMER:
+         ADD_N("nInterval",p->FInterval,"Behavior"); break;
    }
    hb_itemReturnRelease(pArray);
 }

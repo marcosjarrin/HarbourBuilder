@@ -590,7 +590,7 @@ static function RegenerateFormCode( cName, hForm )
    local nL, nT, nCW, nCH, cText
    local cDatas := "", cCreate := "", cEvents := ""
    local cExistingCode, aEvents, j, cEvName, cEvSuffix, cHandlerName
-   local cVal, aHdrs, kk, nColCount, aColProps, nColW, nCtrlClr
+   local cVal, aHdrs, kk, nColCount, aColProps, nColW, nCtrlClr, nInterval
 
    // Read existing code to find declared event handlers
    cExistingCode := ""
@@ -704,9 +704,20 @@ static function RegenerateFormCode( cName, hForm )
                   cCreate += '   ::o' + cCtrlName + ':cDataSource := "' + cVal + '"' + e
                endif
             otherwise
-               cCreate += '   // ::o' + cCtrlName + ' (' + cCtrlClass + ') at ' + ;
-                  LTrim(Str(nL)) + ',' + LTrim(Str(nT)) + ' SIZE ' + ;
-                  LTrim(Str(nCW)) + ',' + LTrim(Str(nCH)) + e
+               if nType >= CT_TIMER  // Non-visual component
+                  cCreate += '   COMPONENT ::o' + cCtrlName + ' TYPE CT_' + ;
+                     Upper( SubStr( cCtrlClass, 2 ) ) + ' OF Self  // ' + cCtrlClass + e
+                  if nType == CT_TIMER
+                     nInterval := UI_GetProp( hCtrl, "nInterval" )
+                     if ValType( nInterval ) == "N" .and. nInterval != 1000
+                        cCreate += '   ::o' + cCtrlName + ':nInterval := ' + LTrim( Str( nInterval ) ) + e
+                     endif
+                  endif
+               else
+                  cCreate += '   // ::o' + cCtrlName + ' (' + cCtrlClass + ') at ' + ;
+                     LTrim(Str(nL)) + ',' + LTrim(Str(nT)) + ' SIZE ' + ;
+                     LTrim(Str(nCW)) + ',' + LTrim(Str(nCH)) + e
+               endif
          endcase
 
          // Emit nClrPane if non-default (default = 0xFFFFFFFF = 4294967295)
@@ -719,7 +730,8 @@ static function RegenerateFormCode( cName, hForm )
          // Pattern: METHOD ControlName + EventSuffix (e.g. Button1Click)
          aEvents := { "OnClick", "OnChange", "OnDblClick", "OnCreate", ;
                        "OnClose", "OnResize", "OnKeyDown", "OnKeyUp", ;
-                       "OnMouseDown", "OnMouseUp", "OnEnter", "OnExit" }
+                       "OnMouseDown", "OnMouseUp", "OnEnter", "OnExit", ;
+                       "OnTimer" }
          for j := 1 to Len( aEvents )
             cEvName := aEvents[j]
             cEvSuffix := SubStr( cEvName, 3 )  // "Click", "Change"...

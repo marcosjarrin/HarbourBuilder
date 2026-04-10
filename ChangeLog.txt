@@ -1,6 +1,30 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-10 (all platforms: TTimer component with Interval, OnTimer, Enabled)
+
+  TTIMER COMPONENT:
+  - New TTimer class in classes.prg with DATA hCpp, nInterval (default
+    1000ms), bOnTimer; ASSIGN OnTimer, nInterval, Enabled properties
+  - HB_CreateComponent: CT_TIMER case creates TTimer and native control
+    via UI_TimerNew (runtime, no icon) for NSTimer scheduling
+  - cocoa_core.m: added FOnTimer, FInterval, FTimer fields to HBControl;
+    startTimer/stopTimer/timerFired: methods using NSTimer; auto-start
+    when OnTimer event is assigned; lEnabled toggles timer on/off
+  - UI_TimerNew: creates lightweight HBControl (no view) for runtime
+  - UI_GETALLPROPS: nInterval property for CT_TIMER in Behavior category
+  - UI_SETPROP/UI_GETPROP: nInterval get/set with timer restart
+  - createAllChildren: skips non-visual controls (>= CT_TIMER) in
+    runtime mode to prevent palette icon artifacts
+  - Inspector: Interval and Enabled properties; OnTimer event
+  - Editor: TTimer property list includes Enabled, Interval, OnTimer
+  - Code generation: COMPONENT TYPE CT_TIMER, nInterval persistence,
+    OnTimer event wiring in all three platforms (macOS/Windows/Linux)
+  - RestoreFormFromCode: parses ::oName:nInterval := value
+  - TBRun: pre-build sync regenerates all forms ensuring event wiring
+  - COMPONENT xcommand passes oParent for runtime native control creation
+  - Sample project: samples/projects/timer/
+
 2026-04-10 (macOS: TBrowse deferred view creation for runtime)
 
   TBROWSE RUNTIME (macOS):

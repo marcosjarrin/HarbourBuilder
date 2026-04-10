@@ -291,6 +291,6 @@
 
 // Non-visual component (used in generated CreateForm code)
 #xcommand COMPONENT <oVar> TYPE <nType> OF <oParent> => ;
-   <oVar> := HB_CreateComponent( <nType> )
+   <oVar> := HB_CreateComponent( <nType>, <oParent> )
 
 #endif

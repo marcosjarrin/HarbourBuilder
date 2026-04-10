@@ -601,7 +601,7 @@ static function RegenerateFormCode( cName, hForm )
    local nL, nT, nCW, nCH, cText
    local cDatas := "", cCreate := "", cEvents := "", cVal
    local cExistingCode, aEvents, j, cEvName, cEvSuffix, cHandlerName
-   local aHdrs, kk, nColCount, aColProps, nColW, nCtrlClr
+   local aHdrs, kk, nColCount, aColProps, nColW, nCtrlClr, nInterval
 
    // Read existing code to find declared event handlers
    cExistingCode := ""
@@ -741,6 +741,11 @@ static function RegenerateFormCode( cName, hForm )
                      if ! Empty( cVal )
                         cCreate += '   ::o' + cCtrlName + ':aData := "' + cVal + '"' + e
                      endif
+                  elseif nType == CT_TIMER
+                     nInterval := UI_GetProp( hCtrl, "nInterval" )
+                     if ValType( nInterval ) == "N" .and. nInterval != 1000
+                        cCreate += '   ::o' + cCtrlName + ':nInterval := ' + LTrim( Str( nInterval ) ) + e
+                     endif
                   endif
                else
                   cCreate += '   // ::o' + cCtrlName + ' (' + cCtrlClass + ') at ' + ;
@@ -758,7 +763,8 @@ static function RegenerateFormCode( cName, hForm )
          // Scan for event handlers matching this control
          aEvents := { "OnClick", "OnChange", "OnDblClick", "OnCreate", ;
                        "OnClose", "OnResize", "OnKeyDown", "OnKeyUp", ;
-                       "OnMouseDown", "OnMouseUp", "OnEnter", "OnExit" }
+                       "OnMouseDown", "OnMouseUp", "OnEnter", "OnExit", ;
+                       "OnTimer" }
          for j := 1 to Len( aEvents )
             cEvName := aEvents[j]
             cEvSuffix := SubStr( cEvName, 3 )
@@ -996,6 +1002,25 @@ static function RestoreFormFromCode( hForm, cCode )
                   next
                endif
             endif
+         endif
+         loop
+      endif
+
+      // Parse component property: ::oName:nInterval := value
+      if Left( cTrim, 3 ) == "::o" .and. ":nInterval" $ cTrim .and. ":=" $ cTrim
+         nPos := At( ":nInterval", cTrim )
+         if nPos > 0
+            cName := SubStr( cTrim, 4, nPos - 4 )
+            if Right( cName, 1 ) == ":"; cName := Left( cName, Len(cName) - 1 ); endif
+            cVal := AllTrim( SubStr( cTrim, At( ":=", cTrim ) + 2 ) )
+            nCount := UI_GetChildCount( hForm )
+            for j := 1 to nCount
+               hCtrl := UI_GetChild( hForm, j )
+               if hCtrl != 0 .and. UI_GetProp( hCtrl, "cName" ) == cName
+                  UI_SetProp( hCtrl, "nInterval", Val( cVal ) )
+                  exit
+               endif
+            next
          endif
          loop
       endif
@@ -2062,9 +2087,33 @@ static function TBRun()
    local cHbDir, cHbBin, cHbInc, cHbLib, cProjDir
    local cAllPrg, cCmd, cAllCode, nHash
    local cResDir, cBackends, cSciInc, cSciCocoa, cLexInc, cSciLib
+   local cOldTab, cSepLine, nP1, nP2, cUserCode
    static nLastHash := 0
 
-   SaveActiveFormCode()
+   // Sync all forms before building (ensures event wiring is up to date)
+   cSepLine := "//" + Replicate( "-", 68 )
+   for i := 1 to Len( aForms )
+      if aForms[i][2] != nil .and. aForms[i][2]:hCpp != 0
+         nActiveForm := i  // RegenerateFormCode reads cExistingCode using nActiveForm
+         cOldTab := CodeEditorGetTabText( hCodeEditor, i + 1 )
+         aForms[i][3] := RegenerateFormCode( aForms[i][1], aForms[i][2]:hCpp )
+         // Preserve user methods from editor
+         nP1 := At( "return nil", cOldTab )
+         if nP1 > 0
+            nP2 := At( cSepLine, SubStr( cOldTab, nP1 + 10 ) )
+            if nP2 > 0
+               cUserCode := SubStr( cOldTab, nP1 + 10 + nP2 - 1 + Len( cSepLine ) )
+               do while Left( cUserCode, 1 ) == Chr(10) .or. Left( cUserCode, 1 ) == Chr(13)
+                  cUserCode := SubStr( cUserCode, 2 )
+               enddo
+               if ! Empty( cUserCode )
+                  aForms[i][3] += Chr(13) + Chr(10) + cUserCode
+               endif
+            endif
+         endif
+         CodeEditorSetTabText( hCodeEditor, i + 1, aForms[i][3] )
+      endif
+   next
 
    cBuildDir := "/tmp/hbbuilder_build"
    cHbDir   := GetEnv( "HOME" ) + "/harbour"

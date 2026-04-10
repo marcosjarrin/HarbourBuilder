@@ -570,6 +570,30 @@ return Self
 
 //----------------------------------------------------------------------------//
 // TCompArray - Non-visual array data container
+// TTimer - non-visual timer component
+//----------------------------------------------------------------------------//
+
+CLASS TTimer
+
+   DATA hCpp      INIT 0
+   DATA oParent   INIT nil
+   DATA nInterval INIT 1000
+   DATA bOnTimer  INIT nil
+
+   ASSIGN OnTimer( b )    INLINE ( ::bOnTimer := b, iif( ::hCpp != 0, UI_OnEvent( ::hCpp, "OnTimer", b ), nil ) )
+   ASSIGN nInterval( n )  INLINE ( ::nInterval := n, iif( ::hCpp != 0, UI_SetProp( ::hCpp, "nInterval", n ), nil ) )
+   ACCESS Enabled         INLINE iif( ::hCpp != 0, UI_GetProp( ::hCpp, "lEnabled" ), .F. )
+   ASSIGN Enabled( l )    INLINE iif( ::hCpp != 0, UI_SetProp( ::hCpp, "lEnabled", l ), nil )
+
+   METHOD New() CONSTRUCTOR
+
+ENDCLASS
+
+METHOD New() CLASS TTimer
+return Self
+
+//----------------------------------------------------------------------------//
+// TCompArray
 // Design-time: aHeaders = "Name|Age|City", aData = "John|45|NYC;Mary|32|LA"
 // Runtime: provides parsed arrays for TBrowse binding
 //----------------------------------------------------------------------------//
@@ -2255,7 +2279,8 @@ function RPT_NewDataField( oBand, cField, nTop, nLeft, nW, nH, cFont, nFSize, lB
 return oFld
 
 // Helper for COMPONENT xcommand - maps type number to class instance
-function HB_CreateComponent( nType )
+function HB_CreateComponent( nType, oParent )
+   local oComp
    do case
       case nType == CT_DBFTABLE;   return TDBFTable():New()
       case nType == CT_MYSQL;      return TMySQL():New()
@@ -2265,5 +2290,11 @@ function HB_CreateComponent( nType )
       case nType == CT_FIREBIRD;   return TFirebird():New()
       case nType == CT_SQLSERVER;  return TSQLServer():New()
       case nType == CT_COMPARRAY;  return TCompArray():New()
+      case nType == CT_TIMER
+         oComp := TTimer():New()
+         if oParent != nil .and. __objHasMsg( oParent, "HCPP" ) .and. oParent:hCpp != 0
+            oComp:hCpp := UI_TimerNew( oParent:hCpp, 1000 )
+         endif
+         return oComp
    endcase
 return nil

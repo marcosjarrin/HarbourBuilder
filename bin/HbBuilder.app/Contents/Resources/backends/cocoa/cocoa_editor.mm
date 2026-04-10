@@ -580,7 +580,7 @@ static ClassMembers s_classMembers[] = {
    { "TToolBar",
      "AddButton() AddSeparator() Height Left Name Text Top Width" },
    { "TTimer",
-     "Height Left Name OnChange OnClick OnClose OnTimer Text Top Width" },
+     "Enabled Height Interval Left Name OnChange OnClick OnClose OnTimer Text Top Width" },
    { "TApplication",
      "CreateForm() Run() Title" },
    { "TPanel",
