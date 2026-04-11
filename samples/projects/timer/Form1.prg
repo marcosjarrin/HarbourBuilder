@@ -16,8 +16,8 @@ ENDCLASS
 METHOD CreateForm() CLASS TForm1
 
    ::Title  := "Form1"
-   ::Left   := 516
-   ::Top    := 284
+   ::Left   := 100
+   ::Top    := 100
    ::Width  := 400
    ::Height := 300
 

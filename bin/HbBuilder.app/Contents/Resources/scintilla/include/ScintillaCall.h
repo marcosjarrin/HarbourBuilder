@@ -360,11 +360,6 @@ public:
 	Position FormatRangeFull(bool draw, RangeToFormatFull *fr);
 	void SetChangeHistory(Scintilla::ChangeHistoryOption changeHistory);
 	Scintilla::ChangeHistoryOption ChangeHistory();
-	void SetUndoSelectionHistory(Scintilla::UndoSelectionHistoryOption undoSelectionHistory);
-	Scintilla::UndoSelectionHistoryOption UndoSelectionHistory();
-	void SetSelectionSerialized(const char *selectionString);
-	Position SelectionSerialized(char *selectionString);
-	std::string SelectionSerialized();
 	Line FirstVisibleLine();
 	Position GetLine(Line line, char *text);
 	std::string GetLine(Line line);
@@ -750,7 +745,7 @@ public:
 	int ExtraAscent();
 	void SetExtraDescent(int extraDescent);
 	int ExtraDescent();
-	Scintilla::MarkerSymbol MarkerSymbolDefined(int markerNumber);
+	int MarkerSymbolDefined(int markerNumber);
 	void MarginSetText(Line line, const char *text);
 	int MarginGetText(Line line, char *text);
 	std::string MarginGetText(Line line);
