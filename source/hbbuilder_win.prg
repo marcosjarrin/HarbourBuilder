@@ -869,6 +869,12 @@ static function RegenerateFormCode( cName, hForm )
             cCreate += '   ::o' + cCtrlName + ':nClrPane := ' + LTrim( Str( nCtrlClr ) ) + e
          endif
 
+         // Emit oFont if non-default
+         cVal := UI_GetProp( hCtrl, "oFont" )
+         if ! Empty( cVal ) .and. cVal != "System,12" .and. cVal != "Segoe UI,9"
+            cCreate += '   ::o' + cCtrlName + ':oFont := "' + cVal + '"' + e
+         endif
+
          // Scan for event handlers matching this control
          aEvents := { "OnClick", "OnChange", "OnDblClick", "OnCreate", ;
                        "OnClose", "OnResize", "OnKeyDown", "OnKeyUp", ;
@@ -1770,7 +1776,7 @@ static function RestoreFormFromCode( hForm, cCode )
       cText := AllTrim( SubStr( cText, nPos2 + 2 ) )
 
       // Only process known properties
-      if ! ( cProp == "nClrPane" .or. cProp == "Color" .or. cProp == "cDataSource" .or. cProp == "nInterval" )
+      if ! ( cProp == "nClrPane" .or. cProp == "Color" .or. cProp == "cDataSource" .or. cProp == "nInterval" .or. cProp == "oFont" )
          loop
       endif
 
@@ -1786,6 +1792,11 @@ static function RestoreFormFromCode( hForm, cCode )
 
       if cProp == "nClrPane" .or. cProp == "Color"
          UI_SetProp( hCtrl, "nClrPane", Val( cText ) )
+      elseif cProp == "oFont"
+         if Left( cText, 1 ) == '"'
+            cText := SubStr( cText, 2, Len( cText ) - 2 )
+         endif
+         UI_SetProp( hCtrl, "oFont", cText )
       elseif cProp == "cDataSource"
          if Left( cText, 1 ) == '"'
             cText := SubStr( cText, 2, Len( cText ) - 2 )

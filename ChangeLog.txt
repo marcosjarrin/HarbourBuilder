@@ -1,6 +1,7 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+<<<<<<< HEAD
 2026-04-11 (Linux: TTimer, autocomplete, build warnings, design-time fixes)
 
   TTIMER RUNTIME (Linux/GTK3):
@@ -76,6 +77,41 @@ HarbourBuilder - Cross-platform visual IDE for Harbour
   - UI_SetProp "lEnabled": SetTimer/KillTimer for CT_TIMER controls
   - UI_SetProp "nInterval": restarts running timer with new interval
   - Cleanup: KillTimer in TControl destructor, release FOnTimer codeblock
+
+2026-04-11 (all platforms: TLabel font and text color support)
+
+  FONT PERSISTENCE (designer → runtime):
+  - TControl: added oFont ACCESS/ASSIGN in classes.prg — all controls
+    can now get/set font via "FontName,Size[,RRGGBB]" compound string
+  - RegenerateFormCode: emits ::oCtrlName:oFont := "..." when font
+    differs from system default (macOS/Windows/Linux)
+  - RestoreFormFromCode: parses :oFont property to restore font in
+    designer when loading projects from disk
+  - createAllChildren: only inherits form font if control has no
+    individual font set (was unconditionally overwriting FFont)
+
+  TEXT COLOR (nClrText):
+  - cocoa_core.m: added FClrText field to HBControl (0xFFFFFFFF = unset)
+  - UI_SETPROP("nClrText"): stores BGR color, applies setTextColor:
+    live on the control view in both designer and runtime
+  - UI_GETPROP("oFont"): includes ,RRGGBB suffix when FClrText is set
+  - UI_GETALLPROPS: oFont string includes color component
+  - HBLabel createViewInParent: applies FClrText at creation time
+  - oFont setter: parses optional third comma-separated hex color field
+
+  FONT PANEL COLOR PICKER (macOS inspector):
+  - cocoa_inspector.m: HBFontPickerTarget listens to
+    NSColorPanelColorDidChangeNotification for real-time color updates
+  - Color changes from the font panel's embedded color picker are
+    applied immediately to the label in the designer
+  - Inspector oFont row display updates dynamically with color hex
+  - Two-way sync fires on color change to update generated code
+
+  LABEL HEIGHT AUTO-FIT:
+  - HBLabel createViewInParent: sizeToFit + FHeight update when custom
+    font is set, so the label view and overlay handles match
+  - applyFont: for CT_LABEL, adjusts FHeight and redraws overlay after
+    font change in the designer
 
 2026-04-10 (all platforms: TTimer component with Interval, OnTimer, Enabled)
 

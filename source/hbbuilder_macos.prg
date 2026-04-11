@@ -760,6 +760,12 @@ static function RegenerateFormCode( cName, hForm )
             cCreate += '   ::o' + cCtrlName + ':nClrPane := ' + LTrim( Str( nCtrlClr ) ) + e
          endif
 
+         // Emit oFont if non-default
+         cVal := UI_GetProp( hCtrl, "oFont" )
+         if ! Empty( cVal ) .and. cVal != "System,12" .and. cVal != ".LucidaGrande,13"
+            cCreate += '   ::o' + cCtrlName + ':oFont := "' + cVal + '"' + e
+         endif
+
          // Scan for event handlers matching this control
          aEvents := { "OnClick", "OnChange", "OnDblClick", "OnCreate", ;
                        "OnClose", "OnResize", "OnKeyDown", "OnKeyUp", ;
@@ -1175,6 +1181,11 @@ static function RestoreFormFromCode( hForm, cCode )
 
       if cVal == "nClrPane" .or. cVal == "Color"
          UI_SetProp( hCtrl, "nClrPane", Val( cText ) )
+      elseif cVal == "oFont"
+         if Left( cText, 1 ) == '"'
+            cText := SubStr( cText, 2, Len( cText ) - 2 )
+         endif
+         UI_SetProp( hCtrl, "oFont", cText )
       elseif cVal == "cDataSource"
          if Left( cText, 1 ) == '"'
             cText := SubStr( cText, 2, Len( cText ) - 2 )

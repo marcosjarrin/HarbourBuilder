@@ -40,6 +40,10 @@ CLASS TControl
    ASSIGN OnChange( b ) INLINE UI_OnEvent( ::hCpp, "OnChange", b )
    ASSIGN OnClose( b )  INLINE UI_OnEvent( ::hCpp, "OnClose", b )
 
+   // Font (compound property: "FontName,Size")
+   ACCESS oFont            INLINE UI_GetProp( ::hCpp, "oFont" )
+   ASSIGN oFont( c )       INLINE UI_SetProp( ::hCpp, "oFont", c )
+
    // Color / nClrPane (available on all controls, not just forms)
    ACCESS Color            INLINE UI_GetProp( ::hCpp, "nClrPane" )
    ASSIGN Color( n )       INLINE UI_SetProp( ::hCpp, "nClrPane", n )

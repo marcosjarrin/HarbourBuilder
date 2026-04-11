@@ -124,6 +124,7 @@ static void InsApplyFont( INSDATA * d, int nReal, NSFont * font );
    int       nReal;
 }
 - (void)changeFont:(id)sender;
+- (void)colorPanelChanged:(NSNotification *)note;
 @end
 
 @implementation HBFontPickerTarget
@@ -135,8 +136,55 @@ static void InsApplyFont( INSDATA * d, int nReal, NSFont * font );
    InsApplyFont( d, nReal, font );
 }
 
-/* Required to keep the font panel active */
-- (BOOL)acceptsFirstResponder { return YES; }
+- (void)colorPanelChanged:(NSNotification *)note
+{
+   NSColorPanel * cp = [note object];
+   NSColor * color = [cp color];
+   if( !color ) return;
+   color = [color colorUsingColorSpace:[NSColorSpace sRGBColorSpace]];
+   if( !color ) return;
+
+   unsigned int r = (unsigned int)([color redComponent] * 255.0);
+   unsigned int g = (unsigned int)([color greenComponent] * 255.0);
+   unsigned int b = (unsigned int)([color blueComponent] * 255.0);
+   unsigned int bgr = r | (g << 8) | (b << 16);
+
+   /* Apply color via UI_SetProp("nClrText") — updates FClrText and live view */
+   PHB_DYNS pDyn = hb_dynsymFindName( "UI_SETPROP" );
+   if( pDyn )
+   {
+      hb_vmPushDynSym( pDyn ); hb_vmPushNil();
+      hb_vmPushNumInt( d->hCtrl );
+      hb_vmPushString( "nClrText", 8 );
+      hb_vmPushNumInt( (HB_MAXINT)bgr );
+      hb_vmDo( 3 );
+   }
+
+   /* Update the oFont row display to include color hex */
+   if( nReal >= 0 && nReal < d->nRows && d->rows[nReal].cType == 'F' )
+   {
+      char * val = d->rows[nReal].szValue;
+      const char * c1 = strchr(val, ',');
+      if( c1 ) {
+         const char * c2 = strchr(c1 + 1, ',');
+         char tmp[128];
+         int baseLen = c2 ? (int)(c2 - val) : (int)strlen(val);
+         if( baseLen > 127 ) baseLen = 127;
+         memcpy(tmp, val, baseLen); tmp[baseLen] = 0;
+         snprintf(d->rows[nReal].szValue, sizeof(d->rows[0].szValue), "%s,%02X%02X%02X", tmp, r, g, b);
+      }
+   }
+
+   [d->tableView reloadData];
+
+   /* Fire two-way sync */
+   if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( d->pOnPropChanged );
+      hb_vmSend( 0 );
+   }
+}
 
 @end
 
@@ -464,6 +512,14 @@ static HBFontPickerTarget * s_fontTarget = nil;
    [fm setAction:@selector(changeFont:)];
 
    NSFontPanel * panel = [fm fontPanel:YES];
+
+   /* Listen for color changes from the font panel's embedded color picker */
+   [[NSNotificationCenter defaultCenter] removeObserver:s_fontTarget
+      name:NSColorPanelColorDidChangeNotification object:nil];
+   [[NSNotificationCenter defaultCenter] addObserver:s_fontTarget
+      selector:@selector(colorPanelChanged:)
+      name:NSColorPanelColorDidChangeNotification object:nil];
+
    [panel orderFront:nil];
 }
 

@@ -307,6 +307,7 @@ void EnsureNSApp( void )
    NSFont * FFont;
    NSColor * FBgColor;
    unsigned int FClrPane;
+   unsigned int FClrText;
 
    PHB_ITEM FOnClick, FOnChange, FOnInit, FOnClose;
    PHB_ITEM FOnTimer;
@@ -593,7 +594,7 @@ void EnsureNSApp( void )
       FLeft = 0; FTop = 0; FWidth = 80; FHeight = 24;
       FVisible = YES; FEnabled = YES; FTabStop = YES;
       FControlType = 0; FView = nil; FFont = nil; FBgColor = nil;
-      FClrPane = 0xFFFFFFFF; FFileName[0] = '\0'; strcpy(FRdd, "DBFCDX");
+      FClrPane = 0xFFFFFFFF; FClrText = 0xFFFFFFFF; FFileName[0] = '\0'; strcpy(FRdd, "DBFCDX");
       FHeaders[0] = '\0'; FData[0] = '\0'; FDataSource[0] = '\0'; FActive = NO;
       FOnClick = NULL; FOnChange = NULL; FOnInit = NULL; FOnClose = NULL;
       FOnTimer = NULL; FInterval = 1000; FTimer = nil;
@@ -848,8 +849,20 @@ void EnsureNSApp( void )
 
 - (void)applyFont
 {
-   if( FFont && FView && [FView respondsToSelector:@selector(setFont:)] )
+   if( FFont && FView && [FView respondsToSelector:@selector(setFont:)] ) {
       [(id)FView setFont:FFont];
+      /* For labels, adjust height to fit the font */
+      if( FControlType == CT_LABEL ) {
+         [(id)FView sizeToFit];
+         NSRect r = [FView frame];
+         FHeight = (int)r.size.height;
+         r.origin.x = FLeft; r.origin.y = FTop; r.size.width = FWidth;
+         [FView setFrame:r];
+         /* Redraw overlay so selection handles match new size */
+         if( FCtrlParent && ((HBForm *)FCtrlParent)->FOverlayView )
+            [((HBForm *)FCtrlParent)->FOverlayView setNeedsDisplay:YES];
+      }
+   }
 }
 
 - (void)setEvent:(const char *)event block:(PHB_ITEM)block
@@ -959,8 +972,21 @@ void EnsureNSApp( void )
    [tf setStringValue:[NSString stringWithUTF8String:FText]];
    [tf setBezeled:NO]; [tf setDrawsBackground:NO];
    [tf setEditable:NO]; [tf setSelectable:NO];
-   [tf setTextColor:[NSColor blackColor]];
-   if( FFont ) [tf setFont:FFont];
+   if( FClrText != 0xFFFFFFFF ) {
+      CGFloat r = (FClrText & 0xFF)/255.0, g = ((FClrText>>8)&0xFF)/255.0, b = ((FClrText>>16)&0xFF)/255.0;
+      [tf setTextColor:[NSColor colorWithCalibratedRed:r green:g blue:b alpha:1.0]];
+   } else {
+      [tf setTextColor:[NSColor blackColor]];
+   }
+   if( FFont ) {
+      [tf setFont:FFont];
+      /* Adjust height to fit the font */
+      [tf sizeToFit];
+      NSRect r = [tf frame];
+      FHeight = (int)r.size.height;
+      r.origin.x = FLeft; r.origin.y = FTop; r.size.width = FWidth;
+      [tf setFrame:r];
+   }
    [parentView addSubview:tf];
    FView = tf;
 }
@@ -2328,7 +2354,7 @@ static HBPaletteTarget * s_palTarget = nil;
    /* GroupBoxes first */
    for( int i = 0; i < FChildCount; i++ )
       if( FChildren[i]->FControlType == CT_GROUPBOX ) {
-         FChildren[i]->FFont = FFormFont;
+         if( !FChildren[i]->FFont ) FChildren[i]->FFont = FFormFont;
          FChildren[i]->FTop += FClientTop;
          [FChildren[i] createViewInParent:FContentView];
       }
@@ -2336,7 +2362,7 @@ static HBPaletteTarget * s_palTarget = nil;
       if( FChildren[i]->FControlType != CT_GROUPBOX &&
           FChildren[i]->FControlType != CT_TOOLBAR &&
           !( FChildren[i]->FControlType >= CT_TIMER && !FDesignMode ) ) {
-         FChildren[i]->FFont = FFormFont;
+         if( !FChildren[i]->FFont ) FChildren[i]->FFont = FFormFont;
          FChildren[i]->FTop += FClientTop;
          [FChildren[i] createViewInParent:FContentView];
       }
@@ -3387,19 +3413,48 @@ HB_FUNC( UI_SETPROP )
             [p->FView setNeedsDisplay:YES];
       }
    }
+   else if( strcasecmp(szProp,"nClrText")==0 ) {
+      p->FClrText = (unsigned int)hb_parnint(3);
+      if( p->FView && [p->FView respondsToSelector:@selector(setTextColor:)] ) {
+         CGFloat r = (p->FClrText & 0xFF)/255.0;
+         CGFloat g = ((p->FClrText>>8)&0xFF)/255.0;
+         CGFloat b = ((p->FClrText>>16)&0xFF)/255.0;
+         [(id)p->FView setTextColor:[NSColor colorWithCalibratedRed:r green:g blue:b alpha:1.0]];
+      }
+   }
    else if( strcasecmp(szProp,"oFont")==0 && HB_ISCHAR(3) ) {
-      char szFace[64]={0}; int nSize=12;
+      char szFace[64]={0}; int nSize=12; unsigned int clrText = 0xFFFFFFFF;
       const char * val = hb_parc(3);
       const char * comma = strchr(val,',');
-      if( comma ) { int len=(int)(comma-val); if(len>63)len=63; memcpy(szFace,val,len); nSize=atoi(comma+1); }
+      if( comma ) {
+         int len=(int)(comma-val); if(len>63)len=63; memcpy(szFace,val,len);
+         nSize=atoi(comma+1);
+         /* Optional third field: color as hex RRGGBB */
+         const char * comma2 = strchr(comma+1,',');
+         if( comma2 ) {
+            unsigned int r=0,g=0,b=0;
+            if( sscanf(comma2+1,"%02X%02X%02X",&r,&g,&b) == 3 )
+               clrText = (r) | (g<<8) | (b<<16);  /* BGR like nClrPane */
+         }
+      }
       else strncpy(szFace,val,63);
       if( nSize <= 0 ) nSize = 12;
       NSFont * font = [NSFont fontWithName:[NSString stringWithUTF8String:szFace] size:(CGFloat)nSize];
       if( !font ) font = [NSFont systemFontOfSize:(CGFloat)nSize];
+      if( clrText != 0xFFFFFFFF ) p->FClrText = clrText;
       if( p->FControlType == CT_FORM ) {
          HBForm * pF = (HBForm *)p; pF->FFormFont = font; pF->FFont = font;
          for( int i = 0; i < pF->FChildCount; i++ ) { pF->FChildren[i]->FFont = font; [pF->FChildren[i] applyFont]; }
-      } else { p->FFont = font; [p applyFont]; }
+      } else {
+         p->FFont = font; [p applyFont];
+         /* Apply text color if set */
+         if( p->FClrText != 0xFFFFFFFF && p->FView && [p->FView respondsToSelector:@selector(setTextColor:)] ) {
+            CGFloat r = (p->FClrText & 0xFF) / 255.0;
+            CGFloat g = ((p->FClrText >> 8) & 0xFF) / 255.0;
+            CGFloat b = ((p->FClrText >> 16) & 0xFF) / 255.0;
+            [(id)p->FView setTextColor:[NSColor colorWithCalibratedRed:r green:g blue:b alpha:1.0]];
+         }
+      }
    }
 }
 
@@ -3484,8 +3539,15 @@ HB_FUNC( UI_GETPROP )
       hb_retni( ((HBComboBox *)p)->FItemIndex );
    else if( strcasecmp(szProp,"nClrPane")==0 )   hb_retnint( (HB_MAXINT)p->FClrPane );
    else if( strcasecmp(szProp,"oFont")==0 ) {
-      char szFont[128] = "System,12";
-      if( p->FFont ) sprintf(szFont,"%s,%d", [[p->FFont fontName] UTF8String], (int)[p->FFont pointSize]);
+      char szFont[192] = "System,12";
+      if( p->FFont ) {
+         sprintf(szFont,"%s,%d", [[p->FFont fontName] UTF8String], (int)[p->FFont pointSize]);
+         if( p->FClrText != 0xFFFFFFFF ) {
+            char szClr[16];
+            sprintf(szClr,",%02X%02X%02X", (p->FClrText & 0xFF), ((p->FClrText>>8)&0xFF), ((p->FClrText>>16)&0xFF));
+            strcat(szFont, szClr);
+         }
+      }
       hb_retc( szFont );
    }
    else if( strcasecmp(szProp,"cFontName")==0 )
@@ -3588,8 +3650,14 @@ HB_FUNC( UI_GETALLPROPS )
    ADD_L("lVisible",p->FVisible,"Behavior"); ADD_L("lEnabled",p->FEnabled,"Behavior");
    ADD_L("lTabStop",p->FTabStop,"Behavior");
 
-   { char sf[128]="System,12";
-     if(p->FFont) sprintf(sf,"%s,%d",[[p->FFont fontName] UTF8String],(int)[p->FFont pointSize]);
+   { char sf[192]="System,12";
+     if(p->FFont) {
+        sprintf(sf,"%s,%d",[[p->FFont fontName] UTF8String],(int)[p->FFont pointSize]);
+        if( p->FClrText != 0xFFFFFFFF ) {
+           char sc[16]; sprintf(sc,",%02X%02X%02X",(p->FClrText&0xFF),((p->FClrText>>8)&0xFF),((p->FClrText>>16)&0xFF));
+           strcat(sf,sc);
+        }
+     }
      ADD_F("oFont",sf,"Appearance"); }
    ADD_C("nClrPane",p->FClrPane,"Appearance");
 
