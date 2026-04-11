@@ -80,6 +80,9 @@ typedef struct {
    int            nTabs;
    int            nActiveTab;
    PHB_ITEM       pOnTabChange;
+   PHB_ITEM       pOnTextChange;     /* Debounced text-change callback */
+   NSTimer *      debounceTimer;     /* Timer for debounce (500ms) */
+   BOOL           bSettingText;      /* Guard: true while SetTabText is active */
 } CODEEDITOR;
 
 /* Forward declarations for messages panel (defined at end of file) */
@@ -412,6 +415,39 @@ static void CE_ConfigureScintilla( ScintillaView * sv )
 static HBSciTabTarget * s_sciTabTarget = nil;
 
 /* -----------------------------------------------------------------------
+ * Debounce timer target — fires pOnTextChange after 500ms of inactivity
+ * ----------------------------------------------------------------------- */
+
+@interface HBDebounceTarget : NSObject
+{
+@public
+   CODEEDITOR * ed;
+}
+@end
+
+@implementation HBDebounceTarget
+
+- (void)fireTextChange:(NSTimer *)timer
+{
+   (void)timer;
+   if( !ed ) return;
+   ed->debounceTimer = nil;
+
+   if( ed->pOnTextChange && HB_IS_BLOCK( ed->pOnTextChange ) )
+   {
+      hb_vmPushEvalSym();
+      hb_vmPush( ed->pOnTextChange );
+      hb_vmPushNumInt( (HB_PTRUINT) ed );
+      hb_vmPushInteger( ed->nActiveTab + 1 );   /* 1-based tab index */
+      hb_vmSend( 2 );
+   }
+}
+
+@end
+
+static HBDebounceTarget * s_debounceTarget = nil;
+
+/* -----------------------------------------------------------------------
  * Scintilla notification delegate — auto-indent, fold click
  * ----------------------------------------------------------------------- */
 
@@ -516,7 +552,25 @@ static HBSciTabTarget * s_sciTabTarget = nil;
       {
          /* Update Harbour folding when text changes */
          if( scn->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT) )
+         {
             CE_UpdateHarbourFolding( ed->sciView );
+
+            /* Schedule debounced text-change callback (500ms) */
+            if( ed->pOnTextChange && !ed->bSettingText )
+            {
+               if( ed->debounceTimer )
+                  [ed->debounceTimer invalidate];
+
+               if( !s_debounceTarget )
+               {
+                  s_debounceTarget = [[HBDebounceTarget alloc] init];
+                  s_debounceTarget->ed = ed;
+               }
+               ed->debounceTimer = [NSTimer scheduledTimerWithTimeInterval:0.5
+                  target:s_debounceTarget selector:@selector(fireTextChange:)
+                  userInfo:nil repeats:NO];
+            }
+         }
          break;
       }
    }
@@ -1765,8 +1819,10 @@ HB_FUNC( CODEEDITORSETTABTEXT )
 
    if( nTab == ed->nActiveTab && ed->sciView )
    {
+      ed->bSettingText = YES;   /* Guard: don't fire OnTextChange */
       SciMsg( ed->sciView, SCI_SETTEXT, 0, (sptr_t) ed->tabTexts[nTab] );
       SciMsg( ed->sciView, SCI_EMPTYUNDOBUFFER, 0, 0 );
+      ed->bSettingText = NO;
    }
 }
 
@@ -1893,6 +1949,20 @@ HB_FUNC( CODEEDITORONTABCHANGE )
    }
 }
 
+/* CodeEditorOnTextChange( hEditor, bBlock )
+ * Register a debounced callback fired 500ms after the user stops typing.
+ * Block receives ( hEditor, nTab ) where nTab is 1-based. */
+HB_FUNC( CODEEDITORONTEXTCHANGE )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   PHB_ITEM pBlock = hb_param(2, HB_IT_BLOCK);
+   if( ed )
+   {
+      if( ed->pOnTextChange ) hb_itemRelease( ed->pOnTextChange );
+      ed->pOnTextChange = pBlock ? hb_itemNew( pBlock ) : NULL;
+   }
+}
+
 HB_FUNC( CODEEDITORBRINGTOFRONT )
 {
    CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
@@ -1936,6 +2006,8 @@ HB_FUNC( CODEEDITORDESTROY )
    CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
    if( ed )
    {
+      if( ed->debounceTimer ) [ed->debounceTimer invalidate];
+      if( ed->pOnTextChange ) hb_itemRelease( ed->pOnTextChange );
       if( ed->window ) [ed->window close];
       for( int i = 0; i < ed->nTabs; i++ )
          if( ed->tabTexts[i] ) free( ed->tabTexts[i] );

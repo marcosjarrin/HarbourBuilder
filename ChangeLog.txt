@@ -1,6 +1,21 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-11 (macOS: Live sync code editor → form designer + inspector)
+
+  LIVE CODE-TO-DESIGNER SYNC (macOS):
+  - Debounced text-change callback in Scintilla editor (500ms after last
+    keystroke) — new pOnTextChange + NSTimer in CODEEDITOR struct
+  - HBDebounceTarget ObjC class: fires Harbour block after inactivity
+  - bSettingText guard in CodeEditorSetTabText prevents callback when IDE
+    updates text programmatically (avoids infinite loops)
+  - New HB_FUNC(CODEEDITORONTEXTCHANGE) to register callback from Harbour
+  - OnEditorTextChange: clears form children, re-parses code via
+    RestoreFormFromCode, refreshes inspector — only for form tabs
+  - lSyncingFromCode static guard prevents SyncDesignerToCode from
+    regenerating code while syncing from editor (bidirectional protection)
+  - Cleanup of timer and callback in CodeEditorDestroy
+
 2026-04-11 (Linux: TTimer, autocomplete, build warnings, design-time fixes)
 
   TTIMER RUNTIME (Linux/GTK3):
