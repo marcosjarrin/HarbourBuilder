@@ -914,6 +914,33 @@ HB_FUNC( UI_SETPROP )
                  SendMessage( p->FHandle, WM_SETFONT, (WPARAM) hNew, TRUE );
                  InvalidateRect( p->FHandle, NULL, TRUE );
               }
+              /* Labels: auto-fit height from the font size (no DC needed).
+               * Width auto-fits via GetTextExtentPoint32 only when FHandle
+               * exists, using the control's own DC — safe (no screen-DC
+               * shared state). */
+              if( p->FControlType == CT_LABEL )
+              {
+                 int newH = -lf.lfHeight + 4;
+                 int newW = p->FWidth;
+                 if( newH > p->FHeight ) p->FHeight = newH;
+                 if( p->FText[0] )
+                 {
+                    /* Use a memory DC (no shared screen DC state) */
+                    HDC hScreen = GetDC( NULL );
+                    HDC hMem = CreateCompatibleDC( hScreen );
+                    HFONT hOldF = (HFONT) SelectObject( hMem, hNew );
+                    SIZE sz = {0};
+                    GetTextExtentPoint32A( hMem, p->FText, (int) strlen( p->FText ), &sz );
+                    SelectObject( hMem, hOldF );
+                    DeleteDC( hMem );
+                    ReleaseDC( NULL, hScreen );
+                    if( sz.cx + 4 > newW ) newW = sz.cx + 4;
+                    p->FWidth = newW;
+                 }
+                 if( p->FHandle )
+                    SetWindowPos( p->FHandle, NULL, 0, 0,
+                       newW, p->FHeight, SWP_NOMOVE | SWP_NOZORDER );
+              }
            }
         }
       }
@@ -1071,12 +1098,17 @@ HB_FUNC( UI_GETPROP )
       char szFont[128] = "Segoe UI,12";
       LOGFONTA lf = {0};
       if( p->FFont && GetObjectA( p->FFont, sizeof(lf), &lf ) ) {
-         int sz = lf.lfHeight < 0 ? -lf.lfHeight : lf.lfHeight;
+         /* Convert logical pixel height back to points */
+         HDC hDC = GetDC( NULL );
+         int px = lf.lfHeight < 0 ? -lf.lfHeight : lf.lfHeight;
+         int pt = MulDiv( px, 72, GetDeviceCaps( hDC, LOGPIXELSY ) );
+         ReleaseDC( NULL, hDC );
+         if( pt <= 0 ) pt = 12;
          if( p->FClrText != CLR_INVALID )
-            sprintf( szFont, "%s,%d,%02X%02X%02X", lf.lfFaceName, sz,
+            sprintf( szFont, "%s,%d,%02X%02X%02X", lf.lfFaceName, pt,
                GetRValue(p->FClrText), GetGValue(p->FClrText), GetBValue(p->FClrText) );
          else
-            sprintf( szFont, "%s,%d", lf.lfFaceName, sz );
+            sprintf( szFont, "%s,%d", lf.lfFaceName, pt );
       }
       hb_retc( szFont );
    }

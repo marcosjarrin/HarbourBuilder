@@ -1,6 +1,35 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-12 (Windows: font size round-trip, label auto-fit, project load fixes)
+
+  FIXES
+  - UI_GetProp("oFont") now converts LOGFONT.lfHeight (pixels) back to
+    points before formatting, so regenerated code emits the original
+    point size. Previously the point size drifted on every save (e.g.
+    60pt saved → regenerated as "100" → reopened as 100pt → 167px).
+  - Project loader: HB_ATokens(content, Chr(10)) left a trailing CR on
+    each form name when the .hbp was stored with CRLF line endings.
+    MemoRead("...\Form1\r.prg") silently returned "" and the form
+    never loaded. Strip Chr(13) before AllTrim on each line.
+  - CodeEditorClearTabs now sets bSettingText guard around SCI_SETTEXT
+    so the live-sync debounced timer doesn't fire during project load
+    (which was destroying the freshly-loaded form's children a few
+    seconds after it appeared).
+  - Inspector "Value" column now extends to the right edge of the
+    inspector window (no 20-px margin).
+
+  NEW
+  - Labels auto-fit both height and width to the assigned font when
+    oFont is applied: height derives from lfHeight + small leading;
+    width uses GetTextExtentPoint32 on a memory DC (safe with no HWND,
+    no shared screen-DC state) so it works both at load time and on
+    live inspector edits.
+  - TBRun's rebuild-skip hash now includes the backend C++ sources
+    (hbbridge.cpp, tform.cpp, tcontrol.cpp, tcontrols.cpp), so changes
+    to the IDE's runtime library force a rebuild of the user's
+    UserApp.exe instead of running a stale cached binary.
+
 2026-04-12 (Windows: Font dialog picks text color)
 
   Windows ChooseFont dialog now opens with CF_EFFECTS so the user can

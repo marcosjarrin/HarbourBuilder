@@ -16,13 +16,16 @@ ENDCLASS
 METHOD CreateForm() CLASS TForm1
 
    ::Title  := "Form1"
-   ::Left   := 1008
-   ::Top    := 309
-   ::Width  := 400
-   ::Height := 300
+   ::Left   := 1122
+   ::Top    := 377
+   ::Width  := 603
+   ::Height := 441
+   ::FontName := "Segoe UI"
+   ::FontSize := 9
+   ::Color  := 2960685
 
-   @ 80, 88 SAY ::oLabel1 PROMPT "Hello world" OF Self SIZE 215
-   ::oLabel1:oFont := "Georgia,36,00FF2E"
+   @ 112, 152 SAY ::oLabel1 PROMPT "Hello" OF Self SIZE 240, 104
+   ::oLabel1:oFont := "Georgia,60,00FF2E"
 
 return nil
 //--------------------------------------------------------------------

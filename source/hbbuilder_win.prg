@@ -1923,7 +1923,7 @@ static function TBOpen()
 
    // Load each form
    for i := 2 to Len( aLines )
-      cFormName := AllTrim( aLines[i] )
+      cFormName := AllTrim( StrTran( aLines[i], Chr(13), "" ) )
       if Empty( cFormName ); loop; endif
 
       // Read form code
@@ -2229,6 +2229,11 @@ static function TBRun()
    // Include compiler and framework in hash so changes force rebuild
    cAllCode += DetectCompiler() + LTrim( Str( nSelectedCompIdx ) )
    cAllCode += MemoRead( "c:\HarbourBuilder\source\core\classes.prg" )
+   // Include backend C++ sources so IDE-side backend updates force a rebuild
+   cAllCode += MemoRead( "c:\HarbourBuilder\source\cpp\hbbridge.cpp" )
+   cAllCode += MemoRead( "c:\HarbourBuilder\source\cpp\tform.cpp" )
+   cAllCode += MemoRead( "c:\HarbourBuilder\source\cpp\tcontrol.cpp" )
+   cAllCode += MemoRead( "c:\HarbourBuilder\source\cpp\tcontrols.cpp" )
    nHash := Len( cAllCode )
    for i := 1 to Min( Len( cAllCode ), 5000 )
       nHash := nHash + Asc( SubStr( cAllCode, i, 1 ) ) * i
@@ -7462,7 +7467,9 @@ HB_FUNC( CODEEDITORCLEARTABS )
    ed->nTabs = 1;
    ed->nActiveTab = 0;
 
+   ed->bSettingText = 1;
    SciMsg( ed->hEdit, SCI_SETTEXT, 0, (LPARAM) "" );
+   ed->bSettingText = 0;
 }
 
 /* CodeEditorOnTabChange( hEditor, bBlock ) - set tab change callback */

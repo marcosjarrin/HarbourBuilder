@@ -677,12 +677,12 @@ static LRESULT CALLBACK InsWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
             if( d->hList )
             {
                MoveWindow( d->hList, 0, topY, w, h - topY, TRUE );
-               ListView_SetColumnWidth( d->hList, 1, w - COL_NAME_W - 20 );
+               ListView_SetColumnWidth( d->hList, 1, w - COL_NAME_W );
             }
             if( d->hEventList )
             {
                MoveWindow( d->hEventList, 0, topY, w, h - topY, TRUE );
-               ListView_SetColumnWidth( d->hEventList, 1, w - COL_NAME_W - 20 );
+               ListView_SetColumnWidth( d->hEventList, 1, w - COL_NAME_W );
             }
          }
          return 0;
