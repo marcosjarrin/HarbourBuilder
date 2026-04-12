@@ -1,6 +1,17 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-12 (Windows: TLabel font preserved at runtime)
+
+  FIX: Labels assigned an oFont in the designer now render with that
+  font when the built project runs. Root cause: TForm::SetupChildren
+  called SetFont(FFormFont) unconditionally before CreateHandle, which
+  overwrote the per-control FFont set by ":oFont := " in the generated
+  CreateForm() code (that runs before Activate(), when FHandle is 0).
+  The two SetFont calls in tform.cpp (groupbox pass + generic pass) now
+  skip controls that already have FFont, matching the macOS pattern
+  ("if !FFont then inherit form font").
+
 2026-04-12 (Windows: Live sync code editor → form designer + inspector)
 
   LIVE CODE-TO-DESIGNER SYNC (Windows):

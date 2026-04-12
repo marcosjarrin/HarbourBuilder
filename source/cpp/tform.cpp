@@ -1551,7 +1551,7 @@ void TForm::CreateAllChildren()
    {
       if( FChildren[i]->FControlType == CT_GROUPBOX )
       {
-         FChildren[i]->SetFont( FFormFont );
+         if( !FChildren[i]->FFont ) FChildren[i]->SetFont( FFormFont );
          FChildren[i]->CreateHandle( FHandle );
          /* Offset below toolbar */
          if( FClientTop > 0 && FChildren[i]->FHandle )
@@ -1612,7 +1612,7 @@ void TForm::CreateAllChildren()
          }
          else
          {
-            FChildren[i]->SetFont( FFormFont );
+            if( !FChildren[i]->FFont ) FChildren[i]->SetFont( FFormFont );
             FChildren[i]->CreateHandle( FHandle );
             /* Offset below toolbar */
             if( FClientTop > 0 && FChildren[i]->FHandle )
