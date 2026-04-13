@@ -61,7 +61,7 @@ Drop AI components on your form, set an API key, and interact with the world's m
   works offline. Perfect for development and enterprise environments.</p>
 </div>
 
-<h2>AI Components Overview</h2>
+<h2 id="ai-controls">AI Components Overview</h2>
 
 <table>
   <tr><th>Component</th><th>CT ID</th><th>Provider</th><th>Type</th></tr>
@@ -76,7 +76,7 @@ Drop AI components on your form, set an API key, and interact with the world's m
   <tr><td><code>TEmbeddings</code></td><td>111</td><td>Various</td><td>Vector Embeddings</td></tr>
 </table>
 
-<h2>Common Properties (all AI controls)</h2>
+<h2 id="common-properties">Common Properties (all AI controls)</h2>
 <table>
   <tr><th>Property</th><th>Type</th><th>Description</th></tr>
   <tr><td><code>cApiKey</code></td><td>String</td><td>API authentication key</td></tr>
@@ -87,7 +87,7 @@ Drop AI components on your form, set an API key, and interact with the world's m
   <tr><td><code>lStream</code></td><td>Logical</td><td>Enable streaming responses (token by token)</td></tr>
 </table>
 
-<h2>Common Events</h2>
+<h2 id="common-events">Common Events</h2>
 <table>
   <tr><th>Event</th><th>Parameters</th><th>Description</th></tr>
   <tr><td><code>OnResponse</code></td><td><code>cResponse</code></td><td>Full response received</td></tr>
@@ -96,7 +96,7 @@ Drop AI components on your form, set an API key, and interact with the world's m
   <tr><td><code>OnTokenCount</code></td><td><code>nPrompt, nCompletion</code></td><td>Token usage report</td></tr>
 </table>
 
-<h2>Common Methods</h2>
+<h2 id="common-methods">Common Methods</h2>
 <table>
   <tr><th>Method</th><th>Parameters</th><th>Description</th></tr>
   <tr><td><code>:Chat( cMessage )</code></td><td>String</td><td>Send a chat message, fires OnResponse</td></tr>
@@ -258,6 +258,56 @@ oEmb:<span class="fn">Search</span>( <span class="st">"visual development enviro
 
 </div>
 
+<!-- Table of Contents Rail -->
+<div class="toc-rail">
+  <h4>On This Page</h4>
+  <a href="#ai-controls" class="toc-h2 active">AI Controls Overview</a>
+  <a href="#common-properties" class="toc-h2">Common Properties</a>
+  <a href="#common-events" class="toc-h2">Common Events</a>
+  <a href="#common-methods" class="toc-h2">Common Methods</a>
+  <a href="#openai" class="toc-h2">TOpenAI</a>
+  <a href="#gemini" class="toc-h2">TGemini</a>
+  <a href="#claude" class="toc-h2">TClaude</a>
+  <a href="#deepseek" class="toc-h2">TDeepSeek</a>
+  <a href="#grok" class="toc-h2">TGrok</a>
+  <a href="#ollama" class="toc-h2">TOllama</a>
+  <a href="#transformer" class="toc-h2">TTransformer</a>
+  <a href="#whisper" class="toc-h2">TWhisper</a>
+  <a href="#embeddings" class="toc-h2">TEmbeddings</a>
+</div>
+
 <script src="../assets/js/docs.js"></script>
+<script>
+// Scroll spy for TOC rail
+document.addEventListener('DOMContentLoaded', function() {
+  const headings = document.querySelectorAll('.content h2[id], .content h3[id]');
+  const tocLinks = document.querySelectorAll('.toc-rail a');
+  
+  if (headings.length === 0 || tocLinks.length === 0) return;
+  
+  function updateActiveLink() {
+    let currentHeading = null;
+    const scrollPos = window.scrollY + 100;
+    
+    headings.forEach(heading => {
+      if (heading.offsetTop <= scrollPos) {
+        currentHeading = heading;
+      }
+    });
+    
+    if (currentHeading) {
+      tocLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.getAttribute('href') === '#' + currentHeading.id) {
+          link.classList.add('active');
+        }
+      });
+    }
+  }
+  
+  window.addEventListener('scroll', updateActiveLink);
+  updateActiveLink();
+});
+</script>
 </body>
 </html>
