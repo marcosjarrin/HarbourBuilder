@@ -1,6 +1,32 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-13 (macOS: File menu icons realigned; reusable Find/Replace dialog for code editor)
+
+  FIXES
+  - macOS File menu: bitmap icons were shifted (Save showed exit icon, Open showed
+    save icon, etc.) because the icon-to-position mapping used an outdated 8-item
+    layout. Remapped to the current 11-item layout: Open=4, Save=7, Save As=8,
+    Exit=10.
+
+  FEATURES
+  - macOS: reusable Find/Replace floating panel in the code editor.
+    - Search menu: Find... (Cmd+F) opens panel in Find mode; Replace... (Cmd+H)
+      opens the same panel with Replace field and Replace/Rep. All buttons.
+    - Options: Match case, Whole word, Wrap around.
+    - Buttons: Previous, Next (Enter), Replace, Rep. All, Close (Esc).
+    - Backed by SCI_SEARCHINTARGET / SCI_REPLACETARGET with wrap-around and
+      undo grouping for Replace All.
+    - Find Next / Find Previous menu items reuse the last search term; open
+      the panel if empty.
+    - Seeds the Find field with the current selection (single-line only).
+
+  FILES
+  - source/hbbuilder_macos.prg: fixed menu icon positions for File menu.
+  - source/backends/cocoa/cocoa_editor.mm: new CE_ShowFindPanel + HBFindTarget
+    Obj-C helper, rewired CODEEDITORFIND / CODEEDITORREPLACE /
+    CODEEDITORFINDNEXT / CODEEDITORFINDPREV / CODEEDITORSHOWFINDBAR.
+
 2026-04-13 (Documentation: complete refactor, 27 new pages, all platforms/IDE features documented)
 
   DOCUMENTATION

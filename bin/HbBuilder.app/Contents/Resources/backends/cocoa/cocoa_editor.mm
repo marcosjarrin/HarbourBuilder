@@ -2044,38 +2044,343 @@ HB_FUNC( CODEEDITORDESTROY )
    }
 }
 
-/* --- Find Bar --- */
+/* --- Find / Replace Dialog -----------------------------------------------
+ * Reusable floating panel for Find and Replace. Operates on the currently
+ * targeted CODEEDITOR (s_findEditor). Uses SCI_SEARCHINTARGET with wrap.
+ * --------------------------------------------------------------------- */
+
+static NSPanel *     s_findPanel      = nil;
+static NSTextField * s_findField      = nil;
+static NSTextField * s_replaceField   = nil;
+static NSButton *    s_chkCase        = nil;
+static NSButton *    s_chkWord        = nil;
+static NSButton *    s_chkWrap        = nil;
+static NSTextField * s_findStatus     = nil;
+static NSBox *       s_replaceBox     = nil;
+static NSButton *    s_btnReplace     = nil;
+static NSButton *    s_btnReplaceAll  = nil;
+static CODEEDITOR *  s_findEditor     = NULL;
+
+static int CE_BuildSearchFlags( void )
+{
+   int flags = 0;
+   if( s_chkCase && [s_chkCase state] == NSControlStateValueOn ) flags |= SCFIND_MATCHCASE;
+   if( s_chkWord && [s_chkWord state] == NSControlStateValueOn ) flags |= SCFIND_WHOLEWORD;
+   return flags;
+}
+
+/* Search from nStart to end of doc; if not found and wrap enabled, from 0 to nStart.
+ * Forward=YES → normal; Forward=NO → find last match before nStart (linear scan). */
+static sptr_t CE_DoSearch( CODEEDITOR * ed, const char * needle, int flags,
+                           sptr_t startPos, BOOL forward, BOOL wrap, sptr_t * outEnd )
+{
+   if( !ed || !ed->sciView || !needle || !*needle ) return -1;
+   sptr_t nLen = (sptr_t) strlen( needle );
+   sptr_t docLen = SciMsg0( ed->sciView, SCI_GETLENGTH );
+   SciMsg( ed->sciView, SCI_SETSEARCHFLAGS, (uptr_t) flags, 0 );
+
+   if( forward )
+   {
+      SciMsg( ed->sciView, SCI_SETTARGETSTART, (uptr_t) startPos, 0 );
+      SciMsg( ed->sciView, SCI_SETTARGETEND,   (uptr_t) docLen, 0 );
+      sptr_t p = SciMsg( ed->sciView, SCI_SEARCHINTARGET, (uptr_t) nLen, (sptr_t) needle );
+      if( p < 0 && wrap && startPos > 0 )
+      {
+         SciMsg( ed->sciView, SCI_SETTARGETSTART, 0, 0 );
+         SciMsg( ed->sciView, SCI_SETTARGETEND, (uptr_t) startPos, 0 );
+         p = SciMsg( ed->sciView, SCI_SEARCHINTARGET, (uptr_t) nLen, (sptr_t) needle );
+      }
+      if( p >= 0 && outEnd ) *outEnd = p + nLen;
+      return p;
+   }
+   else
+   {
+      /* Backward: scan forward collecting matches up to startPos, return last. */
+      sptr_t lastPos = -1, cur = 0;
+      while( cur < startPos )
+      {
+         SciMsg( ed->sciView, SCI_SETTARGETSTART, (uptr_t) cur, 0 );
+         SciMsg( ed->sciView, SCI_SETTARGETEND,   (uptr_t) startPos, 0 );
+         sptr_t p = SciMsg( ed->sciView, SCI_SEARCHINTARGET, (uptr_t) nLen, (sptr_t) needle );
+         if( p < 0 ) break;
+         lastPos = p;
+         cur = p + 1;
+      }
+      if( lastPos < 0 && wrap )
+      {
+         sptr_t cur2 = startPos, last2 = -1;
+         while( cur2 < docLen )
+         {
+            SciMsg( ed->sciView, SCI_SETTARGETSTART, (uptr_t) cur2, 0 );
+            SciMsg( ed->sciView, SCI_SETTARGETEND,   (uptr_t) docLen, 0 );
+            sptr_t p = SciMsg( ed->sciView, SCI_SEARCHINTARGET, (uptr_t) nLen, (sptr_t) needle );
+            if( p < 0 ) break;
+            last2 = p;
+            cur2 = p + 1;
+         }
+         lastPos = last2;
+      }
+      if( lastPos >= 0 && outEnd ) *outEnd = lastPos + nLen;
+      return lastPos;
+   }
+}
+
+@interface HBFindTarget : NSObject
+- (void) onFindNext:(id)sender;
+- (void) onFindPrev:(id)sender;
+- (void) onReplace:(id)sender;
+- (void) onReplaceAll:(id)sender;
+- (void) onClose:(id)sender;
+@end
+
+static HBFindTarget * s_findTarget = nil;
+
+static void CE_FindStep( BOOL forward )
+{
+   CODEEDITOR * ed = s_findEditor;
+   if( !ed || !ed->sciView || !s_findField ) return;
+   const char * needle = [[s_findField stringValue] UTF8String];
+   if( !needle || !*needle ) return;
+
+   int flags = CE_BuildSearchFlags();
+   BOOL wrap = ( s_chkWrap && [s_chkWrap state] == NSControlStateValueOn );
+
+   sptr_t selStart = SciMsg0( ed->sciView, SCI_GETSELECTIONSTART );
+   sptr_t selEnd   = SciMsg0( ed->sciView, SCI_GETSELECTIONEND );
+   sptr_t startPos = forward ? selEnd : selStart;
+
+   sptr_t matchEnd = 0;
+   sptr_t p = CE_DoSearch( ed, needle, flags, startPos, forward, wrap, &matchEnd );
+   if( p < 0 )
+   {
+      [s_findStatus setStringValue:@"Not found"];
+      NSBeep();
+      return;
+   }
+   SciMsg( ed->sciView, SCI_SETSEL, (uptr_t) p, (sptr_t) matchEnd );
+   SciMsg( ed->sciView, SCI_SCROLLCARET, 0, 0 );
+   [s_findStatus setStringValue:@""];
+}
+
+@implementation HBFindTarget
+- (void) onFindNext:(id)sender { (void)sender; CE_FindStep( YES ); }
+- (void) onFindPrev:(id)sender { (void)sender; CE_FindStep( NO ); }
+- (void) onReplace:(id)sender
+{
+   (void)sender;
+   CODEEDITOR * ed = s_findEditor;
+   if( !ed || !ed->sciView ) return;
+   const char * needle = [[s_findField stringValue] UTF8String];
+   const char * repl   = [[s_replaceField stringValue] UTF8String];
+   if( !needle || !*needle ) return;
+
+   /* If current selection matches needle, replace it; then find next. */
+   sptr_t selStart = SciMsg0( ed->sciView, SCI_GETSELECTIONSTART );
+   sptr_t selEnd   = SciMsg0( ed->sciView, SCI_GETSELECTIONEND );
+   if( selEnd > selStart )
+   {
+      int flags = CE_BuildSearchFlags();
+      SciMsg( ed->sciView, SCI_SETTARGETSTART, (uptr_t) selStart, 0 );
+      SciMsg( ed->sciView, SCI_SETTARGETEND,   (uptr_t) selEnd, 0 );
+      SciMsg( ed->sciView, SCI_SETSEARCHFLAGS, (uptr_t) flags, 0 );
+      sptr_t p = SciMsg( ed->sciView, SCI_SEARCHINTARGET, (uptr_t) strlen(needle), (sptr_t) needle );
+      if( p == selStart )
+      {
+         SciMsg( ed->sciView, SCI_REPLACETARGET, (uptr_t) strlen(repl ? repl : ""), (sptr_t) (repl ? repl : "") );
+      }
+   }
+   CE_FindStep( YES );
+}
+- (void) onReplaceAll:(id)sender
+{
+   (void)sender;
+   CODEEDITOR * ed = s_findEditor;
+   if( !ed || !ed->sciView ) return;
+   const char * needle = [[s_findField stringValue] UTF8String];
+   const char * repl   = [[s_replaceField stringValue] UTF8String];
+   if( !needle || !*needle ) return;
+
+   int flags = CE_BuildSearchFlags();
+   sptr_t nLen = (sptr_t) strlen( needle );
+   sptr_t rLen = (sptr_t) strlen( repl ? repl : "" );
+   int count = 0;
+
+   SciMsg( ed->sciView, SCI_BEGINUNDOACTION, 0, 0 );
+   SciMsg( ed->sciView, SCI_SETSEARCHFLAGS, (uptr_t) flags, 0 );
+   sptr_t cur = 0;
+   sptr_t docLen = SciMsg0( ed->sciView, SCI_GETLENGTH );
+   while( cur <= docLen )
+   {
+      SciMsg( ed->sciView, SCI_SETTARGETSTART, (uptr_t) cur, 0 );
+      SciMsg( ed->sciView, SCI_SETTARGETEND,   (uptr_t) docLen, 0 );
+      sptr_t p = SciMsg( ed->sciView, SCI_SEARCHINTARGET, (uptr_t) nLen, (sptr_t) needle );
+      if( p < 0 ) break;
+      SciMsg( ed->sciView, SCI_REPLACETARGET, (uptr_t) rLen, (sptr_t) (repl ? repl : "") );
+      count++;
+      cur = p + rLen;
+      docLen = SciMsg0( ed->sciView, SCI_GETLENGTH );
+   }
+   SciMsg( ed->sciView, SCI_ENDUNDOACTION, 0, 0 );
+   [s_findStatus setStringValue:[NSString stringWithFormat:@"%d replaced", count]];
+}
+- (void) onClose:(id)sender { (void)sender; if( s_findPanel ) [s_findPanel orderOut:nil]; }
+@end
+
+static void CE_ShowFindPanel( CODEEDITOR * ed, BOOL withReplace )
+{
+   s_findEditor = ed;
+   if( !s_findTarget ) s_findTarget = [[HBFindTarget alloc] init];
+
+   if( !s_findPanel )
+   {
+      NSRect frame = NSMakeRect( 0, 0, 420, 190 );
+      s_findPanel = [[NSPanel alloc] initWithContentRect:frame
+         styleMask:( NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskUtilityWindow )
+         backing:NSBackingStoreBuffered defer:NO];
+      [s_findPanel setFloatingPanel:YES];
+      [s_findPanel setHidesOnDeactivate:NO];
+      [s_findPanel setBecomesKeyOnlyIfNeeded:NO];
+
+      NSView * cv = [s_findPanel contentView];
+
+      /* Find label + field */
+      NSTextField * lblFind = [[NSTextField alloc] initWithFrame:NSMakeRect( 12, 155, 70, 20 )];
+      [lblFind setStringValue:@"Find:"]; [lblFind setEditable:NO]; [lblFind setBordered:NO];
+      [lblFind setBackgroundColor:[NSColor clearColor]];
+      [cv addSubview:lblFind];
+
+      s_findField = [[NSTextField alloc] initWithFrame:NSMakeRect( 86, 153, 320, 22 )];
+      [cv addSubview:s_findField];
+
+      /* Replace label + field inside a box so we can hide it */
+      s_replaceBox = [[NSBox alloc] initWithFrame:NSMakeRect( 0, 120, 420, 30 )];
+      [s_replaceBox setBoxType:NSBoxCustom];
+      [s_replaceBox setBorderType:NSNoBorder];
+      [s_replaceBox setTitlePosition:NSNoTitle];
+      [s_replaceBox setContentViewMargins:NSMakeSize(0,0)];
+
+      NSTextField * lblRepl = [[NSTextField alloc] initWithFrame:NSMakeRect( 12, 5, 70, 20 )];
+      [lblRepl setStringValue:@"Replace:"]; [lblRepl setEditable:NO]; [lblRepl setBordered:NO];
+      [lblRepl setBackgroundColor:[NSColor clearColor]];
+      [[s_replaceBox contentView] addSubview:lblRepl];
+
+      s_replaceField = [[NSTextField alloc] initWithFrame:NSMakeRect( 86, 3, 320, 22 )];
+      [[s_replaceBox contentView] addSubview:s_replaceField];
+      [cv addSubview:s_replaceBox];
+
+      /* Checkboxes */
+      s_chkCase = [[NSButton alloc] initWithFrame:NSMakeRect( 86, 90, 100, 20 )];
+      [s_chkCase setButtonType:NSButtonTypeSwitch];
+      [s_chkCase setTitle:@"Match case"];
+      [cv addSubview:s_chkCase];
+
+      s_chkWord = [[NSButton alloc] initWithFrame:NSMakeRect( 190, 90, 110, 20 )];
+      [s_chkWord setButtonType:NSButtonTypeSwitch];
+      [s_chkWord setTitle:@"Whole word"];
+      [cv addSubview:s_chkWord];
+
+      s_chkWrap = [[NSButton alloc] initWithFrame:NSMakeRect( 304, 90, 110, 20 )];
+      [s_chkWrap setButtonType:NSButtonTypeSwitch];
+      [s_chkWrap setTitle:@"Wrap around"];
+      [s_chkWrap setState:NSControlStateValueOn];
+      [cv addSubview:s_chkWrap];
+
+      /* Status label */
+      s_findStatus = [[NSTextField alloc] initWithFrame:NSMakeRect( 12, 60, 394, 20 )];
+      [s_findStatus setEditable:NO]; [s_findStatus setBordered:NO];
+      [s_findStatus setBackgroundColor:[NSColor clearColor]];
+      [s_findStatus setTextColor:[NSColor systemRedColor]];
+      [cv addSubview:s_findStatus];
+
+      /* Buttons */
+      NSButton * btnPrev = [[NSButton alloc] initWithFrame:NSMakeRect( 12, 12, 80, 28 )];
+      [btnPrev setTitle:@"Previous"];
+      [btnPrev setBezelStyle:NSBezelStyleRounded];
+      [btnPrev setTarget:s_findTarget]; [btnPrev setAction:@selector(onFindPrev:)];
+      [cv addSubview:btnPrev];
+
+      NSButton * btnNext = [[NSButton alloc] initWithFrame:NSMakeRect( 96, 12, 80, 28 )];
+      [btnNext setTitle:@"Next"];
+      [btnNext setBezelStyle:NSBezelStyleRounded];
+      [btnNext setKeyEquivalent:@"\r"];
+      [btnNext setTarget:s_findTarget]; [btnNext setAction:@selector(onFindNext:)];
+      [cv addSubview:btnNext];
+
+      s_btnReplace = [[NSButton alloc] initWithFrame:NSMakeRect( 180, 12, 80, 28 )];
+      [s_btnReplace setTitle:@"Replace"];
+      [s_btnReplace setBezelStyle:NSBezelStyleRounded];
+      [s_btnReplace setTarget:s_findTarget]; [s_btnReplace setAction:@selector(onReplace:)];
+      [cv addSubview:s_btnReplace];
+
+      s_btnReplaceAll = [[NSButton alloc] initWithFrame:NSMakeRect( 264, 12, 90, 28 )];
+      [s_btnReplaceAll setTitle:@"Rep. All"];
+      [s_btnReplaceAll setBezelStyle:NSBezelStyleRounded];
+      [s_btnReplaceAll setTarget:s_findTarget]; [s_btnReplaceAll setAction:@selector(onReplaceAll:)];
+      [cv addSubview:s_btnReplaceAll];
+
+      NSButton * btnClose = [[NSButton alloc] initWithFrame:NSMakeRect( 350, 12, 66, 28 )];
+      [btnClose setTitle:@"Close"];
+      [btnClose setBezelStyle:NSBezelStyleRounded];
+      [btnClose setKeyEquivalent:@"\033"];
+      [btnClose setTarget:s_findTarget]; [btnClose setAction:@selector(onClose:)];
+      [cv addSubview:btnClose];
+   }
+
+   [s_findPanel setTitle:( withReplace ? @"Replace" : @"Find" )];
+   [s_replaceBox setHidden:!withReplace];
+   [s_btnReplace setHidden:!withReplace];
+   [s_btnReplaceAll setHidden:!withReplace];
+
+   /* Seed Find field with current selection (if any, single line) */
+   if( ed && ed->sciView )
+   {
+      sptr_t a = SciMsg0( ed->sciView, SCI_GETSELECTIONSTART );
+      sptr_t b = SciMsg0( ed->sciView, SCI_GETSELECTIONEND );
+      if( b > a && (b - a) < 256 )
+      {
+         char buf[260]; memset( buf, 0, sizeof(buf) );
+         struct { sptr_t cpMin, cpMax; char * lpstrText; } tr = { a, b, buf };
+         SciMsg( ed->sciView, 2162 /* SCI_GETTEXTRANGE */, 0, (sptr_t) &tr );
+         NSString * s = [NSString stringWithUTF8String:buf];
+         if( s && [s rangeOfString:@"\n"].location == NSNotFound )
+            [s_findField setStringValue:s];
+      }
+   }
+   [s_findStatus setStringValue:@""];
+   [s_findPanel center];
+   [s_findPanel makeKeyAndOrderFront:nil];
+   [s_findPanel makeFirstResponder:s_findField];
+}
 
 HB_FUNC( CODEEDITORSHOWFINDBAR )
 {
    CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
    if( !ed || !ed->sciView ) return;
-
-   [ed->window makeKeyAndOrderFront:nil];
-
-   /* Use ScintillaView's findAndHighlightText or NSTextFinder */
    BOOL showReplace = HB_ISLOG(2) ? hb_parl(2) : NO;
-   NSInteger action = showReplace ? 12 : 1; /* NSTextFinderAction */
-   NSMenuItem * item = [[NSMenuItem alloc] initWithTitle:@"Find"
-      action:@selector(performTextFinderAction:) keyEquivalent:@""];
-   [item setTag:action];
-
-   /* Try the content view first (SCIContentView handles text input) */
-   SCIContentView * contentView = [ed->sciView content];
-   if( [contentView respondsToSelector:@selector(performTextFinderAction:)] )
-      [contentView performTextFinderAction:item];
+   [ed->window makeKeyAndOrderFront:nil];
+   CE_ShowFindPanel( ed, showReplace );
 }
 
 HB_FUNC( CODEEDITORFINDNEXT )
 {
    CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
-   if( ed && ed->window ) [ed->window makeKeyAndOrderFront:nil];
+   if( !ed || !ed->sciView ) return;
+   [ed->window makeKeyAndOrderFront:nil];
+   if( !s_findField || [[s_findField stringValue] length] == 0 )
+   { CE_ShowFindPanel( ed, NO ); return; }
+   s_findEditor = ed;
+   CE_FindStep( YES );
 }
 
 HB_FUNC( CODEEDITORFINDPREV )
 {
    CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
-   if( ed && ed->window ) [ed->window makeKeyAndOrderFront:nil];
+   if( !ed || !ed->sciView ) return;
+   [ed->window makeKeyAndOrderFront:nil];
+   if( !s_findField || [[s_findField stringValue] length] == 0 )
+   { CE_ShowFindPanel( ed, NO ); return; }
+   s_findEditor = ed;
+   CE_FindStep( NO );
 }
 
 /* --- Auto-Complete --- */
@@ -2154,18 +2459,13 @@ HB_FUNC( CODEEDITORPASTE )
    if( ed && ed->sciView ) SciMsg( ed->sciView, SCI_PASTE, 0, 0 );
 }
 
-/* CodeEditorFind / CodeEditorReplace — aliases for ShowFindBar */
+/* CodeEditorFind / CodeEditorReplace — reusable Find/Replace dialog */
 HB_FUNC( CODEEDITORFIND )
 {
    CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
    if( !ed || !ed->sciView ) return;
    [ed->window makeKeyAndOrderFront:nil];
-   NSMenuItem * item = [[NSMenuItem alloc] initWithTitle:@"Find"
-      action:@selector(performTextFinderAction:) keyEquivalent:@""];
-   [item setTag:1];
-   SCIContentView * cv = [ed->sciView content];
-   if( [cv respondsToSelector:@selector(performTextFinderAction:)] )
-      [cv performTextFinderAction:item];
+   CE_ShowFindPanel( ed, NO );
 }
 
 HB_FUNC( CODEEDITORREPLACE )
@@ -2173,12 +2473,7 @@ HB_FUNC( CODEEDITORREPLACE )
    CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
    if( !ed || !ed->sciView ) return;
    [ed->window makeKeyAndOrderFront:nil];
-   NSMenuItem * item = [[NSMenuItem alloc] initWithTitle:@"Replace"
-      action:@selector(performTextFinderAction:) keyEquivalent:@""];
-   [item setTag:12];
-   SCIContentView * cv = [ed->sciView content];
-   if( [cv respondsToSelector:@selector(performTextFinderAction:)] )
-      [cv performTextFinderAction:item];
+   CE_ShowFindPanel( ed, YES );
 }
 
 /* Debugger Panel — now implemented in the debugger section at end of file */
