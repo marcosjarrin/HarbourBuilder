@@ -2715,6 +2715,14 @@ static function TBRunAndroid()
       return nil
    endif
 
+   W32_ProgressStep( "Checking / booting emulator..." )
+   if ! AndroidEnsureDevice( cAdb )
+      W32_ProgressClose()
+      MsgInfo( "Emulator did not boot within 120 seconds." + Chr(10) + ;
+               "APK is ready at:" + Chr(10) + cApkPath, "Android target" )
+      return nil
+   endif
+
    W32_ProgressStep( "Installing on device..." )
    cCmd := 'cmd /c ""' + cAdb + '" install -r "' + cApkPath + '""'
    W32_ShellExec( cCmd )
@@ -2724,11 +2732,45 @@ static function TBRunAndroid()
    W32_ShellExec( cCmd )
    W32_ProgressClose()
 
-   MsgInfo( "APK built and launched:" + Chr(10) + cApkPath + Chr(10) + Chr(10) + ;
-            "If no device is connected, start the emulator first.", ;
+   MsgInfo( "APK installed and launched on the emulator:" + Chr(10) + cApkPath, ;
             "Android target" )
 
 return nil
+
+// Ensure an Android device is ready. If none is connected, launch the
+// AVD "HarbourBuilderAVD" in background and poll getprop sys.boot_completed
+// for up to 120 seconds. Returns .T. when the device is ready.
+static function AndroidEnsureDevice( cAdb )
+
+   local cEmulator := "C:\Android\Sdk\emulator\emulator.exe"
+   local cAvd      := "HarbourBuilderAVD"
+   local cOut, cCmd, nTries
+
+   // 1. Already a device connected?
+   cOut := W32_ShellExec( 'cmd /c ""' + cAdb + '" devices"' )
+   if ValType( cOut ) == "C" .and. "device" $ SubStr( cOut, At( Chr(10), cOut ) + 1 )
+      return .T.
+   endif
+
+   // 2. Launch the emulator detached (fire-and-forget, new window)
+   if ! File( cEmulator )
+      MsgInfo( "Android emulator not found at " + cEmulator, "Android target" )
+      return .F.
+   endif
+   cCmd := 'cmd /c start "" "' + cEmulator + '" -avd ' + cAvd + ' -no-snapshot-save'
+   W32_ShellExec( cCmd )
+
+   // 3. Poll sys.boot_completed (up to ~120 s at ~2 s per try)
+   for nTries := 1 to 60
+      W32_ProgressStep( "Waiting for emulator (" + LTrim(Str(nTries)) + "/60)..." )
+      cOut := W32_ShellExec( 'cmd /c ""' + cAdb + '" shell getprop sys.boot_completed 2>nul"' )
+      if ValType( cOut ) == "C" .and. "1" $ cOut
+         return .T.
+      endif
+      hb_idleSleep( 2 )
+   next
+
+return .F.
 
 // Build a UI_*-based PRG from the currently designed form.
 // Supported in iteration 1b: Label (1), Edit (2), Button (3) + button OnClick
