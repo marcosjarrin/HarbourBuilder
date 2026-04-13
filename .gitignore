@@ -25,6 +25,8 @@ google-services.json
 !harbour/*.prg
 !backends/**/*.prg
 !backends/**/*.c
+!source/backends/**/*.prg
+!source/backends/**/*.c
 !samples/*.prg
 
 # Generated files
