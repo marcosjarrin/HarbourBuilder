@@ -281,7 +281,8 @@ function Main()
    INS_SetOnComboSel( _InsGetData(), { |nSel| OnComboSelect( nSel ) } )
    INS_SetOnEventDblClick( _InsGetData(), ;
       { |hCtrl, cEvent| OnEventDblClick( hCtrl, cEvent ) } )
-   INS_SetOnPropChanged( _InsGetData(), { || SyncDesignerToCode() } )
+   INS_SetOnPropChanged( _InsGetData(), { || SyncDesignerToCode(), ;
+      InspectorPopulateCombo( oDesignForm:hCpp ) } )
    INS_SetPos( _InsGetData(), 0, nInsTop, nInsW, nBottomY - nInsTop - 50 )
 
    WireDesignForm()
@@ -638,6 +639,9 @@ static function RegenerateFormCode( cName, hForm )
          hCtrl := UI_GetChild( hForm, i )
          if hCtrl == 0; loop; endif
 
+         // Skip auto-created TPageControl page panels (recreated by aTabs)
+         if UI_IsAutoPage( hCtrl ); loop; endif
+
          cCtrlName  := UI_GetProp( hCtrl, "cName" )
          cCtrlClass := UI_GetProp( hCtrl, "cClassName" )
          nType      := UI_GetType( hCtrl )
@@ -690,6 +694,20 @@ static function RegenerateFormCode( cName, hForm )
                cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
                   ' MEMO ::o' + cCtrlName + ' OF Self SIZE ' + ;
                   LTrim(Str(nCW)) + ", " + LTrim(Str(nCH)) + e
+            case nType == 33  // TabControl
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' TABCONTROL ::o' + cCtrlName + ' OF Self SIZE ' + ;
+                  LTrim(Str(nCW)) + ", " + LTrim(Str(nCH))
+               cVal := UI_GetProp( hCtrl, "aTabs" )
+               if ! Empty( cVal )
+                  aHdrs := hb_ATokens( cVal, "|" )
+                  cCreate += ' TABS '
+                  for kk := 1 to Len( aHdrs )
+                     if kk > 1; cCreate += ', '; endif
+                     cCreate += '"' + AllTrim( aHdrs[kk] ) + '"'
+                  next
+               endif
+               cCreate += e
             case nType == 79  // Browse
                cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
                   ' BROWSE ::o' + cCtrlName + ' OF Self SIZE ' + ;
@@ -758,6 +776,22 @@ static function RegenerateFormCode( cName, hForm )
                      LTrim(Str(nCW)) + ',' + LTrim(Str(nCH)) + e
                endif
          endcase
+
+         // Emit TPageControl ownership if present
+         if UI_GetCtrlOwner( hCtrl ) != 0
+            nCtrlClr := UI_GetCtrlOwner( hCtrl )
+            // Find the owner control's name among form children
+            nCount := UI_GetChildCount( hForm )
+            for kk := 1 to nCount
+               if UI_GetChild( hForm, kk ) == nCtrlClr
+                  cCreate += '   ::o' + cCtrlName + ':oOwner := ::o' + ;
+                     UI_GetProp( nCtrlClr, "cName" ) + e
+                  cCreate += '   ::o' + cCtrlName + ':nPage := ' + ;
+                     LTrim( Str( UI_GetCtrlPage( hCtrl ) ) ) + e
+                  exit
+               endif
+            next
+         endif
 
          // Emit nClrPane if non-default (default = 0xFFFFFFFF = 4294967295)
          nCtrlClr := UI_GetProp( hCtrl, "nClrPane" )
@@ -1134,6 +1168,26 @@ static function RestoreFormFromCode( hForm, cCode )
             hCtrl := UI_RadioButtonNew( hForm, cText, nL, nT, nW, nH )
          case " MEMO " $ Upper( cTrim )
             hCtrl := UI_MemoNew( hForm, "", nL, nT, nW, nH )
+         case " TABCONTROL " $ Upper( cTrim )
+            hCtrl := UI_TabControlNew( hForm, nL, nT, nW, nH )
+            nPos := At( "TABS ", Upper( cTrim ) )
+            if nPos > 0
+               cText := SubStr( cTrim, nPos + 5 )
+               cVal := ""
+               do while ! Empty( cText )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  cText := SubStr( cText, nPos2 + 1 )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  if ! Empty( cVal ); cVal += "|"; endif
+                  cVal += Left( cText, nPos2 - 1 )
+                  cText := SubStr( cText, nPos2 + 1 )
+               enddo
+               if hCtrl != 0 .and. ! Empty( cVal )
+                  UI_SetProp( hCtrl, "aTabs", cVal )
+               endif
+            endif
          case " BROWSE " $ Upper( cTrim )
             hCtrl := UI_BrowseNew( hForm, nL, nT, nW, nH )
             // Extract HEADERS "col1", "col2", "col3"
@@ -1195,7 +1249,20 @@ static function RestoreFormFromCode( hForm, cCode )
       next
       if hCtrl == 0; loop; endif
 
-      if cVal == "nClrPane" .or. cVal == "Color"
+      if cVal == "oOwner"
+         // cText is "::oTabCtrlName" -> resolve to handle, set owner
+         if Left( cText, 3 ) == "::o"
+            cName := AllTrim( SubStr( cText, 4 ) )
+            for kk := 1 to UI_GetChildCount( hForm )
+               if AllTrim( UI_GetProp( UI_GetChild( hForm, kk ), "cName" ) ) == cName
+                  UI_SetCtrlOwner( hCtrl, UI_GetChild( hForm, kk ), UI_GetCtrlPage( hCtrl ) )
+                  exit
+               endif
+            next
+         endif
+      elseif cVal == "nPage"
+         UI_SetCtrlOwner( hCtrl, UI_GetCtrlOwner( hCtrl ), Val( cText ) )
+      elseif cVal == "nClrPane" .or. cVal == "Color"
          UI_SetProp( hCtrl, "nClrPane", Val( cText ) )
       elseif cVal == "oFont"
          if Left( cText, 1 ) == '"'
@@ -1539,9 +1606,12 @@ static function SyncDesignerToCode()
       cNewCode += Chr(13) + Chr(10) + cMethods
    endif
 
-   // Update stored code and editor tab
+   // Update stored code and editor tab (guard against re-entry into
+   // OnEditorTextChange which would rebuild the form and invalidate handles)
    aForms[ nActiveForm ][ 3 ] := cNewCode
+   lSyncingFromCode := .t.
    CodeEditorSetTabText( hCodeEditor, nActiveForm + 1, cNewCode )
+   lSyncingFromCode := .f.
 
 return nil
 
@@ -1571,6 +1641,12 @@ static function OnEditorTextChange( hEd, nTab )
    // Read current editor content for this tab
    cCode := CodeEditorGetTabText( hCodeEditor, nTab )
    if Empty( cCode )
+      return nil
+   endif
+
+   // Skip if text matches the last code we regenerated (SyncDesignerToCode):
+   // the debounce timer may fire after our guard already cleared.
+   if cCode == aForms[ nFormIdx ][ 3 ]
       return nil
    endif
 

@@ -640,8 +640,12 @@ static HBFontPickerTarget * s_fontTarget = nil;
    [[sheet contentView] addSubview:cancelBtn];
 
    [sheet center];
+   [sheet setInitialFirstResponder:textView];
    [sheet makeKeyAndOrderFront:nil];
+   [sheet makeFirstResponder:textView];
+   [NSApp activateIgnoringOtherApps:YES];
    NSModalResponse response = [NSApp runModalForWindow:sheet];
+   [sheet makeFirstResponder:textView];
 
    if( response == NSModalResponseAbort )
    {

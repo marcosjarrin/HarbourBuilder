@@ -1,6 +1,60 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-13 (macOS: TTabControl -> TPageControl with auto-page TPanels and ownership)
+
+  FEATURES
+  - TTabControl now behaves like a TPageControl (C++Builder style):
+    - New `aTabs` property on TTabControl, edited via the same multi-line
+      string list dialog used for TBrowse `aHeaders`/`aColumns`.
+    - Auto-creates one TPanel per tab (FAutoPage flag, name `<name>_Page<i>`)
+      as the page container; removed/recreated when `aTabs` changes.
+    - Click on the tab bar in design mode switches the active page AND
+      still lets you select/drag the control.
+    - Auto-page panels are selectable (as drop target) but not movable or
+      resizable — geometry is controlled by the owning TPageControl.
+    - Dropping a control inside the TPageControl content area, or while an
+      auto-page is selected, assigns ownership (FOwnerCtrl, FOwnerPage).
+      The control is shown only when its page is active; hidden otherwise.
+    - Moving a TPageControl translates all its owned controls with it.
+    - Codegen: emits `@ T,L TABCONTROL ::oName OF Self SIZE W,H TABS "A","B"`
+      plus `::oCtrl:oOwner := ::oPC` / `::oCtrl:nPage := n` for owned
+      controls. Parser regenerates ownership via UI_SetCtrlOwner.
+    - Auto-page TPanels are skipped in codegen — rebuilt automatically by
+      the `aTabs` setter.
+  - UI_SetCtrlOwner / UI_GetCtrlOwner / UI_GetCtrlPage / UI_IsAutoPage
+    HB_FUNCs exposed to Harbour.
+
+  FIXES
+  - GetCtrlRaw now validates handles against s_allControls before the
+    __bridge cast; prevents `objc_retain` crash on stale handles returned
+    by the inspector combo map after a form rebuild.
+  - SyncDesignerToCode guards against re-entry via lSyncingFromCode around
+    CodeEditorSetTabText.
+  - OnEditorTextChange also bails out when the debounced text equals the
+    last code we regenerated, so the 500ms text-change timer no longer
+    tears down child controls (and thus no longer deselects the user's
+    current selection).
+  - Find/Replace panel: moved the Close button 10px right so it no longer
+    overlaps Replace All; renamed "Replace All" to "Rep. All" so the title
+    fits; Replace and Rep. All are hidden in Find-only mode.
+  - NSTabView design-time delegate uses a `__weak` back-reference to the
+    owner so tab change events on a freed control no longer crash.
+  - Array editor sheet: explicit initialFirstResponder + makeFirstResponder
+    + activateIgnoringOtherApps so typing is always routed to the text view.
+
+  FILES
+  - source/backends/cocoa/cocoa_core.m: TPageControl ownership plumbing
+    (FOwnerCtrl, FOwnerPage, FAutoPage, FPendingOwner), HBTabDelegate,
+    UI_TabControlNew, UI_SetCtrlOwner / UI_GetCtrlOwner / UI_GetCtrlPage /
+    UI_IsAutoPage, aTabs live update with auto-panel create/remove,
+    overlay acceptsFirstMouse, GetCtrlRaw validation.
+  - source/backends/cocoa/cocoa_inspector.m: focus fixes for the array
+    editor sheet.
+  - source/hbbuilder_macos.prg: TABCONTROL codegen + parser, oOwner/nPage
+    codegen + parser, OnPropChanged refresh combo, SyncDesignerToCode
+    re-entry guard, OnEditorTextChange no-op on identical code.
+
 2026-04-13 (macOS: File menu icons realigned; reusable Find/Replace dialog for code editor)
 
   FIXES

@@ -317,6 +317,13 @@ void EnsureNSApp( void )
    HBControl * FCtrlParent;
    HBControl * FChildren[MAX_CHILDREN];
    int FChildCount;
+
+   /* TPageControl ownership: if FOwnerCtrl != nil, this control belongs to
+    * page FOwnerPage of that TPageControl. Its position remains in form
+    * coordinates; it is shown/hidden when the owner's selected tab matches. */
+   HBControl * FOwnerCtrl;
+   int         FOwnerPage;
+   BOOL        FAutoPage;   /* Auto-created page TPanel for a TPageControl tab */
 }
 - (void)addChild:(HBControl *)child;
 - (void)setText:(const char *)text;
@@ -401,6 +408,11 @@ void EnsureNSApp( void )
    int         FMenuItemCount;
    /* Component drop from palette */
    int         FPendingControlType;  /* -1 = none, CT_LABEL..CT_GROUPBOX */
+   /* Captured at the moment component-drop starts: the currently selected
+    * auto-page panel (if any), so newly dropped controls can be owned by
+    * that TPageControl page even though selection is cleared for rubber band. */
+   HBControl * FPendingOwner;
+   int         FPendingOwnerPage;
    PHB_ITEM    FOnComponentDrop;     /* callback( hForm, nControlType, nLeft, nTop, nWidth, nHeight ) */
    /* C++Builder TForm properties */
    int        FBorderStyle;     /* BS_NONE..BS_SIZETOOLWIN */
@@ -584,6 +596,66 @@ void EnsureNSApp( void )
 
 /* --- HBControl implementation --- */
 
+/* HBTabDelegate — routes NSTabView selection changes to show/hide owned
+ * controls based on FOwnerCtrl + FOwnerPage. Also updates the designer
+ * overlay so selection handles re-render. */
+static void HBUpdateTabVisibility( HBControl * owner );
+
+@interface HBTabDelegate : NSObject <NSTabViewDelegate>
+{
+@public
+   __weak HBControl * ownerCtrl;
+}
+@end
+
+@implementation HBTabDelegate
+- (void)tabView:(NSTabView *)tabView didSelectTabViewItem:(NSTabViewItem *)tabViewItem
+{
+   (void)tabView; (void)tabViewItem;
+   HBControl * o = ownerCtrl;
+   if( !o || !o->FCtrlParent ) return;
+   HBUpdateTabVisibility( o );
+}
+@end
+
+id HBMakeTabDelegate( HBControl * owner )
+{
+   HBTabDelegate * d = [[HBTabDelegate alloc] init];
+   d->ownerCtrl = owner;
+   /* Keep alive via static list so ARC doesn't dealloc */
+   static NSMutableArray * s_keep = nil;
+   if( !s_keep ) s_keep = [NSMutableArray array];
+   [s_keep addObject:d];
+   return d;
+}
+
+static int HBTabSelectedIndex( HBControl * owner )
+{
+   if( !owner || owner->FControlType != CT_TABCONTROL2 || !owner->FView ) return 0;
+   NSTabView * tv = (NSTabView *) owner->FView;
+   NSTabViewItem * sel = [tv selectedTabViewItem];
+   if( !sel ) return 0;
+   return (int) [tv indexOfTabViewItem:sel];
+}
+
+static void HBUpdateTabVisibility( HBControl * owner )
+{
+   if( !owner || !owner->FCtrlParent ) return;
+   HBControl * form = owner->FCtrlParent;
+   int sel = HBTabSelectedIndex( owner );
+   for( int i = 0; i < form->FChildCount; i++ ) {
+      HBControl * c = form->FChildren[i];
+      if( c && c->FOwnerCtrl == owner && c->FView ) {
+         BOOL visible = ( c->FOwnerPage == sel );
+         [c->FView setHidden:!visible];
+      }
+   }
+   if( [form isKindOfClass:[HBForm class]] ) {
+      HBForm * f = (HBForm *) form;
+      if( f->FOverlayView ) [(NSView *)f->FOverlayView setNeedsDisplay:YES];
+   }
+}
+
 @implementation HBControl
 
 - (instancetype)init
@@ -601,6 +673,7 @@ void EnsureNSApp( void )
       FOnTimer = NULL; FInterval = 1000; FTimer = nil;
       FCtrlParent = nil; FChildCount = 0;
       memset( FChildren, 0, sizeof(FChildren) );
+      FOwnerCtrl = nil; FOwnerPage = 0; FAutoPage = NO;
    }
    return self;
 }
@@ -706,9 +779,28 @@ void EnsureNSApp( void )
          [tf setEditable:NO]; [tf setBezeled:YES]; v = tf; break;
       }
       case CT_TABCONTROL2: {
+         extern id HBMakeTabDelegate( HBControl * );
          NSTabView * tv = [[NSTabView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
-         NSTabViewItem * tab1 = [[NSTabViewItem alloc] initWithIdentifier:@"tab1"];
-         [tab1 setLabel:@"Tab 1"]; [tv addTabViewItem:tab1]; v = tv; break;
+         [tv setDelegate:(id<NSTabViewDelegate>) HBMakeTabDelegate(self)];
+         if( FHeaders[0] == 0 ) strcpy( FHeaders, "Tab 1" );
+         const char * src = FHeaders;
+         int idx = 0;
+         while( src && *src )
+         {
+            const char * sep = strchr( src, '|' );
+            int len = sep ? (int)(sep - src) : (int)strlen(src);
+            if( len > 0 )
+            {
+               NSString * lbl = [[NSString alloc] initWithBytes:src length:len encoding:NSUTF8StringEncoding];
+               NSTabViewItem * it = [[NSTabViewItem alloc]
+                  initWithIdentifier:[NSString stringWithFormat:@"tab%d", idx++]];
+               [it setLabel:lbl];
+               [it setView:[[NSView alloc] initWithFrame:NSMakeRect(0,0,10,10)]];
+               [tv addTabViewItem:it];
+            }
+            src = sep ? sep + 1 : NULL;
+         }
+         v = tv; break;
       }
       case CT_TREEVIEW: {
          NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
@@ -1583,9 +1675,11 @@ static HBPaletteTarget * s_palTarget = nil;
 
 - (BOOL)isFlipped { return YES; }
 - (BOOL)acceptsFirstResponder { return YES; }
+- (BOOL)acceptsFirstMouse:(NSEvent *)event { (void)event; return YES; }
 
 - (NSView *)hitTest:(NSPoint)point
 {
+   (void)point;
    if( form && form->FDesignMode ) return self;
    return nil;
 }
@@ -1649,6 +1743,16 @@ static HBPaletteTarget * s_palTarget = nil;
 
    /* Component drop mode: start rubber band to define new control area */
    if( form->FPendingControlType >= 0 ) {
+      /* Capture current auto-page selection before clearing */
+      form->FPendingOwner = nil;
+      form->FPendingOwnerPage = 0;
+      if( form->FSelCount >= 1 ) {
+         HBControl * sel = form->FSelected[0];
+         if( sel && sel->FAutoPage && sel->FOwnerCtrl ) {
+            form->FPendingOwner = sel->FOwnerCtrl;
+            form->FPendingOwnerPage = sel->FOwnerPage;
+         }
+      }
       [form clearSelection];
       isRubberBand = YES;
       rubberOrigin = pt; rubberCurrent = pt;
@@ -1657,6 +1761,10 @@ static HBPaletteTarget * s_palTarget = nil;
 
    int nHandle = [form hitTestHandle:pt];
    if( nHandle >= 0 ) {
+      /* Auto-page panels: ignore handles; geometry is set by TPageControl. */
+      if( form->FSelCount == 1 && form->FSelected[0]->FAutoPage ) {
+         return;
+      }
       /* Block resize for non-visual components (32x32 fixed) */
       if( form->FSelCount == 1 &&
           form->FSelected[0]->FWidth == 32 && form->FSelected[0]->FHeight == 32 )
@@ -1672,6 +1780,32 @@ static HBPaletteTarget * s_palTarget = nil;
    }
 
    HBControl * hit = [form hitTestControl:pt];
+
+   /* TPageControl tab-bar click: switch tab, then fall through to normal
+    * select/drag so the user can still move the control from the tab bar. */
+   if( hit && hit->FControlType == CT_TABCONTROL2 &&
+       pt.y >= hit->FTop && pt.y <= hit->FTop + 24 )
+   {
+      NSTabView * tv = (NSTabView *) hit->FView;
+      if( tv ) {
+         NSInteger nItems = [[tv tabViewItems] count];
+         if( nItems > 0 ) {
+            CGFloat tabW = hit->FWidth / (CGFloat) nItems;
+            NSInteger idx = (NSInteger) ((pt.x - hit->FLeft) / tabW);
+            if( idx < 0 ) idx = 0;
+            if( idx >= nItems ) idx = nItems - 1;
+            [tv selectTabViewItemAtIndex:idx];
+         }
+      }
+   }
+
+   /* Auto-page panels: selectable (as drop target) but not movable/resizable.
+    * Their geometry is controlled by the owning TPageControl. */
+   if( hit && hit->FAutoPage ) {
+      if( ![form isSelected:hit] ) [form selectControl:hit add:NO];
+      return;
+   }
+
    if( hit ) {
       if( isShift ) {
          if( [form isSelected:hit] ) {
@@ -1733,8 +1867,20 @@ static HBPaletteTarget * s_palTarget = nil;
       dx = (dx/8)*8; dy = (dy/8)*8;
       if( dx == 0 && dy == 0 ) return;
       for( int i = 0; i < form->FSelCount; i++ ) {
-         form->FSelected[i]->FLeft += dx; form->FSelected[i]->FTop += dy;
-         [form->FSelected[i] updateViewFrame];
+         HBControl * s = form->FSelected[i];
+         if( s->FAutoPage ) continue; /* pages follow their TPageControl */
+         s->FLeft += dx; s->FTop += dy;
+         [s updateViewFrame];
+         /* If moving a TPageControl, translate all its owned controls too */
+         if( s->FControlType == CT_TABCONTROL2 ) {
+            for( int k = 0; k < form->FChildCount; k++ ) {
+               HBControl * c = form->FChildren[k];
+               if( c && c->FOwnerCtrl == s ) {
+                  c->FLeft += dx; c->FTop += dy;
+                  [c updateViewFrame];
+               }
+            }
+         }
       }
       form->FDragStartX += dx; form->FDragStartY += dy;
       [self setNeedsDisplay:YES]; [form notifySelChange];
@@ -1918,6 +2064,37 @@ static HBPaletteTarget * s_palTarget = nil;
          if( newCtrl ) {
             KeepAlive( newCtrl );
             newCtrl->FFont = form->FFormFont;
+
+            /* TPageControl ownership: if the drop rect's center falls inside a
+             * TTabControl/TPageControl content area, assign to its selected tab.
+             * Fallback: if an auto-page TPanel is currently selected in the
+             * designer, use its owner + page. */
+            if( ctrlType != CT_TABCONTROL2 && ctrlType != CT_PANEL ) {
+               int cx = rx1 + (rw > 0 ? rw / 2 : 10);
+               int cy = ry1 + (rh > 0 ? rh / 2 : 10);
+               HBControl * ownerPC = nil;
+               int ownerPage = 0;
+               for( int i = 0; i < form->FChildCount; i++ ) {
+                  HBControl * pc = form->FChildren[i];
+                  if( pc && pc->FControlType == CT_TABCONTROL2 &&
+                      cx >= pc->FLeft && cx <= pc->FLeft + pc->FWidth &&
+                      cy >= pc->FTop + 24 && cy <= pc->FTop + pc->FHeight )
+                  {
+                     ownerPC = pc;
+                     ownerPage = HBTabSelectedIndex( pc );
+                     break;
+                  }
+               }
+               if( !ownerPC && form->FPendingOwner ) {
+                  ownerPC = form->FPendingOwner;
+                  ownerPage = form->FPendingOwnerPage;
+               }
+               if( ownerPC ) {
+                  newCtrl->FOwnerCtrl = ownerPC;
+                  newCtrl->FOwnerPage = ownerPage;
+               }
+            }
+
             [form addChild:newCtrl];
             [newCtrl createViewInParent:form->FContentView];
 
@@ -2617,7 +2794,15 @@ static void KeepAlive( HBControl * p )
 
 static HBControl * GetCtrlRaw( int nParam )
 {
-   return (__bridge HBControl *)(void *)(HB_PTRUINT) hb_parnint( nParam );
+   HB_PTRUINT n = (HB_PTRUINT) hb_parnint( nParam );
+   if( n == 0 || !s_allControls ) return nil;
+   /* Validate: the handle must still be in s_allControls, otherwise it's a
+    * stale pointer to a freed HBControl and bridge-casting would crash. */
+   void * raw = (void *) n;
+   for( id obj in s_allControls )
+      if( (__bridge void *) obj == raw )
+         return (__bridge HBControl *) raw;
+   return nil;
 }
 
 static void RetCtrl( HBControl * p )
@@ -2708,6 +2893,51 @@ HB_FUNC( UI_MEMONEW )
    if( HB_ISNUM(5) ) p->FWidth = hb_parni(5);  if( HB_ISNUM(6) ) p->FHeight = hb_parni(6);
    if( p->FWidth < 1 ) p->FWidth = 180;  if( p->FHeight < 1 ) p->FHeight = 80;
    strncpy( p->FClassName, "TMemo", sizeof(p->FClassName) - 1 );
+   if( pForm ) [pForm addChild:p]; RetCtrl( p );
+}
+
+/* UI_SetCtrlOwner( hCtrl, hOwner, nPage ) — assign TPageControl ownership */
+HB_FUNC( UI_SETCTRLOWNER )
+{
+   HBControl * c = GetCtrl(1);
+   HBControl * o = GetCtrl(2);
+   int nPage = hb_parni(3);
+   if( !c ) return;
+   c->FOwnerCtrl = o;
+   c->FOwnerPage = nPage;
+   if( o ) HBUpdateTabVisibility( o );
+}
+
+/* UI_GetCtrlOwner( hCtrl ) --> hOwner (0 if none) */
+HB_FUNC( UI_GETCTRLOWNER )
+{
+   HBControl * c = GetCtrl(1);
+   hb_retnint( c && c->FOwnerCtrl ? (HB_PTRUINT)(__bridge void *) c->FOwnerCtrl : 0 );
+}
+
+/* UI_GetCtrlPage( hCtrl ) --> nPage (0-based) */
+HB_FUNC( UI_GETCTRLPAGE )
+{
+   HBControl * c = GetCtrl(1);
+   hb_retni( c ? c->FOwnerPage : 0 );
+}
+
+/* UI_IsAutoPage( hCtrl ) --> lAutoCreated */
+HB_FUNC( UI_ISAUTOPAGE )
+{
+   HBControl * c = GetCtrl(1);
+   hb_retl( c ? c->FAutoPage : 0 );
+}
+
+/* UI_TabControlNew( hForm, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_TABCONTROLNEW )
+{
+   HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
+   p->FControlType = CT_TABCONTROL2;
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( p->FWidth < 1 ) p->FWidth = 200;  if( p->FHeight < 1 ) p->FHeight = 150;
+   strncpy( p->FClassName, "TTabControl", sizeof(p->FClassName) - 1 );
    if( pForm ) [pForm addChild:p]; RetCtrl( p );
 }
 
@@ -3277,7 +3507,8 @@ HB_FUNC( UI_SETPROP )
          if( idx >= 0 && idx < 3 ) strcpy( p->FRdd, rddNames[idx] );
       }
    }
-   else if( strcasecmp(szProp,"aHeaders")==0 || strcasecmp(szProp,"aColumns")==0 )
+   else if( strcasecmp(szProp,"aHeaders")==0 || strcasecmp(szProp,"aColumns")==0 ||
+            strcasecmp(szProp,"aTabs")==0 )
    {
       /* Accept string or array */
       if( HB_ISCHAR(3) )
@@ -3338,6 +3569,87 @@ HB_FUNC( UI_SETPROP )
                src = sep ? sep + 1 : NULL;
             }
             [bd->tableView reloadData];
+         }
+      }
+
+      /* For TTabControl, create/update NSTabView tabs immediately */
+      if( p->FControlType == CT_TABCONTROL2 && p->FView )
+      {
+         NSTabView * tv = (NSTabView *)p->FView;
+         while( [[tv tabViewItems] count] > 0 )
+            [tv removeTabViewItem:[[tv tabViewItems] lastObject]];
+         const char * src = p->FHeaders;
+         int idx = 0;
+         while( src && *src )
+         {
+            const char * sep = strchr( src, '|' );
+            int len = sep ? (int)(sep - src) : (int)strlen(src);
+            if( len > 0 )
+            {
+               NSString * lbl = [[NSString alloc] initWithBytes:src length:len encoding:NSUTF8StringEncoding];
+               NSTabViewItem * it = [[NSTabViewItem alloc]
+                  initWithIdentifier:[NSString stringWithFormat:@"tab%d", idx++]];
+               [it setLabel:lbl];
+               [it setView:[[NSView alloc] initWithFrame:NSMakeRect(0,0,10,10)]];
+               [tv addTabViewItem:it];
+            }
+            src = sep ? sep + 1 : NULL;
+         }
+         if( [[tv tabViewItems] count] == 0 )
+         {
+            NSTabViewItem * it = [[NSTabViewItem alloc] initWithIdentifier:@"tab1"];
+            [it setLabel:@"Tab 1"];
+            [it setView:[[NSView alloc] initWithFrame:NSMakeRect(0,0,10,10)]];
+            [tv addTabViewItem:it];
+         }
+         [tv setNeedsDisplay:YES];
+
+         /* Auto-create/remove TPanel pages: one TPanel per tab, flagged
+          * FAutoPage so codegen can skip them. Positioned inside the tab
+          * content area. Owned by this TPageControl for visibility toggling. */
+         if( p->FCtrlParent && [p->FCtrlParent isKindOfClass:[HBForm class]] )
+         {
+            HBForm * pf = (HBForm *)p->FCtrlParent;
+            int nTabs = (int) [[tv tabViewItems] count];
+
+            /* Remove existing auto-pages for this TPageControl */
+            for( int i = pf->FChildCount - 1; i >= 0; i-- ) {
+               HBControl * c = pf->FChildren[i];
+               if( c && c->FAutoPage && c->FOwnerCtrl == p ) {
+                  if( c->FView ) [c->FView removeFromSuperview];
+                  for( int k = i; k < pf->FChildCount - 1; k++ )
+                     pf->FChildren[k] = pf->FChildren[k+1];
+                  pf->FChildren[--pf->FChildCount] = nil;
+               }
+            }
+
+            /* Create new auto-page panels */
+            int pageL = p->FLeft + 4;
+            int pageT = p->FTop + 26;
+            int pageW = p->FWidth - 8;
+            int pageH = p->FHeight - 30;
+            for( int i = 0; i < nTabs; i++ ) {
+               HBControl * panel = [[HBControl alloc] init];
+               panel->FControlType = CT_PANEL;
+               strncpy( panel->FClassName, "TPanel", sizeof(panel->FClassName) - 1 );
+               snprintf( panel->FName, sizeof(panel->FName), "%s_Page%d", p->FName, i );
+               panel->FLeft = pageL; panel->FTop = pageT;
+               panel->FWidth = pageW; panel->FHeight = pageH;
+               panel->FOwnerCtrl = p;
+               panel->FOwnerPage = i;
+               panel->FAutoPage = YES;
+               KeepAlive( panel );
+               [pf addChild:panel];
+               [panel createViewInParent:pf->FContentView];
+            }
+
+            /* Keep overlay on top */
+            if( pf->FOverlayView && pf->FContentView )
+               [pf->FContentView addSubview:(NSView *)pf->FOverlayView
+                                positioned:NSWindowAbove relativeTo:nil];
+
+            /* Apply visibility for currently selected tab */
+            HBUpdateTabVisibility( p );
          }
       }
    }
@@ -3544,7 +3856,8 @@ HB_FUNC( UI_GETPROP )
    else if( strcasecmp(szProp,"cClassName")==0 ) hb_retc( p->FClassName );
    else if( strcasecmp(szProp,"cFileName")==0 )  hb_retc( p->FFileName );
    else if( strcasecmp(szProp,"cRDD")==0 )      hb_retc( p->FRdd );
-   else if( strcasecmp(szProp,"aHeaders")==0 || strcasecmp(szProp,"aColumns")==0 )  hb_retc( p->FHeaders );
+   else if( strcasecmp(szProp,"aHeaders")==0 || strcasecmp(szProp,"aColumns")==0 ||
+            strcasecmp(szProp,"aTabs")==0 )  hb_retc( p->FHeaders );
    else if( strcasecmp(szProp,"aData")==0 )     hb_retc( p->FData );
    else if( strcasecmp(szProp,"cDataSource")==0 ) hb_retc( p->FDataSource );
    else if( strcasecmp(szProp,"lActive")==0 )   hb_retl( p->FActive );
@@ -3781,6 +4094,8 @@ HB_FUNC( UI_GETALLPROPS )
          ADD_S("cDataSource",p->FDataSource,"Data"); break;
       case CT_TIMER:
          ADD_N("nInterval",p->FInterval,"Behavior"); break;
+      case CT_TABCONTROL2:
+         ADD_A("aTabs",p->FHeaders,"Behavior"); break;
    }
    hb_itemReturnRelease(pArray);
 }
