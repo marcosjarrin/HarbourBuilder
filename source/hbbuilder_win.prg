@@ -156,8 +156,10 @@ function Main()
    MENUITEM "&Options..."           OF oProject ACTION ShowProjectOptions()
 
    DEFINE POPUP oRun PROMPT "&Run" OF oIDE
-   MENUITEM "&Run"           OF oRun ACTION TBRun()
-   MENUITEM "&Debug"         OF oRun ACTION TBDebugRun()
+   MENUITEM "&Run"              OF oRun ACTION TBRun()
+   MENUITEM "&Debug"            OF oRun ACTION TBDebugRun()
+   MENUSEPARATOR OF oRun
+   MENUITEM "Run on &Android..." OF oRun ACTION TBRunAndroid()
    MENUSEPARATOR OF oRun
    MENUITEM "&Continue"      OF oRun ACTION IDE_DebugGo()
    MENUITEM "&Step Over"     OF oRun ACTION DebugStepOver()
@@ -2651,6 +2653,76 @@ static function TBRun()
    endif
 
 return nil
+
+// === Android target: build APK and run on emulator ===
+// Reuses the pre-validated pipeline in C:\HarbourAndroid\.
+// See memory/project_android_build.md for the toolchain layout.
+static function TBRunAndroid()
+
+   local cAndroidDir := "C:\HarbourAndroid"
+   local cDemoDir    := cAndroidDir + "\apk-demo"
+   local cPrgPath    := cDemoDir + "\src\prg\hello.prg"
+   local cLogPath    := cDemoDir + "\build-apk.log"
+   local cBash       := "C:\Program Files\Git\bin\bash.exe"
+   local cCurrentPrg, cLog, cCmd, nRet
+
+   if ! lIsDir( cAndroidDir )
+      MsgInfo( "Android toolchain not found at " + cAndroidDir + Chr(10) + ;
+                 "Expected layout described in memory/project_android_build.md." + Chr(10) + ;
+                 "The Setup Android Wizard is not implemented yet - install manually for now.", ;
+                 "Android target" )
+      return nil
+   endif
+
+   if ! File( cBash )
+      MsgInfo( "bash.exe not found at " + cBash + Chr(10) + ;
+                 "Install Git for Windows to provide bash.", "Android target" )
+      return nil
+   endif
+
+   SaveActiveFormCode()
+
+   // Use Project1.prg tab content as the Android entry point.
+   // Caveat: the current sample backend expects a console-style prg that
+   // writes to stdout (gtstd). GUI forms will not render yet - that needs
+   // a native Android GT. This is documented; step 1 is plumbing only.
+   cCurrentPrg := CodeEditorGetTabText( hCodeEditor, 1 )
+   if Empty( cCurrentPrg )
+      MsgInfo( "Project1.prg is empty - nothing to build.", "Android target" )
+      return nil
+   endif
+   MemoWrit( cPrgPath, cCurrentPrg )
+
+   W32_ProgressOpen( "Building Android APK...", 2 )
+   W32_ProgressStep( "Compiling PRG -> C -> .so -> APK..." )
+
+   // Run build-apk.sh synchronously, piping output to build-apk.log.
+   cCmd := 'cmd /c ""' + cBash + '" -lc "cd /c/HarbourAndroid/apk-demo && ' + ;
+           './build-apk.sh > build-apk.log 2>&1""'
+   nRet := W32_ShellExec( cCmd )
+
+   cLog := iif( File( cLogPath ), MemoRead( cLogPath ), "(no log produced)" )
+
+   if ! File( cDemoDir + "\build\harbour-demo.apk" )
+      W32_ProgressClose()
+      W32_BuildErrorDialog( "Android Build Failed", cLog )
+      return nil
+   endif
+
+   W32_ProgressStep( "Launching emulator..." )
+   cCmd := 'cmd /c start "" "' + cBash + '" -lc "cd /c/HarbourAndroid && ' + ;
+           './run-on-emulator.sh > emulator-run.log 2>&1"'
+   W32_ShellExec( cCmd )
+   W32_ProgressClose()
+
+   MsgInfo( "APK built: " + cDemoDir + "\build\harbour-demo.apk" + Chr(10) + ;
+              "Launching emulator in background - see emulator-run.log.", ;
+              "Android target" )
+
+return nil
+
+static function lIsDir( cPath )
+return ! Empty( hb_DirExists( cPath ) )
 
 // === Project Inspector (VS Solution Explorer / C++Builder Project Manager) ===
 

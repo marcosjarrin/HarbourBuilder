@@ -6411,3 +6411,15 @@ HB_FUNC( GIT_STASHLIST )
    }
    hb_itemReturnRelease( pArray );
 }
+
+/* ------------------------------------------------------------------------- */
+/* TPageControl / page-ownership stubs                                       */
+/* The Cocoa backend tracks which page of a TPageControl owns each child.    */
+/* The Win32 backend does not implement page ownership yet; these stubs let  */
+/* classes.prg link and behave as no-ops (nPage always 1, no owner).         */
+/* ------------------------------------------------------------------------- */
+HB_FUNC( UI_SETCTRLOWNER )         { /* (hCtrl, hOwner, nPage) */ }
+HB_FUNC( UI_GETCTRLOWNER )         { hb_retptr( NULL ); }
+HB_FUNC( UI_GETCTRLPAGE )          { hb_retni( 1 ); }
+HB_FUNC( UI_SETPENDINGPAGEOWNER )  { /* (hFolder, nPage) */ }
+HB_FUNC( UI_TABCONTROLNEW )        { hb_retptr( NULL ); }

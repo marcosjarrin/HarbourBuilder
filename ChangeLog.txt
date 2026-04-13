@@ -1,6 +1,78 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-13 (Android target - iteration 1: GUI backend, end-to-end APK pipeline from the IDE)
+
+  FEATURES
+  - NEW Android target. Menu Run > "Run on Android..." on the Windows
+    IDE drives the full pipeline: saves the current Project1.prg, runs
+    bash build-apk.sh (harbour.exe -> NDK clang -> aapt2 -> javac -> d8 ->
+    zipalign -> apksigner), and launches the signed APK on the
+    HarbourBuilderAVD emulator. Validated end-to-end on Pixel 5 /
+    Android 14 with a 509 KB signed APK.
+  - NEW source/backends/android/ — 4th native GUI backend:
+      * android_core.c — JNI bridge. HB_FUNCs UI_FormNew, UI_LabelNew,
+        UI_ButtonNew, UI_EditNew, UI_SetText, UI_GetText, UI_OnClick,
+        UI_FormRun (no-op: Activity owns the loop), plus the
+        UI_SetCtrlOwner / UI_GetCtrlPage / UI_TabControlNew page-owner
+        stubs so classes.prg links.
+      * java/com/harbour/builder/MainActivity.java — programmatic
+        FrameLayout host (no XML layout). Exposes createForm /
+        createLabel / createButton / createEdit / setText / getText /
+        nativeOnClick to JNI. HashMap<Integer,View> keyed by the
+        numeric control id returned from the UI_*New calls.
+      * build-apk-gui.sh — parallel GUI pipeline that stages sources
+        from the repo, compiles android_core.c alongside the user's
+        PRG, links libapp.so, and signs harbour-gui.apk.
+      * hello_gui.prg — demo calling UI_FormNew + UI_LabelNew +
+        UI_EditNew + UI_ButtonNew + UI_OnClick end-to-end.
+      * AndroidManifest.xml, res/values/strings.xml.
+  - Density-aware layout: MainActivity multiplies form-designer pixels
+    by DisplayMetrics.density so a 100-px button looks consistent on
+    mdpi, hdpi, xxhdpi screens.
+  - Click dispatch: Java onClick -> nativeOnClick(controlId) -> C
+    evaluates the Harbour codeblock registered with UI_OnClick(id,block).
+  - Event loop is inverted vs desktop: UI_FormRun() is a no-op; the
+    Android Activity owns the message pump and widgets live inside its
+    lifecycle.
+
+  WIN32 LINK FIXES
+  - Added TPageControl page-ownership stubs to source/cpp/hbbridge.cpp
+    (UI_SetCtrlOwner, UI_GetCtrlOwner, UI_GetCtrlPage,
+    UI_SetPendingPageOwner, UI_TabControlNew) — no-ops for now so the
+    Win32 IDE links. Real TPageControl support on Win32 will come when
+    the form designer gains a Pages tab.
+  - Guarded the Python #pragma BEGINDUMP block in source/core/classes.prg
+    with #if defined(HB_OS_WIN): Windows gets no-op stubs for PY_Start,
+    PY_Exec, PY_Eval, PY_SetVar, PY_GetVar, PY_GetOutput, PY_LastError,
+    PY_IsAvailable, PY_Stop; macOS/Linux keep the real dlopen backend.
+    Unblocks the bcc32 build on Windows (dlfcn.h isn't available and
+    C99 mid-block decls were rejected).
+
+  DOCS
+  - README.md: new "NEW - Now going Mobile" section with Android/iOS
+    badges, 5-backend architecture diagram, iteration 1 checklist, and
+    iOS teaser. Platform badge extended to include Android + iOS.
+  - docs/index.html: new #mobile section with two side-by-side cards
+    (Android available now / iOS coming soon) using inline SVG logos,
+    gradient background, the same architecture diagram colored, and
+    four feature tiles. Hero pill points to #mobile. Nav gains a Mobile
+    link. "3 native backends" stat updated to 5.
+
+  ROADMAP (not yet in this release)
+  - IDE form designer -> UI_*-based Android PRG code generator
+    (currently the menu item uses the active Project1.prg as-is).
+  - ComboBox, ListView, RadioButton, CheckBox, DatePicker bindings in
+    android_core.c / MainActivity.java.
+  - Embedded adb logcat panel + live build stream in the IDE (today
+    the build-apk.log is shown in a modal dialog only on failure).
+  - Device picker (emulator / USB / Wi-Fi ADB) and keystore manager.
+  - Android toolchain auto-installer wizard (NDK, SDK, JDK, AVD)
+    working on Windows, macOS and Linux.
+  - iOS backend (ios_core.m via UIKit) mirroring the Cocoa one.
+
+---
+
 2026-04-13 (macOS: real in-process Python via dlopen, Python sample, codegen fixes)
 
   FEATURES

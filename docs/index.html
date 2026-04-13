@@ -300,6 +300,7 @@
     <ul>
       <li><a href="#features">Features</a></li>
       <li><a href="#platforms">Platforms</a></li>
+      <li><a href="#mobile" style="color:#34c759">Mobile</a></li>
       <li><a href="#download">Download</a></li>
       <li><a href="#docs">Docs</a></li>
       <li><a href="https://github.com/FiveTechSoft/HarbourBuilder">GitHub</a></li>
@@ -312,7 +313,7 @@
   <div class="wrap inner">
     <div class="pill">
       <span class="new">NEW</span>
-      In-process Python via dlopen — zero runtime deps
+      <a href="#mobile" style="color:inherit">📱 Android support is here — iOS coming soon</a>
     </div>
     <h1>The visual IDE for <span class="grad">Harbour</span>.<br>Design. Code. Ship.</h1>
     <p class="sub">
@@ -327,7 +328,7 @@
     <div class="stats">
       <div><b>130</b>components</div>
       <div><b>16</b>palette tabs</div>
-      <div><b>3</b>native backends</div>
+      <div><b>5</b>native backends</div>
       <div><b>MIT</b>licensed</div>
     </div>
   </div>
@@ -426,6 +427,102 @@
       <div class="plat">
         <img src="https://raw.githubusercontent.com/FiveTechSoft/HarbourBuilder/main/images/linux_scintilla.png" alt="Linux screenshot">
         <div class="label"><b>Linux</b><span>GTK3 · native</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="mobile" style="padding:90px 0;background:linear-gradient(180deg,#0a0e1a 0%,#0f1a2e 50%,#0a0e1a 100%);position:relative;overflow:hidden">
+  <div style="position:absolute;inset:0;background:radial-gradient(ellipse 900px 500px at 30% 50%,rgba(52,199,89,.12),transparent 60%),radial-gradient(ellipse 700px 500px at 80% 50%,rgba(255,255,255,.05),transparent 60%);pointer-events:none"></div>
+  <div class="wrap" style="position:relative;z-index:1">
+    <div style="text-align:center;margin-bottom:50px">
+      <div style="display:inline-block;padding:6px 14px;border-radius:999px;background:linear-gradient(135deg,#34c759,#3b82f6);color:#fff;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:18px">🔥 New · In development</div>
+      <h2 style="font-size:clamp(36px,5vw,56px);font-weight:800;margin-bottom:14px">Now going <span class="grad">mobile</span>.</h2>
+      <p class="lead" style="max-width:680px;margin:0 auto">Drop controls on the form designer. Hit <b>Run</b>. See your app running on a real Android emulator — with <b>native</b> widgets. Same Harbour code, now on your pocket.</p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;max-width:960px;margin:0 auto">
+
+      <!-- Android card -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:36px;position:relative;overflow:hidden">
+        <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;background:radial-gradient(circle,rgba(52,199,89,.25),transparent 70%);pointer-events:none"></div>
+        <div style="position:relative;z-index:1">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="#34c759" style="margin-bottom:18px">
+            <path d="M17.523 15.341a1.05 1.05 0 1 1 0-2.1 1.05 1.05 0 0 1 0 2.1m-11.046 0a1.05 1.05 0 1 1 0-2.1 1.05 1.05 0 0 1 0 2.1m11.423-6.084 2.098-3.633a.436.436 0 0 0-.755-.436l-2.124 3.679A13.15 13.15 0 0 0 12 7.802c-1.831 0-3.564.396-5.119 1.065L4.757 5.188a.436.436 0 0 0-.755.436l2.098 3.633C2.519 11.21 0 14.604 0 18.57h24c0-3.966-2.52-7.36-6.1-9.313"/>
+          </svg>
+          <div style="display:inline-block;padding:4px 10px;border-radius:6px;background:rgba(52,199,89,.15);color:#34c759;font-size:11px;font-weight:700;letter-spacing:.06em;margin-bottom:10px">AVAILABLE NOW · ITERATION 1</div>
+          <h3 style="font-size:26px;font-weight:700;margin-bottom:12px">Android</h3>
+          <p style="color:var(--muted);margin-bottom:18px">NDK + JNI backend. Your UI_* calls turn into <code>android.widget.Button</code>, <code>TextView</code>, <code>EditText</code> — native, real, touchable.</p>
+          <ul style="list-style:none;padding:0;color:var(--fg);font-size:14px;line-height:2">
+            <li>✅ Full <b>harbour/core</b> cross-compiled for ARM64</li>
+            <li>✅ APK signed & installed with one click from the IDE</li>
+            <li>✅ Live on Pixel 5 emulator (Android 14)</li>
+            <li>🚧 GUI widgets — <b>Form / Label / Button / Edit</b> wired</li>
+            <li>⏳ ComboBox, ListView, menus, density-aware layout</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- iOS card -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:36px;position:relative;overflow:hidden;opacity:.92">
+        <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;background:radial-gradient(circle,rgba(229,229,234,.15),transparent 70%);pointer-events:none"></div>
+        <div style="position:relative;z-index:1">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="#e5e5ea" style="margin-bottom:18px">
+            <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.53 4.08zM12 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+          </svg>
+          <div style="display:inline-block;padding:4px 10px;border-radius:6px;background:rgba(229,229,234,.15);color:#e5e5ea;font-size:11px;font-weight:700;letter-spacing:.06em;margin-bottom:10px">COMING SOON</div>
+          <h3 style="font-size:26px;font-weight:700;margin-bottom:12px">iOS</h3>
+          <p style="color:var(--muted);margin-bottom:18px">UIKit backend, symmetrical to the Cocoa one we already ship on macOS. <code>UIView</code> instead of <code>NSView</code>, touch instead of mouse — same Harbour API.</p>
+          <ul style="list-style:none;padding:0;color:var(--fg);font-size:14px;line-height:2">
+            <li>🎯 Reuse of the Cocoa backend architecture</li>
+            <li>🎯 Xcode toolchain integration</li>
+            <li>🎯 .ipa packaging from the IDE</li>
+            <li>🎯 iPhone + iPad in the form designer</li>
+            <li>🎯 TestFlight / App Store workflow</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Architecture -->
+    <div style="margin-top:70px;max-width:960px;margin-left:auto;margin-right:auto">
+      <h3 style="font-size:26px;font-weight:700;text-align:center;margin-bottom:8px">How it works</h3>
+      <p class="lead" style="text-align:center;max-width:640px;margin:0 auto 36px">The same architecture that made HarbourBuilder native on three desktops — now extended to two more.</p>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:32px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.9;color:var(--fg)">
+<pre style="background:none;border:none;padding:0;margin:0"><code><span style="color:#c084fc">Your .prg</span>  ──  <span style="color:#86efac">DEFINE FORM ... BUTTON ...</span>
+    │
+    ▼
+<span style="color:#fbbf24">classes.prg</span>  ──  calls <span style="color:#60a5fa">UI_FormNew()</span>, <span style="color:#60a5fa">UI_ButtonNew()</span> ...
+    │
+    ├──▶  <span style="color:#60a5fa">hbbridge.cpp</span>   →  <span style="color:#ec4899">Win32</span>   (CreateWindowEx)
+    ├──▶  <span style="color:#60a5fa">cocoa_core.m</span>   →  <span style="color:#ec4899">macOS</span>   (NSView hierarchy)
+    ├──▶  <span style="color:#60a5fa">gtk3_core.c</span>    →  <span style="color:#ec4899">Linux</span>   (GtkWidget)
+    ├──▶  <span style="color:#60a5fa">android_core.c</span> →  <span style="color:#34c759">Android</span> (JNI → android.widget.*)  ◀── NEW
+    └──▶  <span style="color:#60a5fa">ios_core.m</span>     →  <span style="color:#e5e5ea">iOS</span>     (UIKit / UIView)          ◀── SOON</code></pre>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;margin-top:28px">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px">
+          <div style="font-size:22px;margin-bottom:8px">📲</div>
+          <h4 style="font-size:15px;font-weight:700;margin-bottom:6px">Native widgets</h4>
+          <p style="font-size:13px;color:var(--muted);margin:0">No web view. No skinned UI. Real <code>android.widget.Button</code>, real material feel.</p>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px">
+          <div style="font-size:22px;margin-bottom:8px">🎨</div>
+          <h4 style="font-size:15px;font-weight:700;margin-bottom:6px">Density-aware</h4>
+          <p style="font-size:13px;color:var(--muted);margin:0">Form-designer coordinates scale by <code>DisplayMetrics.density</code> — consistent on mdpi, hdpi, xxhdpi.</p>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px">
+          <div style="font-size:22px;margin-bottom:8px">⚡</div>
+          <h4 style="font-size:15px;font-weight:700;margin-bottom:6px">One-click build</h4>
+          <p style="font-size:13px;color:var(--muted);margin:0">Menu <b>Run → Run on Android</b>. 8-step pipeline: harbour → clang → aapt2 → d8 → apksigner. Fully automated.</p>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px">
+          <div style="font-size:22px;margin-bottom:8px">🔁</div>
+          <h4 style="font-size:15px;font-weight:700;margin-bottom:6px">Write once</h4>
+          <p style="font-size:13px;color:var(--muted);margin:0">The same <code>.prg</code> that targets Windows, macOS and Linux now also produces a signed APK. iOS next.</p>
+        </div>
       </div>
     </div>
   </div>

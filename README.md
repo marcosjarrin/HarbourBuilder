@@ -5,7 +5,7 @@
 ### The Most Powerful Cross-Platform Visual IDE for Harbour
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-green.svg)](#platforms)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android%20%7C%20iOS-green.svg)](#-new--now-going-mobile)
 [![Controls](https://img.shields.io/badge/Controls-130-orange.svg)](#component-palette)
 [![Docs](https://img.shields.io/badge/Docs-20%20pages-purple.svg)](docs/en/index.html)
 [![Built with Claude Code](https://img.shields.io/badge/Built%20with-Claude%20Code-blueviolet.svg)](https://claude.ai/claude-code)
@@ -30,6 +30,63 @@ HarbourBuilder is a **Borland C++Builder-style visual IDE** that generates Harbo
 
 ### Linux
 ![Linux](images/linux_scintilla.png)
+
+---
+
+## 📱 NEW — Now going Mobile
+
+<div align="center">
+
+### Drop controls. Hit Run. See your app on Android.
+
+<img src="https://img.shields.io/badge/Android-Available%20now-34c759?style=for-the-badge&logo=android&logoColor=white" alt="Android">
+&nbsp;
+<img src="https://img.shields.io/badge/iOS-Coming%20soon-e5e5ea?style=for-the-badge&logo=apple&logoColor=black" alt="iOS">
+
+</div>
+
+The same Harbour source that drives Windows, macOS and Linux desktops now produces a **signed APK** running on the Android emulator — with **native** `android.widget.Button`, `TextView`, `EditText`. No web view. No skinned UI. No runtime dependency.
+
+### Architecture
+
+```
+Your .prg          DEFINE FORM ... BUTTON ... EDIT ...
+    │
+    ▼
+classes.prg   →    UI_FormNew() · UI_ButtonNew() · UI_EditNew() · UI_OnClick() ...
+    │
+    ├──▶  hbbridge.cpp     →  Windows   (Win32 CreateWindowEx)
+    ├──▶  cocoa_core.m     →  macOS     (NSView hierarchy)
+    ├──▶  gtk3_core.c      →  Linux     (GtkWidget)
+    ├──▶  android_core.c   →  Android   (JNI → android.widget.*)   ◀── NEW
+    └──▶  ios_core.m       →  iOS       (UIKit / UIView)           ◀── SOON
+```
+
+### What works today (Iteration 1)
+
+- ✅ **Harbour cross-compiled for ARM64** — 30 static libraries built against official `harbour/core` sources with NDK Clang, zero source changes
+- ✅ **End-to-end build pipeline** — 8 stages: `harbour → clang → aapt2 → javac → d8 → zipalign → apksigner`
+- ✅ **One-click build from the IDE** — menu `Run → Run on Android...` invokes the full pipeline, signs the APK and launches the emulator
+- ✅ **Native GUI backend** — `UI_FormNew`, `UI_LabelNew`, `UI_ButtonNew`, `UI_EditNew`, `UI_SetText`, `UI_GetText`, `UI_OnClick` wired via JNI
+- ✅ **Density-aware layout** — form-designer coordinates scale by `DisplayMetrics.density` so a 100-px button looks consistent on mdpi, hdpi, and xxhdpi screens
+- ✅ **Validated on Pixel 5 / Android 14** — AVD `HarbourBuilderAVD`, Harbour VM initialized, PRG `Main()` executed, widgets rendered, click events dispatched back to Harbour codeblocks
+
+### Coming next
+
+- 🚧 ComboBox, ListView, RadioButton, CheckBox, DatePicker
+- 🚧 Automatic IDE form designer → Android UI code generator
+- 🚧 Embedded `adb logcat` panel in the IDE (live stream, filter by tag/level)
+- 🚧 Device picker (emulator / USB / Wi-Fi ADB)
+- 🚧 Keystore manager + release AAB export for Play Store
+- 🚧 **Android toolchain auto-installer wizard** — detects missing pieces (NDK, SDK, JDK), downloads, configures, ready to build with zero manual setup on Windows, macOS and Linux
+
+### Why this matters
+
+> No other Harbour IDE — classic or modern — targets mobile natively. HarbourBuilder is about to let tens of thousands of Harbour developers ship to **every platform that matters** from a single codebase.
+
+### iOS — coming soon
+
+The iOS backend mirrors the Cocoa architecture we already ship on macOS: `UIView` instead of `NSView`, touch events instead of mouse, Xcode toolchain instead of `clang`. The same Harbour classes that target five desktops will soon also compile to a signed `.ipa`, ready for TestFlight and the App Store. **Five platforms. One source. Harbour everywhere.**
 
 ---
 
