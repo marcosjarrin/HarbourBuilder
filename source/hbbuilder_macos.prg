@@ -895,6 +895,13 @@ static function RegenerateFormCode( cName, hForm )
                   j := At( Chr(10), cLine )
                   if j > 0; cLine := Left( cLine, j - 1 ); endif
                   cLine := AllTrim( StrTran( cLine, Chr(13), "" ) )
+                  // Skip properties already managed by codegen (nClrPane, lTransparent,
+                  // nAlign, oFont) to prevent accumulation when values change
+                  if ":nClrPane" $ cLine .or. ":lTransparent" $ cLine .or. ;
+                     ":nAlign" $ cLine .or. ":oFont" $ cLine
+                     nPos += Len( cEvName )
+                     loop
+                  endif
                   // Only preserve lines not already emitted
                   if ! ( cLine $ cCreate ) .and. ! ( cLine $ cEvents ) .and. ;
                      ":=" $ cLine
@@ -918,11 +925,14 @@ static function RegenerateFormCode( cName, hForm )
             cVal := "::o" + cCtrlName + ":" + cEvName
             nPos := At( cVal, cExistingCode )
             if nPos > 0
-               // Copy the whole line up to the newline
+               // Copy the whole line up to the newline (skip if already emitted)
                cLine := SubStr( cExistingCode, nPos )
                nPos2 := At( Chr(10), cLine )
                if nPos2 > 0; cLine := Left( cLine, nPos2 - 1 ); endif
-               cEvents += "   " + AllTrim( StrTran( cLine, Chr(13), "" ) ) + e
+               cLine := AllTrim( StrTran( cLine, Chr(13), "" ) )
+               if ! ( cLine $ cEvents )
+                  cEvents += "   " + cLine + e
+               endif
             elseif cHandlerName $ cExistingCode
                // Detect if handler is a METHOD in the class → use method send
                // otherwise use plain function call
@@ -951,12 +961,15 @@ static function RegenerateFormCode( cName, hForm )
          cHandlerName := cName + cEvSuffix
          if ( "function " + cHandlerName ) $ cExistingCode .or. ;
             ( "METHOD " + cHandlerName ) $ cExistingCode
-            if ( "METHOD " + cHandlerName ) $ cExistingCode
-               cEvents += "   ::" + cEvName + ;
-                  " := { || ::" + cHandlerName + "() }" + e
-            else
-               cEvents += "   ::" + cEvName + ;
-                  " := { || " + cHandlerName + "( Self ) }" + e
+            cVal := "::" + cEvName + " := "
+            if ! ( cVal $ cEvents )  // skip if already emitted
+               if ( "METHOD " + cHandlerName ) $ cExistingCode
+                  cEvents += "   ::" + cEvName + ;
+                     " := { || ::" + cHandlerName + "() }" + e
+               else
+                  cEvents += "   ::" + cEvName + ;
+                     " := { || " + cHandlerName + "( Self ) }" + e
+               endif
             endif
          endif
       next

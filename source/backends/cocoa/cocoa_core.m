@@ -1205,7 +1205,13 @@ static int         s_pendingPage   = 0;
    NSTextField * tf = [[NSTextField alloc] initWithFrame:
       NSMakeRect( FLeft, FTop, FWidth, FHeight )];
    [tf setStringValue:[NSString stringWithUTF8String:FText]];
-   [tf setBezeled:NO]; [tf setDrawsBackground:!FTransparent];
+   [tf setBezeled:NO];
+   if( FClrPane != 0xFFFFFFFF ) {
+      [tf setDrawsBackground:YES];
+      if( FBgColor ) [tf setBackgroundColor:FBgColor];
+   } else {
+      [tf setDrawsBackground:!FTransparent];
+   }
    [tf setEditable:NO]; [tf setSelectable:NO];
    if( nAlign == 1 ) [tf setAlignment:NSTextAlignmentCenter];
    else if( nAlign == 2 ) [tf setAlignment:NSTextAlignmentRight];
@@ -1224,8 +1230,18 @@ static int         s_pendingPage   = 0;
       r.origin.x = FLeft; r.origin.y = FTop; r.size.width = FWidth;
       [tf setFrame:r];
    }
+   [tf setAllowsEditingTextAttributes:NO];
+   /* Enable click handling for OnClick at runtime */
+   NSClickGestureRecognizer * click = [[NSClickGestureRecognizer alloc]
+      initWithTarget:self action:@selector(labelClicked:)];
+   [tf addGestureRecognizer:click];
    [parentView addSubview:tf];
    FView = tf;
+}
+
+- (void)labelClicked:(id)sender
+{
+   if( FOnClick ) [self fireEvent:FOnClick];
 }
 
 @end
@@ -3709,10 +3725,10 @@ HB_FUNC( UI_SETPROP )
             tv = (NSTextView *)v;
          if( tv ) [tv setString:[NSString stringWithUTF8String:p->FText]];
       }
+      else if( p->FView && [p->FView isKindOfClass:[NSButton class]] )
+         [(NSButton *)p->FView setTitle:[NSString stringWithUTF8String:p->FText]];
       else if( p->FView && [p->FView respondsToSelector:@selector(setStringValue:)] )
          [(id)p->FView setStringValue:[NSString stringWithUTF8String:p->FText]];
-      else if( p->FView && [p->FView respondsToSelector:@selector(setTitle:)] )
-         [(id)p->FView setTitle:[NSString stringWithUTF8String:p->FText]];
    }
    else if( strcasecmp(szProp,"nLeft")==0 )   {
       p->FLeft = hb_parni(3);
@@ -4041,8 +4057,10 @@ HB_FUNC( UI_SETPROP )
       }
       else if( p->FView )
       {
-         if( [p->FView isKindOfClass:[NSTextField class]] )
+         if( [p->FView isKindOfClass:[NSTextField class]] ) {
             [(NSTextField *)p->FView setBackgroundColor:p->FBgColor];
+            [(NSTextField *)p->FView setDrawsBackground:YES];
+         }
          else
             [p->FView setNeedsDisplay:YES];
       }

@@ -1,6 +1,34 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-14 (macOS: Label OnClick, button caption update, nClrPane fixes)
+
+  FEATURES
+  - TLabel OnClick: labels now fire the OnClick event at runtime via
+    NSClickGestureRecognizer on the NSTextField view.
+  - TButton caption: changing cText in the inspector now updates the
+    button's visible title immediately (previously setStringValue: was
+    called instead of setTitle: because NSButton responds to both but
+    only setTitle: updates the displayed caption).
+
+  FIXES
+  - nClrPane accumulation on labels: changing a label's background color
+    no longer duplicates `::oLabel1:nClrPane := ...` lines in generated
+    code. Properties managed by codegen (nClrPane, lTransparent, nAlign,
+    oFont) are now excluded from the generic "preserve ::oCtrl:xxx :="
+    scan that caused duplicates when values changed between regenerations.
+  - nClrPane not visible on labels at runtime: when nClrPane was set
+    before the view was created (the normal runtime order), the label
+    stayed transparent because createViewInParent always used
+    drawsBackground:!FTransparent. Now createViewInParent checks
+    FClrPane and enables drawsBackground + applies FBgColor when a
+    custom color was set. UI_SETPROP also forces drawsBackground:YES
+    when nClrPane changes on an existing NSTextField.
+  - Event wiring dedup: control-level and form-level event scans now
+    check cEvents before adding, preventing duplicate ::OnClick lines
+    when the same event wiring exists in both the generic preserve scan
+    and the event-specific scan.
+
 2026-04-14 (macOS: nAlign, METHOD dedup, non-visual guards, menu icons, New App fix)
 
   FEATURES
