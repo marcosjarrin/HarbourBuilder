@@ -1,6 +1,71 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-14 (Windows: TDbfTable backend + inspector dropdowns + global error handler + Reopen Last)
+
+  FEATURES
+  - TDbfTable non-visual component now works end-to-end on Windows:
+      * FFileName[260] / FRDD[16] / FActive fields on TControl so every
+        non-visual DB component has a storage slot for them.
+      * UI_SetProp / UI_GetProp handle "cFileName", "cRDD", "lActive".
+      * UI_GetAllProps adds a case CT_DBFTABLE that exposes the three
+        under a new "Data" category so they show up in the inspector.
+      * UI_DropNonVisual resolves a default icon by CT_ when the caller
+        does not pass one: CT_DBFTABLE -> database_table.png,
+        CT_MYSQL/MARIADB/POSTGRESQL/SQLITE/FIREBIRD/SQLSERVER/ORACLE/
+        MONGODB -> database_go.png (absolute paths to the repo's
+        resources/icons/ folder).
+  - Inspector dropdowns extended to two new modes:
+      * ENUMDEF now carries a bIsString flag. When TRUE the dropdown
+        stores the chosen string verbatim (not an index), matching by
+        strcmp on initial selection. cRDD uses this: "DBFCDX" /
+        "DBFNTX" / "DBFFPT".
+      * Any row whose cType is 'L' (PT_LOGICAL) automatically gets a
+        synthetic Yes/No combobox even without a named enum entry.
+        Stored value is written back as ".T." / ".F." so the rest of
+        the codegen does not change.
+  - File > "Reopen &Last Project" menuitem. Opens the most recent
+    project from a persistent [Recent] section in hbbuilder.ini, up to
+    MAX_RECENT=8 entries, newest-first, deduped on every open. Uses the
+    same menu_open.png bitmap as Open... - and the File menu bitmap at
+    positions 5 (Save) / 6 (Save As) / 8 (Exit) is adjusted for the new
+    menu item so every row still shows its icon.
+  - Global ErrorBlock installed in Main() before any UI is created.
+    Unhandled runtime errors now surface a W32_BuildErrorDialog showing
+    class / subsystem / GenCode / SubCode / description / operation /
+    args / full call stack (via ProcName + ProcLine + ProcFile), then
+    propagate Break so the IDE unwinds to its outer message loop
+    instead of dying silently. Also appends to
+    c:\HarbourBuilder\error_trace.log for later inspection. This
+    immediately surfaced a BASE/1066 in RegenerateFormCode where
+    UI_GetProp(hCtrl, "lActive") returned NIL for non-visual components
+    that do not implement it - guarded with a ValType()=="L" check.
+  - New sample samples/projects/dbftable/ demonstrating the flow: a
+    TLabel + TEdit + TButton + non-visual oDbfTable1 with cFileName
+    and cRDD set. README explains what to try.
+
+  FIXES
+  - RegenerateFormCode line 855: UI_GetProp(hCtrl, "lActive") returning
+    NIL on a backend that did not recognize the property crashed with
+    "Argument error conditional" inside every form designer click.
+    Defensive guard: only proceed when ValType() == "L". Same pattern
+    for "cRDD" -> only emit the assignment when ValType() == "C".
+  - OpenProjectFile refactor: the bulk of TBOpen is now a shared helper
+    that both TBOpen (after the file dialog) and ReopenLastProject /
+    future recent-list menu items can reuse without duplicating the
+    "destroy current forms, clear tabs, read prg files, rewire
+    callbacks" logic.
+  - Parser of "COMPONENT ::oName TYPE ... OF Self" now strips a
+    trailing ':' from the captured cName so phantom controls do not
+    sneak in when the saved code has ':'.
+
+  BACKEND (Win32)
+  - TForm::FAppTitle and UI_GetAllProps "cAppTitle" entry (already
+    shipped) are joined now by CT_DBFTABLE handling: three properties
+    + one icon mapping + three getter/setter branches.
+
+---
+
 2026-04-14 (Windows catches up with macOS: AppTitle property + full CT_* name resolver)
 
   FEATURES

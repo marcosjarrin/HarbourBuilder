@@ -47,6 +47,12 @@ function Main()
    local nFormX, nFormY, nInsTop, nEditorTop, nBottomY
    local cIcoDir, aCI0, cCompLabel
 
+   // Install global error handler as early as possible so any runtime
+   // error (including from Win32 callbacks like designer clicks, menu
+   // actions, inspector edits) surfaces with a readable diagnostic
+   // dialog instead of failing silently.
+   ErrorBlock( {|oErr| IDE_ErrorHandler( oErr ) } )
+
    // DPI awareness (only for IDE, not for DebugApp)
    SetDPIAware()
 
@@ -112,14 +118,15 @@ function Main()
    DEFINE MENUBAR OF oIDE
 
    DEFINE POPUP oFile PROMPT "&File" OF oIDE
-   MENUITEM "&New Application" OF oFile ACTION TBNew()
-   MENUITEM "New &Form"        OF oFile ACTION MenuNewForm()
+   MENUITEM "&New Application"       OF oFile ACTION TBNew()
+   MENUITEM "New &Form"              OF oFile ACTION MenuNewForm()
    MENUSEPARATOR OF oFile
-   MENUITEM "&Open..."    OF oFile ACTION TBOpen()
-   MENUITEM "&Save"       OF oFile ACTION TBSave()
-   MENUITEM "Save &As..." OF oFile ACTION TBSaveAs()
+   MENUITEM "&Open..."               OF oFile ACTION TBOpen()
+   MENUITEM "Reopen &Last Project"   OF oFile ACTION ReopenLastProject()
+   MENUITEM "&Save"                  OF oFile ACTION TBSave()
+   MENUITEM "Save &As..."            OF oFile ACTION TBSaveAs()
    MENUSEPARATOR OF oFile
-   MENUITEM "E&xit"       OF oFile ACTION oIDE:Close()
+   MENUITEM "E&xit"                  OF oFile ACTION oIDE:Close()
 
    DEFINE POPUP oEdit PROMPT "&Edit" OF oIDE
    MENUITEM "&Undo"  OF oEdit ACTION CodeEditorUndo( hCodeEditor )
@@ -234,9 +241,10 @@ function Main()
    UI_MenuSetBitmapByPos( oFile:hPopup, 0, cIcoDir + "menu_new.png" )
    UI_MenuSetBitmapByPos( oFile:hPopup, 1, cIcoDir + "menu_new_form.png" )
    UI_MenuSetBitmapByPos( oFile:hPopup, 3, cIcoDir + "menu_open.png" )
-   UI_MenuSetBitmapByPos( oFile:hPopup, 4, cIcoDir + "menu_save.png" )
-   UI_MenuSetBitmapByPos( oFile:hPopup, 5, cIcoDir + "menu_saveas.png" )
-   UI_MenuSetBitmapByPos( oFile:hPopup, 7, cIcoDir + "menu_exit.png" )
+   UI_MenuSetBitmapByPos( oFile:hPopup, 4, cIcoDir + "menu_open.png" )   // Reopen Last
+   UI_MenuSetBitmapByPos( oFile:hPopup, 5, cIcoDir + "menu_save.png" )
+   UI_MenuSetBitmapByPos( oFile:hPopup, 6, cIcoDir + "menu_saveas.png" )
+   UI_MenuSetBitmapByPos( oFile:hPopup, 8, cIcoDir + "menu_exit.png" )
    // Edit menu (0:Undo, 1:Redo, -sep-, 3:Cut, 4:Copy, 5:Paste, -sep-, 7:UndoDesign, 8:CopyCtrl, 9:PasteCtrl)
    UI_MenuSetBitmapByPos( oEdit:hPopup, 0, cIcoDir + "menu_undo.png" )
    UI_MenuSetBitmapByPos( oEdit:hPopup, 1, cIcoDir + "menu_redo.png" )
@@ -841,10 +849,11 @@ static function RegenerateFormCode( cName, hForm )
                         cCreate += '   ::o' + cCtrlName + ':cFileName := "' + cVal + '"' + e
                      endif
                      cVal := UI_GetProp( hCtrl, "cRDD" )
-                     if ! Empty( cVal ) .and. Upper( cVal ) != "DBFCDX"
+                     if ValType( cVal ) == "C" .and. ! Empty( cVal ) .and. Upper( cVal ) != "DBFCDX"
                         cCreate += '   ::o' + cCtrlName + ':cRDD := "' + cVal + '"' + e
                      endif
-                     if UI_GetProp( hCtrl, "lActive" )
+                     cVal := UI_GetProp( hCtrl, "lActive" )
+                     if ValType( cVal ) == "L" .and. cVal
                         cCreate += '   ::o' + cCtrlName + ':Open()' + e
                      endif
                   elseif nType == 131  // CompArray
@@ -1889,11 +1898,8 @@ return nil
 // Open Project: load a .hbp project file
 static function TBOpen()
 
-   local cFile, cContent, cDir, aLines, i, nAns
-   local cFormName, cFormCode, nFormX, nFormY
-   local nInsW, nInsTop, nEditorTop, nEditorX, nEditorW, nEditorH
+   local cFile, nAns
 
-   // Ask to save current work if there are forms open
    if Len( aForms ) > 0
       nAns := MsgYesNoCancel( "Save current project before opening?", "HbBuilder" )
       if nAns == 0  // Cancel
@@ -1905,6 +1911,21 @@ static function TBOpen()
 
    cFile := W32_OpenFileDialog( "Open HbBuilder Project", "hbp" )
    if Empty( cFile ); return nil; endif
+
+return OpenProjectFile( cFile )
+
+// Load a .hbp project given an exact path. Shared by TBOpen (file dialog)
+// and the File > Recent menu items.
+static function OpenProjectFile( cFile )
+
+   local cContent, cDir, aLines, i
+   local cFormName, cFormCode, nFormX, nFormY
+   local nInsW, nInsTop, nEditorTop, nEditorX, nEditorW, nEditorH
+
+   if Empty( cFile ) .or. ! File( cFile )
+      MsgInfo( "Project file not found: " + Chr(10) + cFile, "HbBuilder" )
+      return nil
+   endif
 
    cContent := MemoRead( cFile )
    if Empty( cContent )
@@ -1993,10 +2014,126 @@ static function TBOpen()
    endif
 
    cCurrentFile := cFile
+   AddRecentProject( cFile )
 
 return nil
 
-// Save Project: write .hbp + all .prg files
+// --- File > Recent project list ------------------------------------------
+// Persisted across sessions via IniWrite/IniRead under [Recent] File1..N.
+// Capped at MAX_RECENT; most-recent-first order, deduped.
+#define MAX_RECENT 8
+
+static function AddRecentProject( cFile )
+   local aList := GetRecentProjects()
+   local nPos := AScan( aList, {|c| Upper( c ) == Upper( cFile ) } )
+   if nPos > 0
+      ADel( aList, nPos )
+      ASize( aList, Len( aList ) - 1 )
+   endif
+   AAdd( aList, cFile )
+   while Len( aList ) > MAX_RECENT
+      ADel( aList, 1 )
+      ASize( aList, Len( aList ) - 1 )
+   enddo
+   // Persist most-recent-first
+   for nPos := 1 to MAX_RECENT
+      if nPos <= Len( aList )
+         IniWrite( "Recent", "File" + LTrim( Str( nPos ) ), aList[ Len(aList) - nPos + 1 ] )
+      else
+         IniWrite( "Recent", "File" + LTrim( Str( nPos ) ), "" )
+      endif
+   next
+return nil
+
+static function GetRecentProjects()
+   local aList := {}, i, cVal
+   for i := MAX_RECENT to 1 step -1   // stored newest first; return oldest first
+      cVal := IniRead( "Recent", "File" + LTrim( Str( i ) ), "" )
+      if ! Empty( cVal ) .and. File( cVal )
+         AAdd( aList, cVal )
+      endif
+   next
+return aList   // oldest .. newest (so AAdd of a new one keeps newest last)
+
+// File > Reopen Last Project - opens the most recent .hbp stored in
+// [Recent]/File1. Silent no-op if the file no longer exists on disk.
+static function ReopenLastProject()
+   local aList := GetRecentProjects()
+   local nAns
+   if Empty( aList )
+      MsgInfo( "No recent project. Use File > Open... first.", "HbBuilder" )
+      return nil
+   endif
+   // Optional save prompt if forms are open (same policy as TBOpen)
+   if Len( aForms ) > 0
+      nAns := MsgYesNoCancel( "Save current project before reopening?", "HbBuilder" )
+      if nAns == 0; return nil; endif
+      if nAns == 1; TBSave(); endif
+   endif
+return OpenProjectFile( ATail( aList ) )
+
+// Global error handler. Shows a modal W32_BuildErrorDialog with the
+// error class, description, operation, args and the Harbour call stack
+// (captured via ProcName()/ProcLine()), then propagates Break so the
+// runtime unwinds to the nearest BEGIN SEQUENCE / main event loop
+// instead of leaving the IDE in a corrupt state.
+static function IDE_ErrorHandler( oErr )
+
+   local cMsg := "", i, n, cVal
+
+   cMsg += "Class:       " + hb_CStr( oErr:ClassName() ) + Chr(10)
+   cMsg += "Subsystem:   " + hb_CStr( oErr:SubSystem() ) + Chr(10)
+   cMsg += "Code:        " + hb_CStr( oErr:GenCode ) + " / " + ;
+                             hb_CStr( oErr:SubCode )   + Chr(10)
+   cMsg += "Description: " + hb_CStr( oErr:Description ) + Chr(10)
+   cMsg += "Operation:   " + hb_CStr( oErr:Operation ) + Chr(10)
+
+   if ValType( oErr:Args ) == "A" .and. ! Empty( oErr:Args )
+      cMsg += Chr(10) + "Arguments:" + Chr(10)
+      for i := 1 to Len( oErr:Args )
+         cVal := oErr:Args[i]
+         cMsg += "  [" + LTrim( Str( i ) ) + "] (" + ValType( cVal ) + ") " + ;
+                 hb_CStr( cVal ) + Chr(10)
+      next
+   endif
+
+   cMsg += Chr(10) + "Call stack:" + Chr(10)
+   n := 2   // skip this handler frame
+   while ! Empty( ProcName( n ) )
+      cMsg += "  " + PadR( ProcName( n ), 40 ) + ;
+              " line " + LTrim( Str( ProcLine( n ) ) ) + ;
+              "  (" + ProcFile( n ) + ")" + Chr(10)
+      n += 1
+      if n > 60; exit; endif
+   enddo
+
+   // Also append to a persistent log so the user can inspect later
+   // without needing to copy the dialog text.
+   AppendErrorLog( cMsg )
+
+   W32_BuildErrorDialog( "Runtime Error", cMsg )
+
+   // Unwind to the outer message loop instead of continuing with broken
+   // state. The IDE's event loop keeps running; only the failing
+   // operation is aborted.
+   Break( oErr )
+
+return nil
+
+static function AppendErrorLog( cMsg )
+   local nH := FOpen( "c:\HarbourBuilder\error_trace.log", 2 )
+   local cStamp := DToS( Date() ) + " " + Time()
+   if nH == -1
+      nH := FCreate( "c:\HarbourBuilder\error_trace.log" )
+   else
+      FSeek( nH, 0, 2 )
+   endif
+   if nH != -1
+      FWrite( nH, "=== " + cStamp + " ===" + Chr(13) + Chr(10) )
+      FWrite( nH, cMsg + Chr(13) + Chr(10) )
+      FClose( nH )
+   endif
+return nil
 static function TBSave()
 
    local cDir, cFile, cHbp, i

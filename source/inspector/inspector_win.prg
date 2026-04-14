@@ -1044,8 +1044,11 @@ static LRESULT CALLBACK InsWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
    return DefWindowProc( hWnd, msg, wParam, lParam );
 }
 
-/* Enum definitions for dropdown properties */
-typedef struct { const char * szPropName; const char ** aValues; int nCount; } ENUMDEF;
+/* Enum definitions for dropdown properties.
+   bIsString: TRUE means the stored value is one of the strings in aValues
+   (e.g. cRDD = "DBFCDX"); FALSE means the stored value is the numeric
+   index into aValues (legacy behavior). */
+typedef struct { const char * szPropName; const char ** aValues; int nCount; BOOL bIsString; } ENUMDEF;
 
 static const char * s_borderStyle[] = { "bsSizeable", "bsSingle", "bsNone", "bsToolWindow" };
 static const char * s_position[]    = { "poDesigned", "poCenter", "poCenterScreen" };
@@ -1061,22 +1064,32 @@ static const char * s_borderIcons[] = { "biNone", "biSystemMenu", "biMinimize", 
 static const char * s_shapeType[]   = { "stRectangle", "stCircle", "stRoundRect", "stEllipse" };
 static const char * s_viewStyle[]   = { "vsIcon", "vsList", "vsReport", "vsSmallIcon" };
 static const char * s_bevelOuter[]  = { "bvNone", "bvLowered", "bvRaised" };
+static const char * s_cRdd[]        = { "DBFCDX", "DBFNTX", "DBFFPT" };
+
+/* Shared dropdown for all PT_LOGICAL properties: "No" / "Yes" */
+static const char * s_logical[]     = { "No", "Yes" };
 
 static ENUMDEF s_enums[] = {
-   { "nBorderStyle",  s_borderStyle,  4 },
-   { "nBorderIcons",  s_borderIcons,  8 },
-   { "nPosition",     s_position,     3 },
-   { "nWindowState",  s_windowState,  3 },
-   { "nFormStyle",    s_formStyle,    2 },
-   { "nCursor",       s_cursor,       9 },
-   { "nBevelStyle",   s_bevelStyle,   2 },
-   { "nBevelOuter",   s_bevelOuter,   3 },
-   { "nAlignment",    s_alignment,    3 },
-   { "nScrollBars",   s_scrollBars,   4 },
-   { "nShapeType",    s_shapeType,    4 },
-   { "nViewStyle",    s_viewStyle,    4 },
-   { NULL, NULL, 0 }
+   { "nBorderStyle",  s_borderStyle,  4, FALSE },
+   { "nBorderIcons",  s_borderIcons,  8, FALSE },
+   { "nPosition",     s_position,     3, FALSE },
+   { "nWindowState",  s_windowState,  3, FALSE },
+   { "nFormStyle",    s_formStyle,    2, FALSE },
+   { "nCursor",       s_cursor,       9, FALSE },
+   { "nBevelStyle",   s_bevelStyle,   2, FALSE },
+   { "nBevelOuter",   s_bevelOuter,   3, FALSE },
+   { "nAlignment",    s_alignment,    3, FALSE },
+   { "nScrollBars",   s_scrollBars,   4, FALSE },
+   { "nShapeType",    s_shapeType,    4, FALSE },
+   { "nViewStyle",    s_viewStyle,    4, FALSE },
+   { "cRDD",          s_cRdd,         3, TRUE  },
+   { NULL, NULL, 0, FALSE }
 };
+
+/* Synthetic Yes/No enum returned for any PT_LOGICAL row regardless
+   of property name. bIsString is TRUE-ish but the end-edit path
+   special-cases it (stores ".T." / ".F." into szValue). */
+static ENUMDEF s_boolEnum = { "(logical)", s_logical, 2, FALSE };
 
 static ENUMDEF * InsGetEnum( const char * szName )
 {
@@ -1108,11 +1121,14 @@ static void InsStartEdit( INSDATA * d, int nLVRow )
    d->nEditRow = nLVRow;
    ListView_GetSubItemRect( d->hList, nLVRow, 1, LVIR_LABEL, &rc );
 
-   /* Check if this property should be an enum dropdown */
+   /* Dropdown path: either a named enum, a string enum, or any
+      PT_LOGICAL property which all get a synthetic Yes/No picker. */
    pEnum = InsGetEnum( d->rows[nReal].szName );
+   if( !pEnum && d->rows[nReal].cType == 'L' )
+      pEnum = &s_boolEnum;
    if( pEnum )
    {
-      int i, nSel;
+      int i, nSel = -1;
       d->hEdit = CreateWindowExA( 0, "COMBOBOX", NULL,
          WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
          rc.left, rc.top - 2, rc.right - rc.left, 200,
@@ -1120,7 +1136,17 @@ static void InsStartEdit( INSDATA * d, int nLVRow )
       SendMessage( d->hEdit, WM_SETFONT, (WPARAM) d->hFont, TRUE );
       for( i = 0; i < pEnum->nCount; i++ )
          SendMessageA( d->hEdit, CB_ADDSTRING, 0, (LPARAM) pEnum->aValues[i] );
-      nSel = atoi( d->rows[nReal].szValue );
+      /* Compute initial selection */
+      if( d->rows[nReal].cType == 'L' )
+         nSel = ( lstrcmpiA( d->rows[nReal].szValue, ".T." ) == 0 ) ? 1 : 0;
+      else if( pEnum->bIsString )
+      {
+         for( i = 0; i < pEnum->nCount; i++ )
+            if( lstrcmpiA( d->rows[nReal].szValue, pEnum->aValues[i] ) == 0 )
+               { nSel = i; break; }
+      }
+      else
+         nSel = atoi( d->rows[nReal].szValue );
       if( nSel >= 0 && nSel < pEnum->nCount )
          SendMessage( d->hEdit, CB_SETCURSEL, nSel, 0 );
       SetFocus( d->hEdit );
@@ -1175,12 +1201,17 @@ static void InsEndEdit( INSDATA * d, BOOL bApply )
    if( bApply )
    {
       ENUMDEF * pEnum = InsGetEnum( d->rows[nReal].szName );
-      if( pEnum )
+      BOOL bBoolEnum = ( !pEnum && d->rows[nReal].cType == 'L' );
+      if( pEnum || bBoolEnum )
       {
-         /* Enum dropdown: get selected index as the numeric value */
          int nSel = (int) SendMessage( d->hEdit, CB_GETCURSEL, 0, 0 );
          if( nSel >= 0 ) {
-            sprintf( szVal, "%d", nSel );
+            if( bBoolEnum )
+               lstrcpyA( szVal, nSel == 1 ? ".T." : ".F." );
+            else if( pEnum->bIsString )
+               lstrcpynA( szVal, pEnum->aValues[nSel], sizeof(szVal) );
+            else
+               sprintf( szVal, "%d", nSel );
             lstrcpynA( d->rows[nReal].szValue, szVal, sizeof(d->rows[0].szValue) );
             InsApplyValue( d, nReal, szVal );
          }

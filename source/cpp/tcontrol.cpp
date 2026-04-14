@@ -59,6 +59,9 @@ TControl::TControl()
    FClrText = CLR_INVALID;  /* no text color = system default */
    FInterval = 1000;
    FBkBrush = NULL;
+   FFileName[0] = '\0';
+   lstrcpyA( FRDD, "DBFCDX" );
+   FActive = FALSE;
    FCtrlParent = NULL;
    FChildCount = 0;
    memset( FChildren, 0, sizeof(FChildren) );

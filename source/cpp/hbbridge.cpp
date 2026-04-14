@@ -764,6 +764,12 @@ HB_FUNC( UI_SETPROP )
       ((TForm*)p)->FAppBar = hb_parl(3);
    else if( lstrcmpi( szProp, "cAppTitle" ) == 0 && p->FControlType == CT_FORM && HB_ISCHAR(3) )
       lstrcpynA( ((TForm*)p)->FAppTitle, hb_parc(3), sizeof( ((TForm*)p)->FAppTitle ) );
+   else if( lstrcmpi( szProp, "cFileName" ) == 0 && HB_ISCHAR(3) )
+      lstrcpynA( p->FFileName, hb_parc(3), sizeof( p->FFileName ) );
+   else if( lstrcmpi( szProp, "cRDD" ) == 0 && HB_ISCHAR(3) )
+      lstrcpynA( p->FRDD, hb_parc(3), sizeof( p->FRDD ) );
+   else if( lstrcmpi( szProp, "lActive" ) == 0 )
+      p->FActive = hb_parl(3);
    else if( lstrcmpi( szProp, "lToolWindow" ) == 0 && p->FControlType == CT_FORM )
       ((TForm*)p)->FToolWindow = hb_parl(3);
    else if( lstrcmpi( szProp, "nBorderStyle" ) == 0 && p->FControlType == CT_FORM )
@@ -1031,6 +1037,12 @@ HB_FUNC( UI_GETPROP )
       hb_retl( ((TForm*)p)->FAppBar );
    else if( lstrcmpi( szProp, "cAppTitle" ) == 0 && p->FControlType == CT_FORM )
       hb_retc( ((TForm*)p)->FAppTitle );
+   else if( lstrcmpi( szProp, "cFileName" ) == 0 )
+      hb_retc( p->FFileName );
+   else if( lstrcmpi( szProp, "cRDD" ) == 0 )
+      hb_retc( p->FRDD );
+   else if( lstrcmpi( szProp, "lActive" ) == 0 )
+      hb_retl( p->FActive );
    else if( lstrcmpi( szProp, "nBorderStyle" ) == 0 && p->FControlType == CT_FORM )
       hb_retni( ((TForm*)p)->FBorderStyle );
    else if( lstrcmpi( szProp, "nBorderIcons" ) == 0 && p->FControlType == CT_FORM )
@@ -1367,6 +1379,7 @@ HB_FUNC( UI_GETALLEVENTS )
       case CT_DBFTABLE: case CT_MYSQL: case CT_MARIADB:
       case CT_POSTGRESQL: case CT_SQLITE: case CT_FIREBIRD:
       case CT_SQLSERVER: case CT_ORACLE: case CT_MONGODB:
+         /* Data properties exposed in the inspector */
          ADD_E("OnConnect",     0,  "Connection");
          ADD_E("OnDisconnect",  0,  "Connection");
          ADD_E("OnError",       0,  "Error");
@@ -1709,6 +1722,11 @@ HB_FUNC( UI_GETALLPROPS )
          ADD_PROP_S( "cAppTitle", f->FAppTitle, "Application" );
          break;
       }
+      case CT_DBFTABLE:
+         ADD_PROP_S( "cFileName", p->FFileName, "Data" );
+         ADD_PROP_S( "cRDD",      p->FRDD,      "Data" );
+         ADD_PROP_L( "lActive",   p->FActive,   "Data" );
+         break;
       case CT_BUTTON:
          ADD_PROP_L( "lDefault", ((TButton*)p)->FDefault, "Behavior" );
          ADD_PROP_L( "lCancel", ((TButton*)p)->FCancel, "Behavior" );
@@ -2084,6 +2102,32 @@ HB_FUNC( UI_DROPNONVISUAL )
       if( hChild )
       {
          ctrl->FHandle = hChild;
+
+         /* Resolve default icon for the type if caller didn't supply one.
+            Paths are relative to the repo's resources/icons/ folder. */
+         char szDefault[MAX_PATH] = {0};
+         if( !cIconPath )
+         {
+            const char * szIcon = NULL;
+            switch( nType )
+            {
+               case CT_DBFTABLE:    szIcon = "database_table.png"; break;
+               case CT_MYSQL:       szIcon = "database_go.png";    break;
+               case CT_MARIADB:     szIcon = "database_go.png";    break;
+               case CT_POSTGRESQL:  szIcon = "database_go.png";    break;
+               case CT_SQLITE:      szIcon = "database_go.png";    break;
+               case CT_FIREBIRD:    szIcon = "database_go.png";    break;
+               case CT_SQLSERVER:   szIcon = "database_go.png";    break;
+               case CT_ORACLE:      szIcon = "database_go.png";    break;
+               case CT_MONGODB:     szIcon = "database_go.png";    break;
+               default: break;
+            }
+            if( szIcon )
+            {
+               sprintf( szDefault, "c:\\HarbourBuilder\\resources\\icons\\%s", szIcon );
+               cIconPath = szDefault;
+            }
+         }
 
          /* Try to load icon from PNG */
          if( cIconPath )

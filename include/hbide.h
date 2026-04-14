@@ -232,6 +232,11 @@ public:
    int          FInterval;     /* Timer interval (ms), default 1000 */
    HBRUSH       FBkBrush;
 
+   /* Non-visual database components (CT_DBFTABLE etc.) */
+   char         FFileName[260];
+   char         FRDD[16];
+   BOOL         FActive;
+
    /* Harbour event codeblocks */
    PHB_ITEM     FOnClick;
    PHB_ITEM     FOnChange;
