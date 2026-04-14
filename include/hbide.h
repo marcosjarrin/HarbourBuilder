@@ -236,6 +236,7 @@ public:
    char         FFileName[260];
    char         FRDD[16];
    BOOL         FActive;
+   BOOL         FTransparent;  /* TRUE: WM_CTLCOLORSTATIC returns NULL_BRUSH so the parent's bg shows through (TLabel default) */
 
    /* Harbour event codeblocks */
    PHB_ITEM     FOnClick;
@@ -315,6 +316,7 @@ public:
    BOOL         FMainWindow;   /* TRUE = this form owns the message loop */
    BOOL         FModal;        /* TRUE = ShowModal() is active (nested message loop) */
    BOOL         FDesignMode;
+   BOOL         FInSizeMove;     /* TRUE between WM_ENTERSIZEMOVE..WM_EXITSIZEMOVE */
    char         FAppTitle[128];  /* custom binary/app name; defaults to UserApp when empty */
 
    /* Toolbar */

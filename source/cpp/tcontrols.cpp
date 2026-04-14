@@ -20,6 +20,7 @@ TLabel::TLabel()
    FWidth = 80;
    FHeight = 18;
    FTabStop = FALSE;
+   FTransparent = TRUE;   /* Delphi/VCL default: labels inherit parent's bg */
    lstrcpy( FText, "Label" );
 }
 

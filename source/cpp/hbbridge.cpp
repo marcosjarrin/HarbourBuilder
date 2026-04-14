@@ -770,6 +770,11 @@ HB_FUNC( UI_SETPROP )
       lstrcpynA( p->FRDD, hb_parc(3), sizeof( p->FRDD ) );
    else if( lstrcmpi( szProp, "lActive" ) == 0 )
       p->FActive = hb_parl(3);
+   else if( lstrcmpi( szProp, "lTransparent" ) == 0 )
+   {
+      p->FTransparent = hb_parl(3);
+      if( p->FHandle ) InvalidateRect( p->FHandle, NULL, TRUE );
+   }
    else if( lstrcmpi( szProp, "lToolWindow" ) == 0 && p->FControlType == CT_FORM )
       ((TForm*)p)->FToolWindow = hb_parl(3);
    else if( lstrcmpi( szProp, "nBorderStyle" ) == 0 && p->FControlType == CT_FORM )
@@ -824,12 +829,23 @@ HB_FUNC( UI_SETPROP )
       if( p->FControlType == CT_FORM )
       {
          TForm * pF = (TForm *) p;
+         int ic;
          /* Invalidate grid cache so design-mode grid redraws with new color */
          if( pF->FGridBmp ) { SelectObject( pF->FGridDC, NULL ); DeleteObject( pF->FGridBmp ); DeleteDC( pF->FGridDC ); pF->FGridBmp = NULL; pF->FGridDC = NULL; }
          if( pF->FHandle )
          {
             SetClassLongPtr( pF->FHandle, GCLP_HBRBACKGROUND, (LONG_PTR) p->FBkBrush );
             InvalidateRect( pF->FHandle, NULL, TRUE );
+            /* Explicitly invalidate transparent / inherit-color children
+               so static-text caches (TLabel and friends) repaint with the
+               new parent bg instead of the stale one. */
+            for( ic = 0; ic < pF->FChildCount; ic++ )
+            {
+               TControl * pC = pF->FChildren[ic];
+               if( pC && pC->FHandle &&
+                   ( pC->FTransparent || pC->FClrPane == CLR_INVALID ) )
+                  InvalidateRect( pC->FHandle, NULL, TRUE );
+            }
          }
       }
       else
@@ -1043,6 +1059,8 @@ HB_FUNC( UI_GETPROP )
       hb_retc( p->FRDD );
    else if( lstrcmpi( szProp, "lActive" ) == 0 )
       hb_retl( p->FActive );
+   else if( lstrcmpi( szProp, "lTransparent" ) == 0 )
+      hb_retl( p->FTransparent );
    else if( lstrcmpi( szProp, "nBorderStyle" ) == 0 && p->FControlType == CT_FORM )
       hb_retni( ((TForm*)p)->FBorderStyle );
    else if( lstrcmpi( szProp, "nBorderIcons" ) == 0 && p->FControlType == CT_FORM )

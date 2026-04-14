@@ -266,6 +266,7 @@ static void InsEndEdit( INSDATA * d, BOOL bApply );
 static void InsApplyValue( INSDATA * d, int nReal, const char * szVal );
 static void InsColorPick( INSDATA * d, int nLVRow );
 static void InsFontPick( INSDATA * d, int nLVRow );
+static void InsFilePick( INSDATA * d, int nLVRow );
 static void InsPopulateEvents( INSDATA * d );
 static void InsUpdateCombo( INSDATA * d );  /* updates combo from current rows data */
 static void InsArrayEdit( INSDATA * d, int nLVRow );
@@ -279,6 +280,7 @@ static LRESULT CALLBACK InsBtnProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
       int nLV = d->nEditRow;
       int nReal = ( nLV >= 0 && nLV < d->nVisible ) ? d->map[nLV] : -1;
       char cType = ( nReal >= 0 ) ? d->rows[nReal].cType : 0;
+      const char * szName = ( nReal >= 0 ) ? d->rows[nReal].szName : "";
       LRESULT r = CallWindowProc( oldProc, hWnd, msg, wParam, lParam );
       InsEndEdit( d, FALSE );
       if( cType == 'C' )
@@ -287,6 +289,8 @@ static LRESULT CALLBACK InsBtnProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
          InsFontPick( d, nLV );
       else if( cType == 'A' )
          InsArrayEdit( d, nLV );
+      else if( cType == 'S' && lstrcmpiA( szName, "cFileName" ) == 0 )
+         InsFilePick( d, nLV );
       return r;
    }
    return CallWindowProc( oldProc, hWnd, msg, wParam, lParam );
@@ -312,13 +316,11 @@ static LRESULT CALLBACK InsEditProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
    if( msg == WM_KEYDOWN && wParam == VK_RETURN ) { InsEndEdit( d, TRUE ); return 0; }
    if( msg == WM_KEYDOWN && wParam == VK_ESCAPE ) { InsEndEdit( d, FALSE ); return 0; }
 
-   /* ComboBox: CBN_SELCHANGE means user picked a value -> apply */
-   if( msg == WM_COMMAND && HIWORD(wParam) == CBN_SELCHANGE )
-   {
-      /* Post a delayed end-edit so the combo finishes its selection */
-      PostMessage( GetParent(hWnd), WM_USER + 200, 0, 0 );
-      return 0;
-   }
+   /* Note: we USED to post WM_USER+200 on CBN_SELCHANGE to end the edit
+      as soon as a combo item was picked. That destroyed the combobox
+      mid-drop, leaving the dropdown list hanging visibly on screen. The
+      WM_KILLFOCUS path below commits the change cleanly once focus
+      leaves the combo naturally. */
 
    if( msg == WM_KILLFOCUS )
    {
@@ -336,6 +338,36 @@ static LRESULT CALLBACK InsEditProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
    }
 
    return CallWindowProc( d->oldEditProc, hWnd, msg, wParam, lParam );
+}
+
+/* File picker for string properties with a "..." button (cFileName).
+   Opens a standard file-open dialog starting from the current value's
+   folder, writes the chosen path back and refreshes the inspector. */
+static void InsFilePick( INSDATA * d, int nLVRow )
+{
+   OPENFILENAMEA ofn = {0};
+   char szFile[MAX_PATH];
+   int nReal;
+
+   if( nLVRow < 0 || nLVRow >= d->nVisible ) return;
+   nReal = d->map[nLVRow];
+
+   lstrcpynA( szFile, d->rows[nReal].szValue, sizeof(szFile) );
+
+   ofn.lStructSize = sizeof(ofn);
+   ofn.hwndOwner = d->hWnd;
+   ofn.lpstrFilter = "DBF tables (*.dbf)\0*.dbf\0All files (*.*)\0*.*\0";
+   ofn.lpstrFile = szFile;
+   ofn.nMaxFile = sizeof(szFile);
+   ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER;
+   ofn.lpstrDefExt = "dbf";
+
+   if( GetOpenFileNameA( &ofn ) )
+   {
+      lstrcpynA( d->rows[nReal].szValue, szFile, sizeof(d->rows[0].szValue) );
+      InsApplyValue( d, nReal, szFile );
+      InsRebuild( d );
+   }
 }
 
 static void InsColorPick( INSDATA * d, int nLVRow )
@@ -1105,6 +1137,7 @@ static void InsStartEdit( INSDATA * d, int nLVRow )
    RECT rc;
    int nReal, nBtnW;
    ENUMDEF * pEnum;
+   BOOL bNeedsBtn;
 
    { FILE*f=fopen("c:\\HarbourBuilder\\inspector_trace.log","a");
      if(f){fprintf(f,"InsStartEdit: nLVRow=%d d=%p\n",nLVRow,d);fclose(f);} }
@@ -1129,6 +1162,10 @@ static void InsStartEdit( INSDATA * d, int nLVRow )
    if( pEnum )
    {
       int i, nSel = -1;
+      { FILE*f=fopen("c:\\HarbourBuilder\\inspector_trace.log","a");
+        if(f){fprintf(f,"  OPEN COMBO prop='%s' type='%c' val='%s' bIsString=%d count=%d\n",
+          d->rows[nReal].szName, d->rows[nReal].cType, d->rows[nReal].szValue,
+          pEnum->bIsString, pEnum->nCount); fclose(f);} }
       d->hEdit = CreateWindowExA( 0, "COMBOBOX", NULL,
          WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL,
          rc.left, rc.top - 2, rc.right - rc.left, 200,
@@ -1155,7 +1192,18 @@ static void InsStartEdit( INSDATA * d, int nLVRow )
       return;
    }
 
-   nBtnW = ( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'A' ) ? 22 : 0;
+   /* Rows that need a "..." picker button next to the edit:
+      - cType 'C' (color), 'F' (font), 'A' (array) as before
+      - cType 'S' with name cFileName -> file open dialog
+      Declared at top-of-function above to keep BCC happy (C89). */
+   bNeedsBtn = ( d->rows[nReal].cType == 'C' ||
+                 d->rows[nReal].cType == 'F' ||
+                 d->rows[nReal].cType == 'A' ||
+                 ( d->rows[nReal].cType == 'S' &&
+                   lstrcmpiA( d->rows[nReal].szName, "cFileName" ) == 0 ) );
+   nBtnW = bNeedsBtn ? 22 : 0;
+   { FILE*f=fopen("c:\\HarbourBuilder\\inspector_trace.log","a");
+     if(f){fprintf(f,"  bNeedsBtn=%d nBtnW=%d\n",(int)bNeedsBtn,nBtnW);fclose(f);} }
 
    d->hEdit = CreateWindowExA( 0, "EDIT", d->rows[nReal].szValue,
       WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL, rc.left, rc.top, rc.right-rc.left-nBtnW, rc.bottom-rc.top,
@@ -1166,8 +1214,7 @@ static void InsStartEdit( INSDATA * d, int nLVRow )
    SetPropA( d->hEdit, "InsData", (HANDLE) d );
    d->oldEditProc = (WNDPROC) SetWindowLongPtr( d->hEdit, GWLP_WNDPROC, (LONG_PTR) InsEditProc );
 
-   /* Color/Font property: add "..." button to the right */
-   if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'A' )
+   if( bNeedsBtn )
    {
       d->hBtn = CreateWindowExA( 0, "BUTTON", "...",
          WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
@@ -1205,6 +1252,10 @@ static void InsEndEdit( INSDATA * d, BOOL bApply )
       if( pEnum || bBoolEnum )
       {
          int nSel = (int) SendMessage( d->hEdit, CB_GETCURSEL, 0, 0 );
+         { FILE*f=fopen("c:\\HarbourBuilder\\inspector_trace.log","a");
+           if(f){fprintf(f,"  END COMBO prop='%s' bApply=1 bBool=%d bIsString=%d nSel=%d\n",
+             d->rows[nReal].szName, bBoolEnum,
+             pEnum ? pEnum->bIsString : -1, nSel); fclose(f);} }
          if( nSel >= 0 ) {
             if( bBoolEnum )
                lstrcpyA( szVal, nSel == 1 ? ".T." : ".F." );
@@ -1212,6 +1263,8 @@ static void InsEndEdit( INSDATA * d, BOOL bApply )
                lstrcpynA( szVal, pEnum->aValues[nSel], sizeof(szVal) );
             else
                sprintf( szVal, "%d", nSel );
+            { FILE*f=fopen("c:\\HarbourBuilder\\inspector_trace.log","a");
+              if(f){fprintf(f,"  END COMBO writing szVal='%s'\n", szVal); fclose(f);} }
             lstrcpynA( d->rows[nReal].szValue, szVal, sizeof(d->rows[0].szValue) );
             InsApplyValue( d, nReal, szVal );
          }

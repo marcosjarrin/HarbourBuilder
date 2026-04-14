@@ -713,6 +713,9 @@ static function RegenerateFormCode( cName, hForm )
       nH     := UI_GetProp( hForm, "nHeight" )
       nClr   := UI_GetProp( hForm, "nClrPane" )
       cAppTitle := UI_GetProp( hForm, "cAppTitle" )
+      PosTrace( "RegenerateFormCode " + cName + ": L=" + LTrim(Str(nFL)) + ;
+                " T=" + LTrim(Str(nFT)) + " W=" + LTrim(Str(nW)) + ;
+                " H=" + LTrim(Str(nH)) )
    else
       cTitle := cName
       nFL := 100; nFT := 100; nW := 400; nH := 300
@@ -903,8 +906,15 @@ static function RegenerateFormCode( cName, hForm )
             cEvSuffix := SubStr( cEvName, 3 )
             cHandlerName := cCtrlName + cEvSuffix
             if cHandlerName $ cExistingCode
-               cEvents += "   ::o" + cCtrlName + ":" + cEvName + ;
-                  " := { || " + cHandlerName + "( Self ) }" + e
+               // METHOD Button1Click() CLASS TForm1 -> emit ::Button1Click()
+               // plain FUNCTION Button1Click         -> emit Button1Click( Self )
+               if ( "METHOD " + cHandlerName ) $ cExistingCode
+                  cEvents += "   ::o" + cCtrlName + ":" + cEvName + ;
+                     " := { || ::" + cHandlerName + "() }" + e
+               else
+                  cEvents += "   ::o" + cCtrlName + ":" + cEvName + ;
+                     " := { || " + cHandlerName + "( Self ) }" + e
+               endif
             endif
          next
       next
@@ -940,6 +950,13 @@ static function RegenerateFormCode( cName, hForm )
    endif
    cCode += e
    cCode += "   // Event handlers" + e
+   // Scan the existing event-handler code for "METHOD <Name>() CLASS <cClass>"
+   // implementations and auto-declare each one in the CLASS body. Without
+   // that, calling ::<Name>() on a TForm1 instance throws "Message not
+   // found" at runtime because the symbol was never registered on the
+   // class. Also the link step needs the bare-function symbol, which the
+   // class-method compilation provides, but dispatch needs the declaration.
+   cCode += ScanMethodDeclarations( cExistingCode, cClass )
    cCode += e
    cCode += "   METHOD CreateForm()" + e
    cCode += e
@@ -1387,9 +1404,17 @@ static function SyncDesignerToCode()
       cNewCode += Chr(13) + Chr(10) + cMethods
    endif
 
-   // Update stored code and editor tab
+   // Update stored code and editor tab. Guard against the re-entrant
+   // loop: CodeEditorSetTabText fires OnEditorTextChange, which calls
+   // RestoreFormFromCode, which destroys and recreates every child
+   // control (losing any in-memory state the backend stores outside
+   // the parsed code, like TDbfTable::FRDD set moments ago).
    aForms[ nActiveForm ][ 3 ] := cNewCode
+   PosTrace( "SyncDesignerToCode setting editor tab, guard .t." )
+   lSyncingFromCode := .t.
    CodeEditorSetTabText( hCodeEditor, nActiveForm + 1, cNewCode )
+   lSyncingFromCode := .f.
+   PosTrace( "SyncDesignerToCode guard released" )
 
 return nil
 
@@ -1399,6 +1424,9 @@ static function OnEditorTextChange( hEd, nTab )
    local nFormIdx, cCode, hForm
 
    HB_SYMBOL_UNUSED( hEd )
+
+   PosTrace( "OnEditorTextChange fired nTab=" + LTrim(Str(nTab)) + ;
+             " lSyncingFromCode=" + iif( lSyncingFromCode, "Y", "N" ) )
 
    // Avoid re-entrant loop (SyncDesignerToCode updates editor text)
    if lSyncingFromCode
@@ -1680,11 +1708,15 @@ static function RestoreFormFromCode( hForm, cCode )
          loop
       endif
       if '::Left' $ cTrim .and. ':=' $ cTrim .and. ! "::o" $ cTrim
-         UI_SetProp( hForm, "nLeft", Val( AllTrim( SubStr( cTrim, At( ":=", cTrim ) + 2 ) ) ) )
+         nPos := Val( AllTrim( SubStr( cTrim, At( ":=", cTrim ) + 2 ) ) )
+         UI_SetProp( hForm, "nLeft", nPos )
+         PosTrace( "RestoreFormFromCode Left := " + LTrim( Str( nPos ) ) )
          loop
       endif
       if '::Top' $ cTrim .and. ':=' $ cTrim .and. ! "::o" $ cTrim
-         UI_SetProp( hForm, "nTop", Val( AllTrim( SubStr( cTrim, At( ":=", cTrim ) + 2 ) ) ) )
+         nPos := Val( AllTrim( SubStr( cTrim, At( ":=", cTrim ) + 2 ) ) )
+         UI_SetProp( hForm, "nTop", nPos )
+         PosTrace( "RestoreFormFromCode Top  := " + LTrim( Str( nPos ) ) )
          loop
       endif
       if '::Color' $ cTrim .and. ':=' $ cTrim .and. ! "::o" $ cTrim
@@ -1862,7 +1894,9 @@ static function RestoreFormFromCode( hForm, cCode )
       cText := AllTrim( SubStr( cText, nPos2 + 2 ) )
 
       // Only process known properties
-      if ! ( cProp == "nClrPane" .or. cProp == "Color" .or. cProp == "cDataSource" .or. cProp == "nInterval" .or. cProp == "oFont" )
+      if ! ( cProp == "nClrPane" .or. cProp == "Color" .or. cProp == "cDataSource" .or. ;
+             cProp == "nInterval" .or. cProp == "oFont" .or. ;
+             cProp == "cFileName" .or. cProp == "cRDD" .or. cProp == "lActive" )
          loop
       endif
 
@@ -1890,6 +1924,14 @@ static function RestoreFormFromCode( hForm, cCode )
          UI_SetProp( hCtrl, "cDataSource", cText )
       elseif cProp == "nInterval"
          UI_SetProp( hCtrl, "nInterval", Val( cText ) )
+      elseif cProp == "cFileName" .or. cProp == "cRDD"
+         // Strip surrounding quotes from string literal
+         if Left( cText, 1 ) == '"'
+            cText := SubStr( cText, 2, Len( cText ) - 2 )
+         endif
+         UI_SetProp( hCtrl, cProp, cText )
+      elseif cProp == "lActive"
+         UI_SetProp( hCtrl, "lActive", Upper( AllTrim( cText ) ) == ".T." )
       endif
    next
 
@@ -2000,6 +2042,11 @@ static function OpenProjectFile( cFile )
          { |hCtrl| OnDesignSelChange( hCtrl ) } )
       UI_FormOnComponentDrop( oDesignForm:hCpp, ;
          { |hForm, nType, nL, nT, nW, nH| OnComponentDrop( hForm, nType, nL, nT, nW, nH ) } )
+      // Two-way: sync code + inspector when form is moved/resized.
+      // Was wired in TBNew but missing here - that's why dragging the
+      // design form after Open never updated ::Left / ::Top before save.
+      oDesignForm:OnResize := { || SyncDesignerToCode(), ;
+         InspectorRefresh( oDesignForm:hCpp ) }
    next
 
    // Activate first form
@@ -2120,6 +2167,52 @@ static function IDE_ErrorHandler( oErr )
 
 return nil
 
+// Append position-related diagnostics to pos_trace.log. Short-lived,
+// only used while we debug form save/restore.
+static function PosTrace( cMsg )
+   local nH := FOpen( "c:\HarbourBuilder\pos_trace.log", 2 )
+   if nH == -1
+      nH := FCreate( "c:\HarbourBuilder\pos_trace.log" )
+   else
+      FSeek( nH, 0, 2 )
+   endif
+   if nH != -1
+      FWrite( nH, DToS( Date() ) + " " + Time() + "  " + cMsg + Chr(13) + Chr(10) )
+      FClose( nH )
+   endif
+return nil
+
+// Extract every "METHOD <Name>() CLASS <cClass>" implementation from
+// cCode and return a block of "   METHOD <Name>()" declarations suitable
+// for inclusion inside the CLASS body. Skips CreateForm which is
+// already hardcoded. Returns "" if no user methods are found.
+static function ScanMethodDeclarations( cCode, cClass )
+   local cOut := "", e := Chr(10)
+   local aLines, cLine, cTrim, cName, nPos, nPos2, i
+   local cTag := "CLASS " + cClass
+   if Empty( cCode ); return ""; endif
+   aLines := hb_ATokens( cCode, e )
+   for i := 1 to Len( aLines )
+      cTrim := AllTrim( StrTran( aLines[i], Chr(13), "" ) )
+      if Left( cTrim, 7 ) == "METHOD "
+         if cTag $ cTrim
+            cName := AllTrim( SubStr( cTrim, 8 ) )  // after "METHOD "
+            nPos := At( "(", cName )
+            if nPos > 0
+               cName := Left( cName, nPos - 1 )
+            endif
+            nPos := At( " ", cName )
+            if nPos > 0
+               cName := Left( cName, nPos - 1 )
+            endif
+            if ! Empty( cName ) .and. Upper( cName ) != "CREATEFORM"
+               cOut += "   METHOD " + cName + "()" + e
+            endif
+         endif
+      endif
+   next
+return cOut
+
 static function AppendErrorLog( cMsg )
    local nH := FOpen( "c:\HarbourBuilder\error_trace.log", 2 )
    local cStamp := DToS( Date() ) + " " + Time()
@@ -2138,7 +2231,10 @@ static function TBSave()
 
    local cDir, cFile, cHbp, i
 
-   // Sync current form code
+   // Sync current form code. SyncDesignerToCode first so the live
+   // designer state (including any post-Open form drag) is captured,
+   // then SaveActiveFormCode picks up any manual edits in the editor.
+   SyncDesignerToCode()
    SaveActiveFormCode()
 
    if Empty( cCurrentFile )
@@ -2400,6 +2496,9 @@ static function TBRun()
    cAllCode += MemoRead( "c:\HarbourBuilder\source\cpp\tform.cpp" )
    cAllCode += MemoRead( "c:\HarbourBuilder\source\cpp\tcontrol.cpp" )
    cAllCode += MemoRead( "c:\HarbourBuilder\source\cpp\tcontrols.cpp" )
+   // Include this file too: the W32_ErrorDialog template + main.prg
+   // assembly logic live here, so changes here must invalidate the cache.
+   cAllCode += MemoRead( "c:\HarbourBuilder\source\hbbuilder_win.prg" )
    nHash := Len( cAllCode )
    for i := 1 to Min( Len( cAllCode ), 5000 )
       nHash := nHash + Asc( SubStr( cAllCode, i, 1 ) ) * i
@@ -2495,7 +2594,13 @@ static function TBRun()
    W32_ProgressStep( "Assembling main.prg..." )
    cLog += "[2] Building main.prg..." + Chr(10)
    cAllPrg := '#include "hbbuilder.ch"' + Chr(10)
-   cAllPrg += "REQUEST HB_GT_GUI_DEFAULT" + Chr(10) + Chr(10)
+   cAllPrg += "REQUEST HB_GT_GUI_DEFAULT" + Chr(10)
+   // RDD drivers required by TDBFTable (cRDD = DBFCDX/DBFNTX/DBFFPT) and
+   // RDDSYS so REQUEST is honored. Without these the user app links but
+   // dbUseArea("DBFCDX",...) fails with EG_ARG/1015 - the driver name
+   // is not registered with the RDD subsystem.
+   cAllPrg += "REQUEST DBFCDX, DBFNTX, DBFFPT" + Chr(10)
+   cAllPrg += "REQUEST RDDSYS" + Chr(10) + Chr(10)
    cAllPrg += StrTran( MemoRead( cBuildDir + "\Project1.prg" ), ;
                        '#include "hbbuilder.ch"', "" ) + Chr(10)
    for i := 1 to Len( aForms )
@@ -2516,27 +2621,70 @@ static function TBRun()
    cAllPrg += 'HB_FUNC( MAC_RUNTIMEERRORDIALOG ) { hb_retni( 0 ); }' + Chr(10)
    cAllPrg += 'HB_FUNC( MAC_APPTERMINATE )  { }' + Chr(10)
    cAllPrg += 'HB_FUNC( W32_ERRORDIALOG ) {' + Chr(10)
-   cAllPrg += '  const char * msg = hb_parc(1);' + Chr(10)
-   cAllPrg += '  HWND hDlg, hEdit, hBtn;' + Chr(10)
-   cAllPrg += '  MSG m; HFONT hF;' + Chr(10)
-   cAllPrg += '  hDlg = CreateWindowExA(0,"STATIC","Runtime Error",' + Chr(10)
+   cAllPrg += '  const char * raw = hb_parc(1);' + Chr(10)
+   cAllPrg += '  char msg[16384]; int ri, mi = 0;' + Chr(10)
+   cAllPrg += '  /* Normalize LF -> CRLF so MessageBox lays out lines correctly. */' + Chr(10)
+   cAllPrg += '  for( ri = 0; raw && raw[ri] && mi < (int)sizeof(msg) - 2; ri++ ) {' + Chr(10)
+   cAllPrg += '    if( raw[ri] == 0x0A && ( ri == 0 || raw[ri-1] != 0x0D ) )' + Chr(10)
+   cAllPrg += '      msg[mi++] = 0x0D;' + Chr(10)
+   cAllPrg += '    msg[mi++] = raw[ri];' + Chr(10)
+   cAllPrg += '  }' + Chr(10)
+   cAllPrg += '  msg[mi] = 0;' + Chr(10)
+   cAllPrg += '  /* Native MessageBox: DPI-aware, kernel-managed dialog. Vista+' + Chr(10)
+   cAllPrg += '     supports Ctrl+C to copy contents to the clipboard. Avoids' + Chr(10)
+   cAllPrg += '     the previous custom GetMessage-pump-inside-a-callback path' + Chr(10)
+   cAllPrg += '     that occasionally corrupted the desktop image under DPI. */' + Chr(10)
+   cAllPrg += '  /* Custom dialog: EDIT with the formatted text + Copy button +' + Chr(10)
+   cAllPrg += '     OK. MessageBoxA was tried but in some configurations did not' + Chr(10)
+   cAllPrg += '     show on top of the user form, so we use our own window. */' + Chr(10)
+   cAllPrg += '  { HWND hDlg, hEdit, hOK, hCopy;' + Chr(10)
+   cAllPrg += '    MSG m; HFONT hF, hFMono;' + Chr(10)
+   cAllPrg += '    int sw = GetSystemMetrics(SM_CXSCREEN);' + Chr(10)
+   cAllPrg += '    int sh = GetSystemMetrics(SM_CYSCREEN);' + Chr(10)
+   cAllPrg += '    int W = 1000, H = 700, X = (sw-W)/2, Y = (sh-H)/2;' + Chr(10)
+   cAllPrg += '    int btnH = 36, btnY = H - btnH - 60;' + Chr(10)
+   cAllPrg += '  hDlg = CreateWindowExA(WS_EX_DLGMODALFRAME|WS_EX_TOPMOST,"#32770","Runtime Error",' + Chr(10)
    cAllPrg += '    WS_OVERLAPPED|WS_CAPTION|WS_SYSMENU|WS_VISIBLE,' + Chr(10)
-   cAllPrg += '    100,100,600,400,NULL,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
+   cAllPrg += '    X,Y,W,H,NULL,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
    cAllPrg += '  hF = (HFONT)GetStockObject(DEFAULT_GUI_FONT);' + Chr(10)
+   cAllPrg += '  hFMono = CreateFontA(-16,0,0,0,FW_NORMAL,0,0,0,DEFAULT_CHARSET,0,0,DEFAULT_QUALITY,FIXED_PITCH|FF_MODERN,"Consolas");' + Chr(10)
+   cAllPrg += '  if (!hFMono) hFMono = (HFONT)GetStockObject(ANSI_FIXED_FONT);' + Chr(10)
    cAllPrg += '  hEdit = CreateWindowExA(WS_EX_CLIENTEDGE,"EDIT",msg,' + Chr(10)
-   cAllPrg += '    WS_CHILD|WS_VISIBLE|WS_VSCROLL|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL,' + Chr(10)
-   cAllPrg += '    8,8,576,320,hDlg,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
-   cAllPrg += '  SendMessage(hEdit,WM_SETFONT,(WPARAM)hF,TRUE);' + Chr(10)
-   cAllPrg += '  hBtn = CreateWindowExA(0,"BUTTON","OK",' + Chr(10)
+   cAllPrg += '    WS_CHILD|WS_VISIBLE|WS_VSCROLL|WS_HSCROLL|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL|ES_AUTOHSCROLL,' + Chr(10)
+   cAllPrg += '    8,8,W-24,btnY-16,hDlg,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
+   cAllPrg += '  SendMessage(hEdit,WM_SETFONT,(WPARAM)hFMono,TRUE);' + Chr(10)
+   cAllPrg += '  hCopy = CreateWindowExA(0,"BUTTON","Copy to clipboard",' + Chr(10)
+   cAllPrg += '    WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON,' + Chr(10)
+   cAllPrg += '    8,btnY,200,btnH,hDlg,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
+   cAllPrg += '  SendMessage(hCopy,WM_SETFONT,(WPARAM)hF,TRUE);' + Chr(10)
+   cAllPrg += '  hOK = CreateWindowExA(0,"BUTTON","OK",' + Chr(10)
    cAllPrg += '    WS_CHILD|WS_VISIBLE|BS_DEFPUSHBUTTON,' + Chr(10)
-   cAllPrg += '    260,340,80,28,hDlg,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
-   cAllPrg += '  SendMessage(hBtn,WM_SETFONT,(WPARAM)hF,TRUE);' + Chr(10)
+   cAllPrg += '    W-130,btnY,110,btnH,hDlg,NULL,GetModuleHandle(NULL),NULL);' + Chr(10)
+   cAllPrg += '  SendMessage(hOK,WM_SETFONT,(WPARAM)hF,TRUE);' + Chr(10)
+   cAllPrg += '  SetForegroundWindow(hDlg);' + Chr(10)
    cAllPrg += '  while(GetMessage(&m,NULL,0,0)) {' + Chr(10)
    cAllPrg += '    TranslateMessage(&m); DispatchMessage(&m);' + Chr(10)
-   cAllPrg += '    if(m.message==WM_LBUTTONUP && m.hwnd==hBtn) break;' + Chr(10)
+   cAllPrg += '    if(m.message==WM_LBUTTONUP && m.hwnd==hOK) break;' + Chr(10)
+   cAllPrg += '    if(m.message==WM_LBUTTONUP && m.hwnd==hCopy) {' + Chr(10)
+   cAllPrg += '      size_t len = strlen(msg) + 1;' + Chr(10)
+   cAllPrg += '      if(OpenClipboard(hDlg)) {' + Chr(10)
+   cAllPrg += '        HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, len);' + Chr(10)
+   cAllPrg += '        if(hg) { char * dst=(char*)GlobalLock(hg); memcpy(dst,msg,len); GlobalUnlock(hg);' + Chr(10)
+   cAllPrg += '                 EmptyClipboard(); SetClipboardData(CF_TEXT,hg); }' + Chr(10)
+   cAllPrg += '        CloseClipboard();' + Chr(10)
+   cAllPrg += '        SetWindowTextA(hCopy,"Copied!");' + Chr(10)
+   cAllPrg += '      }' + Chr(10)
+   cAllPrg += '    }' + Chr(10)
+   cAllPrg += '    if(m.message==WM_KEYDOWN && m.wParam==VK_ESCAPE) break;' + Chr(10)
    cAllPrg += '    if(m.message==WM_CLOSE || m.message==WM_DESTROY) break;' + Chr(10)
    cAllPrg += '  }' + Chr(10)
+   cAllPrg += '  if(hFMono) DeleteObject(hFMono);' + Chr(10)
    cAllPrg += '  DestroyWindow(hDlg);' + Chr(10)
+   cAllPrg += '  }' + Chr(10)
+   cAllPrg += '  /* QUIT does not break the form GetMessage loop on Win32,' + Chr(10)
+   cAllPrg += '     so the user app process kept running silently after the' + Chr(10)
+   cAllPrg += '     error dialog was dismissed. ExitProcess terminates it. */' + Chr(10)
+   cAllPrg += '  ExitProcess(1);' + Chr(10)
    cAllPrg += '}' + Chr(10)
    cAllPrg += '#pragma ENDDUMP' + Chr(10)
    MemoWrit( cBuildDir + "\main.prg", cAllPrg )

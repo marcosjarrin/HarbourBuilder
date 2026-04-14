@@ -49,6 +49,7 @@ TForm::TForm()
    FSizable = TRUE;   /* Default: resizable (like Delphi/C++Builder) */
    FAppBar = FALSE;
    FToolWindow = FALSE;
+   FInSizeMove = FALSE;
    FAppTitle[0] = '\0';
    FModalResult = 0;
    FRunning = FALSE;
@@ -523,6 +524,14 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
             {
                if( FChildren[i]->FClrText != CLR_INVALID )
                   SetTextColor( (HDC) wParam, FChildren[i]->FClrText );
+               /* Transparent wins: child paints on top of the parent's
+                  fresh background without its own brush, so changes to
+                  the form's color are reflected immediately. */
+               if( FChildren[i]->FTransparent )
+               {
+                  SetBkMode( (HDC) wParam, TRANSPARENT );
+                  return (LRESULT) GetStockObject( NULL_BRUSH );
+               }
                if( FChildren[i]->FClrPane != CLR_INVALID )
                {
                   SetBkColor( (HDC) wParam, FChildren[i]->FClrPane );
@@ -753,10 +762,27 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
             SendMessage( FStatusBar, WM_SIZE, 0, 0 );
          if( FDesignMode )
             UpdateOverlay();
-         /* Fire OnResize for both design and runtime mode */
-         FireEvent( FOnResize );
+         /* Fire OnResize for both design and runtime mode - BUT suppress
+            the firing while the user is dragging/sizing the window. The
+            final WM_EXITSIZEMOVE below fires it once so the Harbour
+            handler (which rewrites the code-editor tab and regenerates
+            the form) runs exactly once per drag, not per pixel. Without
+            this, dragging the design form after Open flickered the
+            editor horribly as every frame re-emitted the whole class. */
+         if( !FInSizeMove )
+            FireEvent( FOnResize );
          break;
       }
+
+      case WM_ENTERSIZEMOVE:
+         FInSizeMove = TRUE;
+         break;
+
+      case WM_EXITSIZEMOVE:
+         FInSizeMove = FALSE;
+         /* Fire a single OnResize to capture the final position/size */
+         FireEvent( FOnResize );
+         break;
 
       case WM_NOTIFY:
       {

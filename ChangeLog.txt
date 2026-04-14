@@ -1,6 +1,101 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-14 (Windows: TLabel transparency, form-position save/restore, runtime error dialog, dropdown UX, sample improvements)
+
+  FEATURES
+  - TLabel and any TControl now expose lTransparent (default TRUE for
+    TLabel, matching VCL/Delphi). Transparent statics are painted with
+    NULL_BRUSH so the parent's background shows through. Inspector
+    surfaces it automatically as a Yes/No dropdown.
+  - When a form's nClrPane changes, every transparent / inherit-color
+    child is invalidated so labels (and friends) repaint with the new
+    background instead of caching the old one.
+  - cFileName property in the inspector grew a "..." button that opens
+    a standard Win32 file-open dialog (filter "*.dbf" by default,
+    seeded with the current path). Wired into InsBtnProc + new
+    InsFilePick helper.
+  - User-app runtime error dialog (W32_ErrorDialog injected into every
+    generated main.prg):
+      * Custom dialog using the predefined "#32770" class so the
+        window stops painting its own caption text as a giant label
+        inside the client area.
+      * EDIT control with Consolas -16, scrollable, ES_READONLY.
+      * Two buttons: "Copy to clipboard" (becomes "Copied!" on click)
+        and "OK". ESC closes too.
+      * WS_EX_TOPMOST + SetForegroundWindow so it doesn't hide behind
+        the user form.
+      * LF -> CRLF normalization so AppShowError output formats with
+        proper line breaks.
+      * ExitProcess(1) at the end so the user-app process actually
+        terminates - QUIT alone did not break the form's GetMessage
+        loop, leaving zombie processes after each error.
+  - REQUEST DBFCDX, DBFNTX, DBFFPT and RDDSYS injected at the top of
+    every generated main.prg so TDbfTable Open() actually finds the
+    DBF driver. Without this, dbUseArea threw EG_ARG/1015 on click.
+  - Inspector cRDD dropdown now closes naturally when an item is
+    picked. Dropped the WM_COMMAND/CBN_SELCHANGE branch in InsEditProc
+    that destroyed the combo mid-drop and left the listbox hanging.
+  - File > Reopen Last Project menu item, with same open icon.
+
+  FIXES
+  - Form position save/restore - "form was top-left after every open":
+      * OpenProjectFile was missing the OnResize wiring, so dragging
+        the design form after Open never updated FLeft/FTop and Save
+        wrote stale 120/120. Wired explicitly.
+      * TBSave now calls SyncDesignerToCode() before SaveActiveFormCode
+        as a belt-and-braces capture of the latest position.
+      * SyncDesignerToCode wraps CodeEditorSetTabText with
+        lSyncingFromCode := .t./.f. so the editor change does not
+        re-trigger RestoreFormFromCode (which would destroy and
+        recreate every TControl, dropping in-memory state like
+        TDbfTable::FRDD that was set seconds earlier).
+  - Form drag flicker - WM_MOVE/WM_SIZE fired FOnResize on every pixel
+    of drag, repainting the entire Scintilla tab 60 times/second.
+    Added FInSizeMove flag handled by WM_ENTERSIZEMOVE/WM_EXITSIZEMOVE;
+    OnResize fires once at the END of drag instead.
+  - METHOD <Name>Click() handlers were emitted as plain function calls
+    in the OnClick codeblock - the linker found the symbol but at
+    runtime the dispatch was nonsense. Codegen now detects "METHOD
+    <Name>" in the existing source and emits ::Name() (method send)
+    instead of Name( Self ) (function call).
+  - CLASS body did not auto-declare custom METHODs implemented below,
+    so calling ::Name() raised "Message not found" at runtime. New
+    ScanMethodDeclarations() walks the existing user code, picks up
+    every "METHOD <Name>() CLASS <cClass>" implementation and emits a
+    matching "   METHOD <Name>()" inside the CLASS body.
+  - RestoreFormFromCode parser now also accepts cFileName, cRDD and
+    lActive in the per-control "::oCtrl:prop := value" pass, so
+    TDbfTable settings round-trip across save/load.
+  - Static-text caching: TControl::SetText on a transparent label
+    used to leave the old text bleeding through the new one. Hide ->
+    RedrawWindow on parent rect with RDW_INVALIDATE|RDW_ERASE|RDW_
+    UPDATENOW -> Show forces parent bg to repaint synchronously
+    before the static draws the new text.
+  - TBRun's incremental-build hash now includes hbbuilder_win.prg, so
+    edits to the W32_ErrorDialog template (and any other IDE-side
+    code) actually invalidate the cache and trigger a rebuild instead
+    of relaunching the stale .exe.
+
+  BACKEND (Win32)
+  - TControl: new BOOL FTransparent.
+  - TForm: new BOOL FInSizeMove (gates FOnResize firing during drag).
+  - TLabel constructor: FTransparent = TRUE.
+  - WM_CTLCOLORSTATIC: transparent branch returns NULL_BRUSH first.
+  - UI_SetProp / UI_GetProp / UI_GetAllProps know "lTransparent".
+  - UI_DropNonVisual: default icon table (CT_DBFTABLE -> database_
+    table.png, CT_MYSQL/MARIADB/PG/SQLITE/FB/SQLSERVER/ORACLE/MONGODB
+    -> database_go.png) so non-visual database components render
+    with a recognisable icon when re-loaded from saved code.
+
+  SAMPLE
+  - samples/projects/dbftable/Form1.prg button handler now opens the
+    DBF, reads the first field of the first record into the Edit and
+    puts "<FieldName> (rec 1 of <RecCount>)" into the Label. Closes
+    the table immediately. Demonstrates TDbfTable end-to-end.
+
+---
+
 2026-04-14 (Windows: TDbfTable backend + inspector dropdowns + global error handler + Reopen Last)
 
   FEATURES

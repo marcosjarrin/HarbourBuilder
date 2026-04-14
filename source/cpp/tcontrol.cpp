@@ -62,6 +62,7 @@ TControl::TControl()
    FFileName[0] = '\0';
    lstrcpyA( FRDD, "DBFCDX" );
    FActive = FALSE;
+   FTransparent = FALSE;   /* TLabel overrides to TRUE in its own ctor */
    FCtrlParent = NULL;
    FChildCount = 0;
    memset( FChildren, 0, sizeof(FChildren) );
@@ -144,7 +145,27 @@ void TControl::SetText( const char * szText )
 {
    lstrcpynA( FText, szText, sizeof(FText) );
    if( FHandle )
+   {
       SetWindowTextA( FHandle, FText );
+      /* Transparent statics (TLabel) draw with SetBkMode(TRANSPARENT)
+         so without forcing the PARENT to erase its background first the
+         old text bleeds through the new one. The cleanest cure: hide
+         briefly, force the parent to redraw the underlying region with
+         erase + paint synchronously (RedrawWindow), then show again so
+         the static repaints on top of the freshly drawn parent bg. */
+      if( FTransparent && FCtrlParent && FCtrlParent->FHandle )
+      {
+         RECT rc;
+         rc.left = FLeft;
+         rc.top  = FTop;
+         rc.right  = FLeft + FWidth;
+         rc.bottom = FTop  + FHeight;
+         ShowWindow( FHandle, SW_HIDE );
+         RedrawWindow( FCtrlParent->FHandle, &rc, NULL,
+            RDW_INVALIDATE | RDW_ERASE | RDW_UPDATENOW );
+         ShowWindow( FHandle, SW_SHOW );
+      }
+   }
 }
 
 void TControl::SetBounds( int nLeft, int nTop, int nWidth, int nHeight )
