@@ -37,6 +37,7 @@ typedef struct {
    NSFont *     boldFont;
    HB_PTRUINT   hCtrl;       /* currently inspected control handle */
    int          nBrowseCol;  /* >=0 when inspecting a browse column, -1 otherwise */
+   int          nFolderPage; /* >=0 when inspecting a folder page, -1 otherwise */
    HB_PTRUINT   hFormCtrl;   /* form handle for combo enumeration */
    IROW         rows[MAX_ROWS];
    int          nRows;
@@ -1700,6 +1701,7 @@ HB_FUNC( INS_CREATE )
 {
    INSDATA * d = (INSDATA *) calloc( 1, sizeof(INSDATA) );
    d->nBrowseCol = -1;
+   d->nFolderPage = -1;
 
    d->font = [NSFont systemFontOfSize:12];
    d->boldFont = [NSFont boldSystemFontOfSize:12];
@@ -1866,6 +1868,72 @@ HB_FUNC( INS_SETBROWSECOL )
 {
    INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
    if( d ) d->nBrowseCol = hb_parni(2);
+}
+
+/* INS_SetFolderPage( hInsData, hFolder, nPage ) - prepare inspector for folder-page view */
+HB_FUNC( INS_SETFOLDERPAGE )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   if( !d ) return;
+   d->hCtrl = (HB_PTRUINT) hb_parnint(2);
+   d->nFolderPage = HB_ISNUM(3) ? hb_parni(3) : -1;
+   d->nBrowseCol = -1;
+   d->nRows = 0;
+}
+
+/* INS_AddRow( hInsData, cName, cValue, cCategory, cType ) */
+HB_FUNC( INS_ADDROW )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   IROW * r;
+   if( !d || d->nRows >= MAX_ROWS - 1 ) return;
+
+   r = &d->rows[d->nRows++];
+   strncpy( r->szName,     HB_ISCHAR(2) ? hb_parc(2) : "", 31 );
+   strncpy( r->szValue,    HB_ISCHAR(3) ? hb_parc(3) : "", 255 );
+   strncpy( r->szCategory, HB_ISCHAR(4) ? hb_parc(4) : "General", 31 );
+   r->cType = ( HB_ISCHAR(5) && hb_parc(5)[0] ) ? hb_parc(5)[0] : 'S';
+   r->bIsCat = NO;
+   r->bCollapsed = NO;
+   r->bVisible = YES;
+}
+
+/* INS_AddCategoryRow( hInsData, cName ) - header/divider row */
+HB_FUNC( INS_ADDCATEGORYROW )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   IROW * r;
+   if( !d || d->nRows >= MAX_ROWS - 1 ) return;
+
+   r = &d->rows[d->nRows++];
+   strncpy( r->szName,     HB_ISCHAR(2) ? hb_parc(2) : "", 31 );
+   r->szValue[0] = 0;
+   strncpy( r->szCategory, HB_ISCHAR(2) ? hb_parc(2) : "", 31 );
+   r->cType = 0;
+   r->bIsCat = YES;
+   r->bCollapsed = NO;
+   r->bVisible = YES;
+}
+
+/* INS_Rebuild( hInsData ) - refresh layout after Harbour pushes rows via
+ * INS_SetFolderPage / INS_AddCategoryRow / INS_AddRow.
+ * Rebuilds the visibility map from existing rows and reloads the table. */
+HB_FUNC( INS_REBUILD )
+{
+   INSDATA * d = (INSDATA *)(HB_PTRUINT) hb_parnint(1);
+   if( d )
+   {
+      /* Rebuild visibility map from rows already populated by Harbour */
+      int i;
+      d->nVisible = 0;
+      for( i = 0; i < d->nRows; i++ )
+      {
+         if( d->rows[i].bVisible )
+            d->map[d->nVisible++] = i;
+      }
+      InsPopulateEvents( d );
+      [d->tableView reloadData];
+   }
 }
 
 /* ======================================================================

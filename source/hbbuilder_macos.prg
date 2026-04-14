@@ -90,6 +90,7 @@ function Main()
    MENUITEM "Add Module..."   OF oFile ACTION MenuAddModule()
    MENUSEPARATOR OF oFile
    MENUITEM "Open Project..." OF oFile ACTION TBOpen()               ACCEL "o"
+   MENUITEM "Reopen Last Project" OF oFile ACTION ReopenLastProject()
    MENUITEM "Open File..."    OF oFile ACTION MenuOpenFile()
    MENUITEM "Close File"      OF oFile ACTION MenuCloseFile()
    MENUITEM "Save"       OF oFile ACTION TBSave()                   ACCEL "s"
@@ -177,9 +178,11 @@ function Main()
    UI_MenuSetBitmapByPos( oFile:hPopup, 0, cIcoDir + "menu_new.png" )
    UI_MenuSetBitmapByPos( oFile:hPopup, 1, cIcoDir + "menu_new_form.png" )
    UI_MenuSetBitmapByPos( oFile:hPopup, 4, cIcoDir + "menu_open.png" )
-   UI_MenuSetBitmapByPos( oFile:hPopup, 7, cIcoDir + "menu_save.png" )
-   UI_MenuSetBitmapByPos( oFile:hPopup, 8, cIcoDir + "menu_saveas.png" )
-   UI_MenuSetBitmapByPos( oFile:hPopup, 10, cIcoDir + "menu_exit.png" )
+   UI_MenuSetBitmapByPos( oFile:hPopup, 5, cIcoDir + "menu_open.png" )   // Reopen Last
+   UI_MenuSetBitmapByPos( oFile:hPopup, 6, cIcoDir + "menu_open.png" )   // Open File
+   UI_MenuSetBitmapByPos( oFile:hPopup, 8, cIcoDir + "menu_save.png" )
+   UI_MenuSetBitmapByPos( oFile:hPopup, 9, cIcoDir + "menu_saveas.png" )
+   UI_MenuSetBitmapByPos( oFile:hPopup, 11, cIcoDir + "menu_exit.png" )
 
    UI_MenuSetBitmapByPos( oEdit:hPopup, 0, cIcoDir + "menu_undo.png" )
    UI_MenuSetBitmapByPos( oEdit:hPopup, 1, cIcoDir + "menu_redo.png" )
@@ -504,6 +507,7 @@ return nil
 static function OnComboSelect( nSel )
 
    local hTarget, aMap, aEntry
+   local cTabs, aLabels, cCap, hIns
 
    aMap := InspectorGetComboMap()
 
@@ -515,6 +519,23 @@ static function OnComboSelect( nSel )
          UI_FormSelectCtrl( oDesignForm:hCpp, aEntry[2] )
          lIgnoreSelChange := .f.
          InspectorRefreshColumn( aEntry[2], aEntry[3] )
+
+      elseif aEntry[1] == 3  // Folder page
+         // aEntry = { 3, hFolder, nPageIdx } - switch tab and show
+         // page-level properties (cCaption, nPage) in the inspector.
+         cTabs := UI_GetProp( aEntry[2], "aTabs" )
+         aLabels := iif( Empty( cTabs ), {}, hb_ATokens( cTabs, "|" ) )
+         cCap := iif( aEntry[3]+1 <= Len(aLabels), aLabels[aEntry[3]+1], "" )
+         UI_FormSelectCtrl( oDesignForm:hCpp, aEntry[2] )
+         UI_TabControlSetSel( aEntry[2], aEntry[3] )
+         hIns := _InsGetData()
+         INS_SetFolderPage( hIns, aEntry[2], aEntry[3] )
+         INS_AddCategoryRow( hIns, "Page" )
+         INS_AddRow( hIns, "cCaption", cCap, "Page", "S" )
+         INS_AddRow( hIns, "nPage", LTrim(Str(aEntry[3]+1)), "Page", "N" )
+         INS_Rebuild( hIns )
+         return nil
+
       else
          hTarget := aEntry[2]
          UI_FormSelectCtrl( oDesignForm:hCpp, hTarget )
@@ -610,7 +631,8 @@ static function RegenerateFormCode( cName, hForm )
    local cDatas := "", cCreate := "", cEvents := "", cVal
    local cExistingCode, aEvents, j, cEvName, cEvSuffix, cHandlerName
    local aHdrs, kk, nColCount, aColProps, nColW, nCtrlClr, nInterval
-   local cParent, nOwnerH
+   local cParent, nOwnerH, nPos, nPos2, cLine
+   local aMethodNames, cMethodName
 
    // Read existing code to find declared event handlers
    cExistingCode := ""
@@ -828,16 +850,30 @@ static function RegenerateFormCode( cName, hForm )
                endif
          endcase
 
-         // Emit nClrPane if non-default (default = 0xFFFFFFFF = 4294967295)
-         nCtrlClr := UI_GetProp( hCtrl, "nClrPane" )
-         if nCtrlClr != 4294967295 .and. nCtrlClr != 0
-            cCreate += '   ::o' + cCtrlName + ':nClrPane := ' + LTrim( Str( nCtrlClr ) ) + e
-         endif
+         // Emit visual properties only for visual controls
+         if ! IsNonVisual( nType )
+            // Emit nClrPane if non-default (default = 0xFFFFFFFF = 4294967295)
+            nCtrlClr := UI_GetProp( hCtrl, "nClrPane" )
+            if nCtrlClr != 4294967295 .and. nCtrlClr != 0
+               cCreate += '   ::o' + cCtrlName + ':nClrPane := ' + LTrim( Str( nCtrlClr ) ) + e
+            endif
 
-         // Emit oFont if non-default
-         cVal := UI_GetProp( hCtrl, "oFont" )
-         if ! Empty( cVal ) .and. cVal != "System,12" .and. cVal != ".LucidaGrande,13"
-            cCreate += '   ::o' + cCtrlName + ':oFont := "' + cVal + '"' + e
+            // Emit lTransparent for labels when not default (.F. instead of default .T.)
+            if nType == 1 .and. UI_GetProp( hCtrl, "lTransparent" ) == .F.
+               cCreate += '   ::o' + cCtrlName + ':lTransparent := .F.' + e
+            endif
+
+            // Emit nAlign if non-default (0=Left)
+            cVal := UI_GetProp( hCtrl, "nAlign" )
+            if ValType( cVal ) == "N" .and. cVal != 0
+               cCreate += '   ::o' + cCtrlName + ':nAlign := ' + LTrim( Str( cVal ) ) + e
+            endif
+
+            // Emit oFont if non-default
+            cVal := UI_GetProp( hCtrl, "oFont" )
+            if ! Empty( cVal ) .and. cVal != "System,12" .and. cVal != ".LucidaGrande,13"
+               cCreate += '   ::o' + cCtrlName + ':oFont := "' + cVal + '"' + e
+            endif
          endif
 
          // Preserve any user-written ::oCtrl:xxx := ... line from CreateForm
@@ -888,8 +924,15 @@ static function RegenerateFormCode( cName, hForm )
                if nPos2 > 0; cLine := Left( cLine, nPos2 - 1 ); endif
                cEvents += "   " + AllTrim( StrTran( cLine, Chr(13), "" ) ) + e
             elseif cHandlerName $ cExistingCode
-               cEvents += "   ::o" + cCtrlName + ":" + cEvName + ;
-                  " := { || " + cHandlerName + "( Self ) }" + e
+               // Detect if handler is a METHOD in the class → use method send
+               // otherwise use plain function call
+               if ( "METHOD " + cHandlerName ) $ cExistingCode
+                  cEvents += "   ::o" + cCtrlName + ":" + cEvName + ;
+                     " := { || ::" + cHandlerName + "() }" + e
+               else
+                  cEvents += "   ::o" + cCtrlName + ":" + cEvName + ;
+                     " := { || " + cHandlerName + "( Self ) }" + e
+               endif
             endif
          next
       next
@@ -906,10 +949,15 @@ static function RegenerateFormCode( cName, hForm )
          cEvName := aEvents[j]
          cEvSuffix := SubStr( cEvName, 3 )
          cHandlerName := cName + cEvSuffix
-         if ( "function " + cHandlerName ) $ cExistingCode
-            cEvents += "   ::" + cEvName + ;
-               " := { || " + cHandlerName + "( Self ) }" + e
-
+         if ( "function " + cHandlerName ) $ cExistingCode .or. ;
+            ( "METHOD " + cHandlerName ) $ cExistingCode
+            if ( "METHOD " + cHandlerName ) $ cExistingCode
+               cEvents += "   ::" + cEvName + ;
+                  " := { || ::" + cHandlerName + "() }" + e
+            else
+               cEvents += "   ::" + cEvName + ;
+                  " := { || " + cHandlerName + "( Self ) }" + e
+            endif
          endif
       next
    endif
@@ -929,8 +977,32 @@ static function RegenerateFormCode( cName, hForm )
    cCode += e
    cCode += "   METHOD CreateForm()" + e
 
-   // Preserve user-added METHOD declarations from the existing CLASS block
+   // Preserve user-added METHOD declarations: collect unique names from
+   // both "METHOD Name() CLASS cClass" implementations outside the CLASS
+   // body AND inline declarations inside CLASS..ENDCLASS, then emit each
+   // name only once (dedup prevents accumulation on repeated regeneration).
    if ! Empty( cExistingCode )
+      aMethodNames := {}
+
+      // 1) Scan implementations outside the CLASS body
+      cVal := ScanMethodDeclarations( cExistingCode, cClass )
+      if ! Empty( cVal )
+         for kk := 1 to Len( HB_ATokens( cVal, e ) )
+            cText := AllTrim( StrTran( HB_ATokens( cVal, e )[ kk ], Chr(13), "" ) )
+            if Left( cText, 7 ) == "METHOD "
+               cMethodName := AllTrim( SubStr( cText, 8 ) )
+               nPos2 := At( "(", cMethodName )
+               if nPos2 > 0; cMethodName := Left( cMethodName, nPos2 - 1 ); endif
+               nPos2 := At( " ", cMethodName )
+               if nPos2 > 0; cMethodName := Left( cMethodName, nPos2 - 1 ); endif
+               if ! Empty( cMethodName ) .and. AScan( aMethodNames, cMethodName ) == 0
+                  AAdd( aMethodNames, cMethodName )
+               endif
+            endif
+         next
+      endif
+
+      // 2) Scan inline METHOD declarations from inside CLASS..ENDCLASS
       nPos := At( "CLASS " + cClass + " FROM", cExistingCode )
       if nPos > 0
          nPos2 := At( "ENDCLASS", SubStr( cExistingCode, nPos ) )
@@ -941,11 +1013,23 @@ static function RegenerateFormCode( cName, hForm )
                cText := StrTran( cText, Chr(13), "" )
                if Left( cText, 7 ) == "METHOD " .and. ;
                   ! Left( cText, 19 ) == "METHOD CreateForm()"
-                  cCode += "   " + cText + e
+                  cMethodName := AllTrim( SubStr( cText, 8 ) )
+                  nPos2 := At( "(", cMethodName )
+                  if nPos2 > 0; cMethodName := Left( cMethodName, nPos2 - 1 ); endif
+                  nPos2 := At( " ", cMethodName )
+                  if nPos2 > 0; cMethodName := Left( cMethodName, nPos2 - 1 ); endif
+                  if ! Empty( cMethodName ) .and. AScan( aMethodNames, cMethodName ) == 0
+                     AAdd( aMethodNames, cMethodName )
+                  endif
                endif
             next
          endif
       endif
+
+      // Emit deduplicated METHOD declarations
+      for kk := 1 to Len( aMethodNames )
+         cCode += "   METHOD " + aMethodNames[ kk ] + "()" + e
+      next
    endif
 
    cCode += e
@@ -989,7 +1073,7 @@ static function RestoreFormFromCode( hForm, cCode )
 
    local aLines, cLine, cTrim, i, j, nType, nCount, lInCreateForm
    local nT, nL, nW, nH, cText, cName, hCtrl
-   local nPos, nPos2, cTitle, cVal, cPropName, kk
+   local nPos, nPos2, cTitle, cVal, cPropName, kk, nColCount
 
    if Empty( cCode ) .or. hForm == 0
       return nil
@@ -1462,6 +1546,10 @@ static function RestoreFormFromCode( hForm, cCode )
       elseif cVal == "Text" .or. cVal == "cText"
          cText := RebuildStringExpr( cText )
          UI_SetProp( hCtrl, "cText", cText )
+      elseif cVal == "lTransparent"
+         UI_SetProp( hCtrl, "lTransparent", cText == ".T." )
+      elseif cVal == "nAlign"
+         UI_SetProp( hCtrl, "nAlign", Val( cText ) )
       endif
    next
 
@@ -1712,6 +1800,7 @@ static function Var2Char( x )
    case t == "O"; return "[O]"
    otherwise;     return "[" + t + "]"
    endcase
+return nil
 
 static function IdeTrace( cMsg )
    local hDbg := FOpen( "/tmp/hb_trace.log", 1 )
@@ -2193,6 +2282,8 @@ static function TBNew()
 
    // Destroy all existing forms
    for i := 1 to Len( aForms )
+      UI_FormHide( aForms[i][2]:hCpp )
+      UI_FormClose( aForms[i][2]:hCpp )
       aForms[i][2]:Destroy()
    next
    aForms := {}
@@ -2235,133 +2326,16 @@ return nil
 // Open Project: load a .hbp project file
 static function TBOpen()
 
-   local cFile, cContent, cDir, cLine, aLines, i, nAns
-   local cFormName, cFormCode, nFormX, nFormY
-   local nInsW, nInsTop, nEditorTop, nEditorX, nEditorW, nEditorH
-   local lInModules
-
-   // Ask to save current work if there are forms open
-   if Len( aForms ) > 0
-      nAns := MsgYesNoCancel( "Save current project before opening?", "HbBuilder" )
-      if nAns == 0  // Cancel
-         return nil
-      elseif nAns == 1  // Yes
-         TBSave()
-      endif
-      // nAns == 2 (No) → proceed without saving
-   endif
+   local cFile
 
    cFile := MAC_OpenFileDialog( "Open HbBuilder Project", "hbp" )
    if Empty( cFile )
       return nil
    endif
 
-   cContent := MemoRead( cFile )
-   if Empty( cContent )
-      MsgInfo( "Could not read project: " + cFile )
-      return nil
-   endif
-
-   // Project dir
-   cDir := Left( cFile, RAt( "/", cFile ) )
-
-   // Destroy current forms (hide windows + remove from control list)
-   for i := 1 to Len( aForms )
-      UI_FormHide( aForms[i][2]:hCpp )
-      aForms[i][2]:Destroy()
-   next
-   aForms := {}
-   nActiveForm := 0
-   aModules := {}
-   aOpenFiles := {}
-   oDesignForm := nil
-
-   // Clear editor tabs
-   CodeEditorClearTabs( hCodeEditor )
-
-   // Calculate form positions
-   nInsW := Int( nScreenW * 0.18 )
-   nInsTop := MAC_GetWindowBottom( oIDE:hCpp )
-   nEditorTop := nInsTop + 80
-   nEditorX := nInsW
-   nEditorW := nScreenW - nEditorX
-   nEditorH := nScreenH - nEditorTop
-
-   // Read project file: each line is a form name (Form1, Form2...)
-   // First line is the project title, rest are form names
-   aLines := HB_ATokens( cContent, Chr(10) )
-
-   // Load Project1.prg
-   cFormCode := MemoRead( cDir + "Project1.prg" )
-   if ! Empty( cFormCode )
-      CodeEditorSetTabText( hCodeEditor, 1, cFormCode )
-   endif
-
-   // Load each form (stop at [modules] marker)
-   for i := 2 to Len( aLines )
-      cFormName := AllTrim( aLines[i] )
-      if Empty( cFormName ); loop; endif
-      if Lower( cFormName ) == "[modules]"; exit; endif
-
-      // Read form code
-      cFormCode := MemoRead( cDir + cFormName + ".prg" )
-      if Empty( cFormCode ); loop; endif
-
-      // Calculate position
-      nFormX := nEditorX + Int( ( nEditorW - 400 ) / 2 ) + ( Len(aForms) ) * 20
-      nFormY := nEditorTop + Int( ( nEditorH - 300 ) * 0.35 ) + ( Len(aForms) ) * 20
-
-      // Create design form and restore controls from code
-      CreateDesignForm( nFormX, nFormY )
-      RestoreFormFromCode( oDesignForm:hCpp, cFormCode )
-      oDesignForm:SetDesign( .t. )
-      oDesignForm:Show()
-
-      // Store the loaded code
-      aForms[ Len(aForms) ][ 3 ] := cFormCode
-
-      // Add editor tab
-      CodeEditorAddTab( hCodeEditor, cFormName + ".prg" )
-      CodeEditorSetTabText( hCodeEditor, Len(aForms) + 1, cFormCode )
-
-      // Wire up (includes OnResize for two-way sync on move/resize)
-      WireDesignForm()
-   next
-
-   // Load modules (after [modules] marker)
-   aModules := {}
-   lInModules := .F.
-   for i := 2 to Len( aLines )
-      cFormName := AllTrim( aLines[i] )
-      if Empty( cFormName ); loop; endif
-      if Lower( cFormName ) == "[modules]"
-         lInModules := .T.
-         loop
-      endif
-      if lInModules
-         cFormCode := MemoRead( cDir + cFormName + ".prg" )
-         if Empty( cFormCode ); loop; endif
-         AAdd( aModules, { cFormName, cFormCode, cDir + cFormName + ".prg" } )
-         CodeEditorAddTab( hCodeEditor, cFormName + ".prg" )
-         CodeEditorSetTabText( hCodeEditor, 1 + Len(aForms) + Len(aModules), cFormCode )
-      endif
-   next
-
-   // Activate first form
-   if Len( aForms ) > 0
-      nActiveForm := 1
-      oDesignForm := aForms[1][2]
-      UI_SetDesignForm( oDesignForm:hCpp )
-      CodeEditorSelectTab( hCodeEditor, 2 )
-      InspectorRefresh( oDesignForm:hCpp )
-      InspectorPopulateCombo( oDesignForm:hCpp )
-   endif
-
-   cCurrentFile := cFile
+   OpenProjectFile( cFile )
 
 return nil
-
-// Save Project: write .hbp + all .prg files
 static function TBSave()
 
    local cDir, cFile, cHbp, i
@@ -3615,6 +3589,297 @@ static function ResolveComponentType( cName )
       endif
    next
 return 0
+
+// --- ScanMethodDeclarations ---
+// Extract every "METHOD <Name>() CLASS <cClass>" implementation from
+// cCode and return a block of "   METHOD <Name>()" declarations suitable
+// for inclusion inside the CLASS body. Skips CreateForm which is already
+// hardcoded. Returns "" if no user methods are found.
+static function ScanMethodDeclarations( cCode, cClass )
+
+   local cOut := "", e := Chr(10)
+   local aLines, cLine, cTrim, cName, nPos, nPos2, i
+   local cTag := "CLASS " + cClass
+
+   if Empty( cCode ); return ""; endif
+
+   aLines := HB_ATokens( cCode, e )
+   for i := 1 to Len( aLines )
+      cTrim := AllTrim( StrTran( aLines[i], Chr(13), "" ) )
+      if Left( cTrim, 7 ) == "METHOD "
+         if cTag $ cTrim
+            cName := AllTrim( SubStr( cTrim, 8 ) )  // after "METHOD "
+            nPos := At( "(", cName )
+            if nPos > 0
+               cName := Left( cName, nPos - 1 )
+            endif
+            nPos := At( " ", cName )
+            if nPos > 0
+               cName := Left( cName, nPos - 1 )
+            endif
+            if ! Empty( cName ) .and. Upper( cName ) != "CREATEFORM"
+               cOut += "   METHOD " + cName + "()" + e
+            endif
+         endif
+      endif
+   next
+
+return cOut
+
+// --- INI file helpers (hbbuilder.ini) ---
+
+static function IniFilePath()
+return HB_DirBase() + "../hbbuilder.ini"
+
+static function IniWrite( cSection, cKey, cValue )
+
+   local cFile := IniFilePath()
+   local cContent, aLines, i, lFound, cSearch
+
+   cContent := MemoRead( cFile )
+   if Empty( cContent )
+      cContent := ""
+   endif
+
+   aLines := HB_ATokens( cContent, Chr(10) )
+   cSearch := Lower( cKey ) + "="
+   lFound := .f.
+
+   for i := 1 to Len( aLines )
+      if Lower( AllTrim( aLines[i] ) ) == Lower( cKey ) + "=" + Lower( cValue )
+         return nil  // already set
+      endif
+      if Left( Lower( AllTrim( aLines[i] ) ), Len( cSearch ) ) == cSearch
+         aLines[i] := cKey + "=" + cValue
+         lFound := .t.
+         exit
+      endif
+   next
+
+   if ! lFound
+      AAdd( aLines, cKey + "=" + cValue )
+   endif
+
+   cContent := ""
+   for i := 1 to Len( aLines )
+      cContent += aLines[i]
+      if i < Len( aLines )
+         cContent += Chr(10)
+      endif
+   next
+
+   MemoWrit( cFile, cContent )
+
+return nil
+
+static function IniRead( cSection, cKey, cDefault )
+
+   local cFile := IniFilePath()
+   local cContent, aLines, i, cSearch
+
+   cContent := MemoRead( cFile )
+   if Empty( cContent )
+      return cDefault
+   endif
+
+   aLines := HB_ATokens( cContent, Chr(10) )
+   cSearch := Lower( cKey ) + "="
+
+   for i := 1 to Len( aLines )
+      if Left( Lower( AllTrim( aLines[i] ) ), Len( cSearch ) ) == cSearch
+         return SubStr( AllTrim( aLines[i] ), Len( cSearch ) + 1 )
+      endif
+   next
+
+return cDefault
+
+// --- File > Recent project list ---
+// Persisted across sessions via IniWrite/IniRead under [Recent] File1..N.
+// Capped at MAX_RECENT; most-recent-first order, deduped.
+
+#define MAX_RECENT 8
+
+static function AddRecentProject( cFile )
+
+   local aList := GetRecentProjects()
+   local nPos, i
+
+   // Dedupe: remove if already present
+   nPos := AScan( aList, { |x| Lower(x) == Lower(cFile) } )
+   if nPos > 0
+      ADel( aList, nPos )
+      aList := ASize( aList, Len(aList) - 1 )
+   endif
+
+   AAdd( aList, cFile )
+
+   // Cap at MAX_RECENT
+   while Len( aList ) > MAX_RECENT
+      ADel( aList, 1 )
+      aList := ASize( aList, Len(aList) - 1 )
+   enddo
+
+   // Persist most-recent-first
+   for nPos := 1 to MAX_RECENT
+      if Len( aList ) >= nPos
+         IniWrite( "Recent", "File" + LTrim( Str( nPos ) ), aList[ Len(aList) - nPos + 1 ] )
+      else
+         IniWrite( "Recent", "File" + LTrim( Str( nPos ) ), "" )
+      endif
+   next
+
+return nil
+
+static function GetRecentProjects()
+
+   local aList := {}, i, cVal
+
+   for i := MAX_RECENT to 1 step -1   // stored newest first; return oldest first
+      cVal := IniRead( "Recent", "File" + LTrim( Str( i ) ), "" )
+      if ! Empty( cVal )
+         AAdd( aList, cVal )
+      endif
+   next
+
+return aList
+
+// File > Reopen Last Project - opens the most recent .hbp stored in
+// [Recent]/File1. Silent no-op if the file no longer exists on disk.
+static function ReopenLastProject()
+
+   local cFile := IniRead( "Recent", "File1", "" )
+
+   if Empty( cFile )
+      MsgInfo( "No recent project found.", "HbBuilder" )
+      return nil
+   endif
+
+   if ! File( cFile )
+      MsgInfo( "File not found: " + cFile, "HbBuilder" )
+      return nil
+   endif
+
+   // Reuse the OpenProjectFile logic from TBOpen, but without the file dialog
+   OpenProjectFile( cFile )
+
+return nil
+
+// Shared helper: open a project file by path (used by TBOpen and ReopenLastProject)
+static function OpenProjectFile( cFile )
+
+   local cContent, cDir, aLines, i
+   local cFormName, cFormCode, nFormX, nFormY
+   local nInsW, nInsTop, nEditorTop, nEditorX, nEditorW, nEditorH
+   local lInModules, nAns
+
+   // Ask to save current work if there are forms open
+   if Len( aForms ) > 0
+      nAns := MsgYesNoCancel( "Save current project before opening?", "HbBuilder" )
+      if nAns == 0  // Cancel
+         return nil
+      elseif nAns == 1  // Yes
+         TBSave()
+      endif
+   endif
+
+   cContent := MemoRead( cFile )
+   if Empty( cContent )
+      MsgInfo( "Could not read project: " + cFile )
+      return nil
+   endif
+
+   // Project dir
+   cDir := Left( cFile, RAt( "/", cFile ) )
+
+   // Destroy current forms
+   for i := 1 to Len( aForms )
+      UI_FormHide( aForms[i][2]:hCpp )
+      aForms[i][2]:Destroy()
+   next
+   aForms := {}
+   nActiveForm := 0
+   aModules := {}
+   aOpenFiles := {}
+   oDesignForm := nil
+
+   // Clear editor tabs
+   CodeEditorClearTabs( hCodeEditor )
+
+   // Calculate form positions
+   nInsW := Int( nScreenW * 0.18 )
+   nInsTop := MAC_GetWindowBottom( oIDE:hCpp )
+   nEditorTop := nInsTop + 80
+   nEditorX := nInsW
+   nEditorW := nScreenW - nEditorX
+   nEditorH := nScreenH - nEditorTop
+
+   // Read project file
+   aLines := HB_ATokens( cContent, Chr(10) )
+
+   // Load Project1.prg
+   cFormCode := MemoRead( cDir + "Project1.prg" )
+   if ! Empty( cFormCode )
+      CodeEditorSetTabText( hCodeEditor, 1, cFormCode )
+   endif
+
+   // Load each form
+   for i := 2 to Len( aLines )
+      cFormName := AllTrim( aLines[i] )
+      if Empty( cFormName ); loop; endif
+      if Lower( cFormName ) == "[modules]"; exit; endif
+
+      cFormCode := MemoRead( cDir + cFormName + ".prg" )
+      if Empty( cFormCode ); loop; endif
+
+      nFormX := nEditorX + Int( ( nEditorW - 400 ) / 2 ) + ( Len(aForms) ) * 20
+      nFormY := nEditorTop + Int( ( nEditorH - 300 ) * 0.35 ) + ( Len(aForms) ) * 20
+
+      CreateDesignForm( nFormX, nFormY )
+      RestoreFormFromCode( oDesignForm:hCpp, cFormCode )
+      oDesignForm:SetDesign( .t. )
+      oDesignForm:Show()
+
+      aForms[ Len(aForms) ][ 3 ] := cFormCode
+
+      CodeEditorAddTab( hCodeEditor, cFormName + ".prg" )
+      CodeEditorSetTabText( hCodeEditor, Len(aForms) + 1, cFormCode )
+
+      WireDesignForm()
+   next
+
+   // Load modules
+   aModules := {}
+   lInModules := .F.
+   for i := 2 to Len( aLines )
+      cFormName := AllTrim( aLines[i] )
+      if Empty( cFormName ); loop; endif
+      if Lower( cFormName ) == "[modules]"
+         lInModules := .T.
+         loop
+      endif
+      if lInModules
+         cFormCode := MemoRead( cDir + cFormName + ".prg" )
+         if Empty( cFormCode ); loop; endif
+         AAdd( aModules, { cFormName, cFormCode, cDir + cFormName + ".prg" } )
+         CodeEditorAddTab( hCodeEditor, cFormName + ".prg" )
+         CodeEditorSetTabText( hCodeEditor, 1 + Len(aForms) + Len(aModules), cFormCode )
+      endif
+   next
+
+   // Activate first form
+   if Len( aForms ) > 0
+      nActiveForm := 1
+      oDesignForm := aForms[1][2]
+      UI_SetDesignForm( oDesignForm:hCpp )
+      CodeEditorSelectTab( hCodeEditor, 2 )
+      InspectorRefresh( oDesignForm:hCpp )
+      InspectorPopulateCombo( oDesignForm:hCpp )
+   endif
+
+   cCurrentFile := cFile
+   AddRecentProject( cFile )
+
+return nil
 
 // Framework
 #include "classes.prg"

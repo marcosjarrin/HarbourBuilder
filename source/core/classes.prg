@@ -50,6 +50,12 @@ CLASS TControl
    ACCESS nClrPane         INLINE UI_GetProp( ::hCpp, "nClrPane" )
    ASSIGN nClrPane( n )    INLINE UI_SetProp( ::hCpp, "nClrPane", n )
 
+   ACCESS lTransparent     INLINE UI_GetProp( ::hCpp, "lTransparent" )
+   ASSIGN lTransparent( l ) INLINE UI_SetProp( ::hCpp, "lTransparent", l )
+
+   ACCESS nAlign           INLINE UI_GetProp( ::hCpp, "nAlign" )
+   ASSIGN nAlign( n )      INLINE UI_SetProp( ::hCpp, "nAlign", n )
+
    // TPageControl ownership
    ASSIGN oOwner( o )      INLINE UI_SetCtrlOwner( ::hCpp, ;
                                   If( o == nil, 0, o:hCpp ), ;

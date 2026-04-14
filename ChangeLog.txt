@@ -1,6 +1,40 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-14 (macOS: nAlign, METHOD dedup, non-visual guards, menu icons, New App fix)
+
+  FEATURES
+  - TLabel and TEdit now support nAlign property (0=Left, 1=Center, 2=Right).
+    Inspector shows a dropdown with Left|Center|Right. The alignment maps
+    correctly to macOS NSTextAlignment (where Right=1, Center=2 in the enum,
+    opposite to our convention).
+  - Reopen Last Project: File > Reopen Last Project reopens the most recent
+    .hbp from the INI-backed recent list (up to 8 entries, deduped).
+  - Event handler codegen now detects whether a handler is a METHOD of the
+    form class (uses ::Method() send) or a standalone function (uses
+    FuncName(Self) call), matching the C++Builder/RadStudio pattern.
+  - Form-level event detection: OnCreate, OnShow, OnClose, OnResize, etc.
+    are now scanned and wired when their handler exists in the code.
+
+  FIXES
+  - METHOD accumulation: repeated form moves/resizes no longer duplicate
+    METHOD declarations inside the CLASS body. Both the external-implementation
+    scan and the inline-declaration scan now collect into a shared aMethodNames
+    array with AScan dedup before emitting.
+  - Non-visual components (Timer, DBFTable, etc.) no longer emit oFont,
+    nClrPane, or lTransparent in generated code — those properties don't
+    exist on non-visual controls and caused a runtime error
+    (TDBFTABLE:_OFONT not found).
+  - Menu bitmap positions corrected for the File menu (new items had shifted
+    all positions). Exit now shows menu_exit.png, Open File shows
+    menu_open.png (folder icon).
+  - New Application now properly closes the previous form window
+    (UI_FormHide + UI_FormClose) before destroying it, so no ghost windows
+    remain on screen.
+  - nAlign Center/Right mapping: the initial implementation used a direct
+    cast to NSTextAlignment, which swapped Center and Right on macOS.
+    Now uses conditional mapping matching createViewInParent.
+
 2026-04-14 (Windows: TFolder page inspector view + designer drop-on-page)
 
   FEATURES

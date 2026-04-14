@@ -58,7 +58,7 @@ return nil
 function InspectorPopulateCombo( hForm )
    local h := _InsGetData()
    local i, j, nCount, hChild, cName, cClass, cEntry, nColCount
-   local aMap
+   local aMap, cTabsStr, aTabsArr, jj
 
    if h == 0 .or. hForm == 0
       return nil
@@ -96,6 +96,21 @@ function InspectorPopulateCombo( hForm )
                INS_ComboAdd( h, cEntry )
                AAdd( aMap, { 2, hChild, j - 1 } )  // 0-based col index
             next
+         endif
+
+         // If it's a Folder/TPageControl, add its pages as sub-entries
+         // "oFolderN:aPages[N] AS TFolderPage"
+         if UI_GetType( hChild ) == 33  // CT_TABCONTROL2
+            cTabsStr := UI_GetProp( hChild, "aTabs" )
+            if ! Empty( cTabsStr )
+               aTabsArr := hb_ATokens( cTabsStr, "|" )
+               for jj := 1 to Len( aTabsArr )
+                  cEntry := "o" + cName + ":aPages[" + LTrim( Str( jj ) ) + ;
+                            "] AS TFolderPage  /* " + aTabsArr[jj] + " */"
+                  INS_ComboAdd( h, cEntry )
+                  AAdd( aMap, { 3, hChild, jj - 1 } )  // 0-based page idx
+               next
+            endif
          endif
       endif
    next

@@ -324,6 +324,8 @@ void EnsureNSApp( void )
    HBControl * FOwnerCtrl;
    int         FOwnerPage;
    BOOL        FAutoPage;   /* Auto-created page TPanel for a TPageControl tab */
+   BOOL        FTransparent; /* TRUE = don't draw background (labels default TRUE) */
+   int         nAlign;      /* 0=Left, 1=Center, 2=Right (text alignment) */
 }
 - (void)addChild:(HBControl *)child;
 - (void)setText:(const char *)text;
@@ -763,7 +765,7 @@ static int         s_pendingPage   = 0;
       FOnTimer = NULL; FInterval = 1000; FTimer = nil;
       FCtrlParent = nil; FChildCount = 0;
       memset( FChildren, 0, sizeof(FChildren) );
-      FOwnerCtrl = nil; FOwnerPage = 0; FAutoPage = NO;
+      FOwnerCtrl = nil; FOwnerPage = 0; FAutoPage = NO; FTransparent = NO; nAlign = 0;
    }
    return self;
 }
@@ -1192,7 +1194,7 @@ static int         s_pendingPage   = 0;
    self = [super init];
    if( self ) {
       strcpy( FClassName, "TLabel" );
-      FControlType = CT_LABEL; FWidth = 80; FHeight = 15; FTabStop = NO;
+      FControlType = CT_LABEL; FWidth = 80; FHeight = 15; FTabStop = NO; FTransparent = YES;
       strcpy( FText, "Label" );
    }
    return self;
@@ -1203,8 +1205,10 @@ static int         s_pendingPage   = 0;
    NSTextField * tf = [[NSTextField alloc] initWithFrame:
       NSMakeRect( FLeft, FTop, FWidth, FHeight )];
    [tf setStringValue:[NSString stringWithUTF8String:FText]];
-   [tf setBezeled:NO]; [tf setDrawsBackground:NO];
+   [tf setBezeled:NO]; [tf setDrawsBackground:!FTransparent];
    [tf setEditable:NO]; [tf setSelectable:NO];
+   if( nAlign == 1 ) [tf setAlignment:NSTextAlignmentCenter];
+   else if( nAlign == 2 ) [tf setAlignment:NSTextAlignmentRight];
    if( FClrText != 0xFFFFFFFF ) {
       CGFloat r = (FClrText & 0xFF)/255.0, g = ((FClrText>>8)&0xFF)/255.0, b = ((FClrText>>16)&0xFF)/255.0;
       [tf setTextColor:[NSColor colorWithCalibratedRed:r green:g blue:b alpha:1.0]];
@@ -1252,6 +1256,8 @@ static int         s_pendingPage   = 0;
    [tf setBezeled:YES]; [tf setBezelStyle:NSTextFieldSquareBezel];
    [tf setEditable:!FReadOnly];
    [tf setTextColor:[NSColor blackColor]];
+   if( nAlign == 1 ) [tf setAlignment:NSTextAlignmentCenter];
+   else if( nAlign == 2 ) [tf setAlignment:NSTextAlignmentRight];
    if( FFont ) [tf setFont:FFont];
    [parentView addSubview:tf];
    FView = tf;
@@ -3112,6 +3118,20 @@ HB_FUNC( UI_SETPENDINGPAGEOWNER )
    s_pendingPage   = hb_parni(2);
 }
 
+/* UI_TabControlSetSel( hFolder, nPage ) - switch active tab page */
+HB_FUNC( UI_TABCONTROLSETSEL )
+{
+   HBControl * p = GetCtrl(1);
+   int nPage = hb_parni(2);
+   if( p && p->FControlType == CT_TABCONTROL2 && p->FView )
+   {
+      NSTabView * tv = (NSTabView *)p->FView;
+      NSInteger nItems = [[tv tabViewItems] count];
+      if( nPage >= 0 && nPage < nItems )
+         [tv selectTabViewItemAtIndex:nPage];
+   }
+}
+
 /* UI_TabControlNew( hForm, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
 HB_FUNC( UI_TABCONTROLNEW )
 {
@@ -3715,6 +3735,20 @@ HB_FUNC( UI_SETPROP )
       }
       else if( p->FView && [p->FView respondsToSelector:@selector(setEnabled:)] )
          [(id)p->FView setEnabled:p->FEnabled]; }
+   else if( strcasecmp(szProp,"lTransparent")==0 ) {
+      p->FTransparent = hb_parl(3);
+      if( p->FView && [p->FView isKindOfClass:[NSTextField class]] && p->FControlType == CT_LABEL )
+         [(NSTextField *)p->FView setDrawsBackground:!p->FTransparent];
+   }
+   else if( strcasecmp(szProp,"nAlign")==0 && HB_ISNUM(3) ) {
+      p->nAlign = hb_parni(3);
+      if( p->FView && [p->FView respondsToSelector:@selector(setAlignment:)] ) {
+         NSTextAlignment a = NSTextAlignmentLeft;
+         if( p->nAlign == 1 ) a = NSTextAlignmentCenter;
+         else if( p->nAlign == 2 ) a = NSTextAlignmentRight;
+         [(id)p->FView setAlignment:a];
+      }
+   }
    else if( strcasecmp(szProp,"lDefault")==0 && p->FControlType == CT_BUTTON )
       ((HBButton *)p)->FDefault = hb_parl(3);
    else if( strcasecmp(szProp,"lCancel")==0 && p->FControlType == CT_BUTTON )
@@ -3983,6 +4017,11 @@ HB_FUNC( UI_SETPROP )
                   break;
                }
          }
+         /* Invalidate transparent children so they pick up the new bg */
+         for( int ci = 0; ci < p->FChildCount; ci++ ) {
+            HBControl * ch = p->FChildren[ci];
+            if( ch->FTransparent && ch->FView ) [ch->FView setNeedsDisplay:YES];
+         }
       }
       else if( p->FControlType == CT_BROWSE )
       {
@@ -4102,6 +4141,8 @@ HB_FUNC( UI_GETPROP )
    else if( strcasecmp(szProp,"aData")==0 )     hb_retc( p->FData );
    else if( strcasecmp(szProp,"cDataSource")==0 ) hb_retc( p->FDataSource );
    else if( strcasecmp(szProp,"lActive")==0 )   hb_retl( p->FActive );
+   else if( strcasecmp(szProp,"lTransparent")==0 ) hb_retl( p->FTransparent );
+   else if( strcasecmp(szProp,"nAlign")==0 ) hb_retni( p->nAlign );
    else if( strcasecmp(szProp,"nInterval")==0 && p->FControlType==CT_TIMER )
       hb_retni( p->FInterval );
    else if( strcasecmp(szProp,"lSizable")==0 && p->FControlType==CT_FORM )
@@ -4313,9 +4354,12 @@ HB_FUNC( UI_GETALLPROPS )
          ADD_L("lDefault",((HBButton*)p)->FDefault,"Behavior");
          ADD_L("lCancel",((HBButton*)p)->FCancel,"Behavior"); break;
       case CT_CHECKBOX: ADD_L("lChecked",((HBCheckBox*)p)->FChecked,"Data"); break;
+      case CT_LABEL: ADD_L("lTransparent",p->FTransparent,"Appearance");
+         ADD_D("nAlign",p->nAlign,"Left|Center|Right","Appearance"); break;
       case CT_EDIT:
          ADD_L("lReadOnly",((HBEdit*)p)->FReadOnly,"Behavior");
-         ADD_L("lPassword",((HBEdit*)p)->FPassword,"Behavior"); break;
+         ADD_L("lPassword",((HBEdit*)p)->FPassword,"Behavior");
+         ADD_D("nAlign",p->nAlign,"Left|Center|Right","Appearance"); break;
       case CT_COMBOBOX:
          ADD_N("nItemIndex",((HBComboBox*)p)->FItemIndex,"Data");
          ADD_N("nItemCount",((HBComboBox*)p)->FItemCount,"Data"); break;

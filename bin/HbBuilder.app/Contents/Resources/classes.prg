@@ -50,6 +50,12 @@ CLASS TControl
    ACCESS nClrPane         INLINE UI_GetProp( ::hCpp, "nClrPane" )
    ASSIGN nClrPane( n )    INLINE UI_SetProp( ::hCpp, "nClrPane", n )
 
+   ACCESS lTransparent     INLINE UI_GetProp( ::hCpp, "lTransparent" )
+   ASSIGN lTransparent( l ) INLINE UI_SetProp( ::hCpp, "lTransparent", l )
+
+   ACCESS nAlign           INLINE UI_GetProp( ::hCpp, "nAlign" )
+   ASSIGN nAlign( n )      INLINE UI_SetProp( ::hCpp, "nAlign", n )
+
    // TPageControl ownership
    ASSIGN oOwner( o )      INLINE UI_SetCtrlOwner( ::hCpp, ;
                                   If( o == nil, 0, o:hCpp ), ;
@@ -2764,9 +2770,23 @@ return nil
 #pragma BEGINDUMP
 #include <hbapi.h>
 #include <hbapiitm.h>
-#include <dlfcn.h>
 #include <string.h>
 #include <stdio.h>
+
+#if defined( HB_OS_WIN ) || defined( _WIN32 )
+/* Python backend not yet ported to Windows - provide no-op stubs so the IDE
+   links. TPython methods return .F. / "" and PY_LASTERROR explains why. */
+HB_FUNC( PY_START )       { hb_retl( 0 ); }
+HB_FUNC( PY_STOP )        { }
+HB_FUNC( PY_EXEC )        { hb_retl( 0 ); }
+HB_FUNC( PY_EVAL )        { hb_retc( "" ); }
+HB_FUNC( PY_SETVAR )      { hb_retl( 0 ); }
+HB_FUNC( PY_GETVAR )      { hb_retc( "" ); }
+HB_FUNC( PY_GETOUTPUT )   { hb_retc( "" ); }
+HB_FUNC( PY_LASTERROR )   { hb_retc( "Python backend not available on Windows yet" ); }
+HB_FUNC( PY_ISAVAILABLE ) { hb_retl( 0 ); }
+#else
+#include <dlfcn.h>
 
 /* Opaque forward-declared Python types. We never dereference them. */
 typedef struct _object PyObject;
@@ -3012,5 +3032,7 @@ HB_FUNC( PY_ISAVAILABLE )
 {
    hb_retl( py_load_lib( hb_parc(1) ) );
 }
+
+#endif /* !HB_OS_WIN */
 
 #pragma ENDDUMP
