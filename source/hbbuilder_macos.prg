@@ -4103,13 +4103,13 @@ static function GenerateiOSPRG()
    // Generate UI_* calls for each control
    for i := 1 to nCount
       hCtrl  := UI_GetChild( hForm, i )
-      cName  := UI_GetProp( hCtrl, "cVarName" )
+      cName  := UI_GetProp( hCtrl, "cName" )
       cText  := UI_GetProp( hCtrl, "cText" )
       nL     := UI_GetProp( hCtrl, "nLeft" )
       nT     := UI_GetProp( hCtrl, "nTop" )
       nW     := UI_GetProp( hCtrl, "nWidth" )
       nH     := UI_GetProp( hCtrl, "nHeight" )
-      nType  := UI_GetProp( hCtrl, "nType" )
+      nType  := UI_GetType( hCtrl )
       nCtrlClr := UI_GetProp( hCtrl, "nClrPane" )
 
       if Empty( cName )
@@ -4149,8 +4149,8 @@ static function GenerateiOSPRG()
          endif
       endif
 
-      // OnClick
-      if ! Empty( cName )
+      // OnClick (buttons only — only buttons have click handlers on iOS)
+      if nType == 2 .and. ! Empty( cName )
          AAdd( aBind, '   UI_OnClick( ' + cName + ', {|| ' + cName + '_OnClick() } )' )
       endif
    next
@@ -4162,7 +4162,7 @@ static function GenerateiOSPRG()
 
    for i := 1 to nCount
       hCtrl := UI_GetChild( hForm, i )
-      cName := UI_GetProp( hCtrl, "cVarName" )
+      cName := UI_GetProp( hCtrl, "cName" )
       if Empty( cName )
          cName := "ctrl" + LTrim( Str( i ) )
       endif
@@ -4193,9 +4193,9 @@ static function GenerateiOSPRG()
    // Stub click handlers
    for i := 1 to nCount
       hCtrl := UI_GetChild( hForm, i )
-      nType := UI_GetProp( hCtrl, "nType" )
+      nType := UI_GetType( hCtrl )
       if nType == 2  // Button only
-         cName := UI_GetProp( hCtrl, "cVarName" )
+         cName := UI_GetProp( hCtrl, "cName" )
          if Empty( cName )
             cName := "ctrl" + LTrim( Str( i ) )
          endif

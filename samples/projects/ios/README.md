@@ -1,46 +1,44 @@
-# iOS Sample Project
+# iOS sample project
 
-A simple iOS application built with Harbour using the UI_* native UIKit API.
+A minimal one-form project (Label + Edit + Button) that exercises the
+iOS backend end-to-end.
 
-## Files
+## Run it
 
-- **Project1.prg** - Main program with iOSApp class
-- **Form1.prg** - TFormIOS class demonstrating form layout
+1. Open `Project1.hbp` in HarbourBuilder (macOS IDE).
+2. Select **Run → Run on iOS...**
+3. The IDE will:
+   - generate `_generated.prg` from the form using UI_* API calls
+   - build a signed `HarbourApp.app` for the simulator
+   - install and launch it on the iPhone Simulator
 
-## Building
+You should see a native iOS screen with:
 
-From the project directory:
+- a **Label** `"Type your name:"`
+- a **UITextField** you can type into
+- a **UIButton** `"Greet"` that updates the label to `"Hello, <name> !"`
+  when tapped
 
-```bash
-# Build for simulator
-/Users/usuario/HarbourBuilder/source/backends/ios/build-ios-app.sh Project1.prg simulator
+## How the iOS target works
 
-# Build for device
-/Users/usuario/HarbourBuilder/source/backends/ios/build-ios-app.sh Project1.prg device
-```
+The same `Form1.prg` runs on macOS/Windows/Linux through `TForm` and on
+iOS through `UI_*` primitives. The backend (`ios_core.m`) creates real
+UIKit controls — UILabel, UIButton, UITextField — via Objective-C, using
+the same HB_FUNC API as the Android backend.
 
-## Running on Simulator
+The event loop is inverted on iOS: `UIApplicationMain()` owns the run
+loop, and Harbour's `UI_FormRun()` is a no-op. The AppDelegate starts
+the Harbour VM in `application:didFinishLaunchingWithOptions:`, which
+runs `Main()` to create the controls, then returns control to the
+iOS event loop.
 
-```bash
-/Users/usuario/HarbourBuilder/source/backends/ios/install-and-run.sh
-```
+See `docs/en/platform-ios.html` for the full architecture.
 
-## UI_* API
+## Prerequisites
 
-The iOS backend implements the same UI_* API as the Android backend:
+- macOS with **Xcode 15+** installed
+- iOS SDK (installed via Xcode > Settings > Platforms)
+- Harbour for macOS at `~/harbour/bin/harbour`
+- Harbour iOS libraries at `~/harbour-ios-src/lib/darwin/clang-ios-arm64/`
 
-| Function | Description |
-|----------|-------------|
-| `UI_FormNew(cTitle, nW, nH)` | Create form (UIViewController) |
-| `UI_LabelNew(hParent, cText, nX, nY, nW, nH)` | Create UILabel |
-| `UI_ButtonNew(hParent, cText, nX, nY, nW, nH)` | Create UIButton |
-| `UI_EditNew(hParent, cText, nX, nY, nW, nH)` | Create UITextField |
-| `UI_SetText(hCtrl, cText)` | Set control text |
-| `UI_GetText(hCtrl)` | Get control text |
-| `UI_OnClick(hCtrl, bBlock)` | Set click handler |
-| `UI_SetFormColor(nClr)` | Set form background (BGR) |
-| `UI_SetCtrlColor(hCtrl, nClr)` | Set control background (BGR) |
-| `UI_SetCtrlFont(hCtrl, cFamily, nSize)` | Set font |
-| `UI_FormRun(hForm)` | Start event loop (no-op on iOS) |
-
-Colors use Win32 COLORREF format (0x00BBGGRR).
+Run **Run → iOS Setup Wizard...** to check and install missing components.

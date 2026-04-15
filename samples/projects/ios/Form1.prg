@@ -1,56 +1,42 @@
-/* Form1.prg - iOS Form Definition */
+// Form1.prg
+//--------------------------------------------------------------------
 
-#include "hbclass.ch"
+CLASS TForm1 FROM TForm
 
-CLASS TFormIOS
+   // IDE-managed Components
+   DATA oLabel1   // TLabel
+   DATA oEdit1    // TEdit
+   DATA oButton1  // TButton
 
-   DATA hForm
-   DATA hTitleLabel
-   DATA hNameLabel
-   DATA hNameEdit
-   DATA hOkButton
-   DATA hCancelButton
+   // Event handlers
 
-   METHOD New( cTitle, nWidth, nHeight )
-   METHOD Activate()
+   METHOD CreateForm()
 
 ENDCLASS
+//--------------------------------------------------------------------
 
-METHOD New( cTitle, nWidth, nHeight ) CLASS TFormIOS
+METHOD CreateForm() CLASS TForm1
 
-   DEFAULT cTitle TO "Form", nWidth TO 375, nHeight TO 667
+   ::Title  := "Hello iOS"
+   ::Left   := 0
+   ::Top    := 0
+   ::Width  := 400
+   ::Height := 600
 
-   ::hForm := UI_FormNew( cTitle, nWidth, nHeight )
-   UI_SetFormColor( 0xFFFFFF )
+   @ 20, 20 SAY ::oLabel1 PROMPT "Type your name:" OF Self SIZE 300, 30
+   @ 76, 76 GET ::oEdit1 VAR "" OF Self SIZE 300, 50
+   @ 284, 74 BUTTON ::oButton1 PROMPT "Greet" OF Self SIZE 300, 50
 
-   /* Title */
-   ::hTitleLabel := UI_LabelNew( ::hForm, cTitle, 20, 40, 335, 35 )
-   UI_SetCtrlFont( ::hTitleLabel, "Helvetica-Bold", 22 )
-   UI_SetCtrlColor( ::hTitleLabel, -1 )   /* transparent */
+   // Event wiring
+   ::oButton1:OnClick := { || Button1Click( Self ) }
 
-   /* Name field */
-   ::hNameLabel := UI_LabelNew( ::hForm, "Name:", 20, 100, 100, 30 )
-   ::hNameEdit  := UI_EditNew( ::hForm, "", 130, 100, 225, 30 )
+return nil
+//--------------------------------------------------------------------
 
-   /* Buttons */
-   ::hOkButton     := UI_ButtonNew( ::hForm, "OK", 20, 160, 160, 40 )
-   ::hCancelButton := UI_ButtonNew( ::hForm, "Cancel", 195, 160, 160, 40 )
+static function Button1Click( oForm )
 
-   UI_OnClick( ::hOkButton,     {|| ::OnOK() } )
-   UI_OnClick( ::hCancelButton, {|| ::OnCancel() } )
+   oForm:oLabel1:Text := "Hello, " + oForm:oEdit1:Text + " !"
 
-RETURN Self
+return nil
 
-METHOD Activate() CLASS TFormIOS
-   UI_FormRun( ::hForm )
-RETURN Self
-
-METHOD OnOK() CLASS TFormIOS
-   LOCAL cName := UI_GetText( ::hNameEdit )
-   UI_SetText( ::hTitleLabel, "Hello, " + IfEmpty( cName, "World" ) + "!" )
-RETURN Self
-
-METHOD OnCancel() CLASS TFormIOS
-   UI_SetText( ::hNameEdit, "" )
-   UI_SetText( ::hTitleLabel, "Cancelled" )
-RETURN Self
+//--------------------------------------------------------------------
