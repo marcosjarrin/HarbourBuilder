@@ -216,6 +216,11 @@ cp "$PROJDIR/source/backends/cocoa/cocoa_core.m" "$APP/Contents/Resources/backen
 cp "$PROJDIR/source/backends/cocoa/cocoa_editor.mm" "$APP/Contents/Resources/backends/cocoa/" 2>/dev/null
 cp "$PROJDIR/source/backends/cocoa/cocoa_inspector.m" "$APP/Contents/Resources/backends/cocoa/" 2>/dev/null
 cp "$PROJDIR/source/backends/cocoa/gt_dummy.c" "$APP/Contents/Resources/backends/cocoa/" 2>/dev/null
+# iOS backend
+if [ -d "$PROJDIR/source/backends/ios" ]; then
+   mkdir -p "$APP/Contents/Resources/backends/ios"
+   cp -r "$PROJDIR/source/backends/ios/"* "$APP/Contents/Resources/backends/ios/" 2>/dev/null
+fi
 # Copy Scintilla includes and libs for user project compilation
 mkdir -p "$APP/Contents/Resources/scintilla/include"
 mkdir -p "$APP/Contents/Resources/scintilla/cocoa"

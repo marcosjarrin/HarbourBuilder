@@ -140,6 +140,9 @@ function Main()
    MENUSEPARATOR OF oRun
    MENUITEM "Toggle Breakpoint"  OF oRun ACTION ToggleBreakpoint()
    MENUITEM "Clear Breakpoints"  OF oRun ACTION ClearBreakpoints()
+   MENUSEPARATOR OF oRun
+   MENUITEM "Run on iOS..."         OF oRun ACTION TBRuniOS()
+   MENUITEM "iOS Setup Wizard..."   OF oRun ACTION iOSSetupWizard()
 
    DEFINE POPUP oFormat PROMPT "Format" OF oIDE
    MENUITEM "Align Left"             OF oFormat ACTION AlignControls( 1 )
@@ -210,6 +213,7 @@ function Main()
    UI_MenuSetBitmapByPos( oRun:hPopup, 4, cIcoDir + "menu_stepover.png" )
    UI_MenuSetBitmapByPos( oRun:hPopup, 5, cIcoDir + "menu_stepinto.png" )
    UI_MenuSetBitmapByPos( oRun:hPopup, 6, cIcoDir + "menu_stop.png" )
+   UI_MenuSetBitmapByPos( oRun:hPopup, 8, cIcoDir + "menu_run.png" )      // Run on iOS
 
    UI_MenuSetBitmapByPos( oTools:hPopup, 0, cIcoDir + "menu_editor_colors.png" )
    UI_MenuSetBitmapByPos( oTools:hPopup, 1, cIcoDir + "menu_environment_options.png" )
@@ -3893,6 +3897,315 @@ static function OpenProjectFile( cFile )
    AddRecentProject( cFile )
 
 return nil
+
+// -------------------------------------------------------------------
+// iOS support - Run on iOS and Setup Wizard
+// -------------------------------------------------------------------
+
+static function TBRuniOS()
+
+   local cHome       := GetEnv( "HOME" )
+   local cRepoRoot   := HB_DirBase() + ".."
+   local cResDir     := HB_DirBase() + "../Resources"
+   local cIOSDir     := cHome + "/harbour-ios-src"
+   local cBackend    := ""
+   local cGenPrg     := "/tmp/hbbuilder_ios/_generated.prg"
+   local cBuildSh    := ""
+   local cAppPath    := "/tmp/HarbouriOS/app-build/HarbourApp.app"
+   local cLogPath    := "/tmp/hbbuilder_ios/build-ios.log"
+   local cHbBin      := cHome + "/harbour/bin/harbour"
+   local cPrg, cLog, cCmd, nRc
+
+   // Resolve iOS backend path (bundle Resources or source tree)
+   if hb_DirExists( cResDir + "/backends/ios" )
+      cBackend := cResDir + "/backends/ios"
+   else
+      cBackend := cRepoRoot + "/source/backends/ios"
+   endif
+   cBuildSh := cBackend + "/build-ios-app.sh"
+
+   // Check toolchain
+   if ! hb_DirExists( cIOSDir )
+      MsgInfo( "iOS toolchain not found." + Chr(10) + ;
+               "Run 'iOS Setup Wizard' first to build Harbour for iOS.", ;
+               "iOS target" )
+      return nil
+   endif
+   if ! hb_DirExists( cIOSDir + "/lib/darwin/clang-ios-arm64" )
+      MsgInfo( "Harbour iOS libraries not found at" + Chr(10) + ;
+               cIOSDir + "/lib/darwin/clang-ios-arm64/" + Chr(10) + ;
+               "Run 'iOS Setup Wizard' to build them.", ;
+               "iOS target" )
+      return nil
+   endif
+
+   SaveActiveFormCode()
+   SyncDesignerToCode()
+
+   // Generate iOS PRG from the current form
+   cPrg := GenerateiOSPRG()
+   if Empty( cPrg )
+      MsgInfo( "No form to build - add at least one control to the designer.", ;
+               "iOS target" )
+      return nil
+   endif
+
+   hb_DirBuild( "/tmp/hbbuilder_ios" )
+   MemoWrit( cGenPrg, cPrg )
+
+   // Delete stale .app
+   if hb_DirExists( cAppPath )
+      hb_run( "rm -rf " + cAppPath )
+   endif
+
+   // Build .app for simulator
+   cCmd := 'bash "' + cBuildSh + '" "' + cGenPrg + '" simulator > "' + cLogPath + '" 2>&1'
+   nRc := hb_run( cCmd )
+
+   cLog := iif( File( cLogPath ), MemoRead( cLogPath ), "(no log produced)" )
+
+   if ! hb_DirExists( cAppPath )
+      MsgInfo( "iOS Build Failed" + Chr(10) + Chr(10) + ;
+               SubStr( cLog, Max(1, Len(cLog)-2000) ), ;
+               "iOS target" )
+      return nil
+   endif
+
+   // Install and launch on simulator
+   cCmd := 'bash "' + cBackend + '/install-and-run.sh" "' + cAppPath + '" > /tmp/hbbuilder_ios/ios-run.log 2>&1 &'
+   hb_run( cCmd )
+
+   MsgInfo( "iOS .app built and installed on simulator!" + Chr(10) + ;
+            cAppPath + Chr(10) + Chr(10) + ;
+            "The app should now be running on the iPhone simulator.", ;
+            "iOS target" )
+
+return nil
+
+// iOS Setup Wizard
+//
+// Reports which toolchain components are present and, if anything is
+// missing, offers to run setup-ios-toolchain.sh.
+
+static function iOSSetupWizard()
+
+   local cHome    := GetEnv( "HOME" )
+   local cIOSDir  := cHome + "/harbour-ios-src"
+   local cReport  := "iOS toolchain status:" + Chr(10) + Chr(10)
+   local lXcode, lIosSdk, lSimRuntime, lHbIos, lHbHost, cCmd, cSetupSh
+
+   lXcode     := File( "/Applications/Xcode.app/Contents/MacOS/Xcode" )
+   lIosSdk    := .F.
+   lSimRuntime := .F.
+   lHbIos     := hb_DirExists( cIOSDir + "/lib/darwin/clang-ios-arm64" )
+   lHbHost    := File( cHome + "/harbour/bin/harbour" )
+
+   // Check iOS SDK
+   if lXcode
+      cCmd := hb_run( "xcrun --sdk iphoneos --show-sdk-path 2>/dev/null" )
+      lIosSdk := ! Empty( hb_CStr( cCmd ) )
+   endif
+
+   // Check simulator runtime
+   if lXcode
+      cCmd := hb_run( "xcrun simctl list runtimes 2>/dev/null | grep -c iOS" )
+      lSimRuntime := Val( hb_CStr( cCmd ) ) > 0
+   endif
+
+   cReport += "  Xcode            " + iif( lXcode,      "OK", "MISSING" ) + Chr(10)
+   cReport += "  iOS SDK          " + iif( lIosSdk,    "OK", "MISSING" ) + Chr(10)
+   cReport += "  iOS Simulator    " + iif( lSimRuntime, "OK", "MISSING" ) + Chr(10)
+   cReport += "  Harbour (host)   " + iif( lHbHost,    "OK", "MISSING" ) + Chr(10)
+   cReport += "  Harbour iOS libs " + iif( lHbIos,     "OK", "MISSING" ) + Chr(10)
+
+   // Everything present?
+   if lXcode .and. lIosSdk .and. lSimRuntime .and. lHbHost .and. lHbIos
+      MsgInfo( cReport + Chr(10) + "Toolchain is complete. Ready to Run on iOS.", ;
+               "iOS Setup Wizard" )
+      return nil
+   endif
+
+   // Xcode is required
+   if ! lXcode
+      MsgInfo( cReport + Chr(10) + ;
+               "Install Xcode from the Mac App Store first.", ;
+               "iOS Setup Wizard" )
+      return nil
+   endif
+
+   // Harbour host is required
+   if ! lHbHost
+      MsgInfo( cReport + Chr(10) + ;
+               "Harbour for macOS not found at ~/harbour/bin/harbour" + Chr(10) + ;
+               "Install Harbour first.", ;
+               "iOS Setup Wizard" )
+      return nil
+   endif
+
+   // Offer to build the missing pieces
+   cReport += Chr(10) + "Build the missing iOS components now?" + Chr(10) + ;
+              "(This will clone and cross-compile Harbour for iOS." + Chr(10) + ;
+              "It takes about 5-10 minutes.)"
+   if ! MsgYesNo( cReport, "iOS Setup Wizard" )
+      return nil
+   endif
+
+   // Run setup script in a Terminal.app window
+   if File( HB_DirBase() + "../Resources/backends/ios/setup-ios-toolchain.sh" )
+      cSetupSh := HB_DirBase() + "../Resources/backends/ios/setup-ios-toolchain.sh"
+   else
+      cSetupSh := HB_DirBase() + "../../source/backends/ios/setup-ios-toolchain.sh"
+   endif
+   cCmd := 'open -a Terminal.app "' + cSetupSh + '"'
+   hb_run( cCmd )
+
+   MsgInfo( "Setup terminal launched. When it says 'All done', close it " + ;
+            "and try Run > Run on iOS...", "iOS Setup Wizard" )
+
+return nil
+
+// Generate iOS PRG from the current form design
+// (same pattern as GenerateAndroidPRG on Windows)
+
+static function GenerateiOSPRG()
+
+   local cPRG, e := Chr(10)
+   local hForm, nCount, i, hCtrl, nType
+   local cName, cText, nL, nT, nW, nH, cTitle, nFW, nFH, nFormClr, nCtrlClr
+   local cFontFam, nFontSize, cVal, nPos
+   local cEventTab, aCreate := {}, aBind := {}
+   local cQ := Chr(34)
+
+   // Get the form handle
+   hForm := nil
+   if oDesignForm != nil .and. ValType( oDesignForm ) == "O"
+      hForm := oDesignForm:hCpp
+   endif
+   if ( hForm == nil .or. hForm == 0 ) .and. ! Empty( aForms )
+      if aForms[1][2] != nil .and. ValType( aForms[1][2] ) == "O"
+         hForm := aForms[1][2]:hCpp
+      endif
+   endif
+   if hForm == nil .or. hForm == 0
+      return ""
+   endif
+
+   cTitle := UI_GetProp( hForm, "cText" )
+   if Empty( cTitle )
+      cTitle := iif( ! Empty( aForms ), aForms[1][1], "Form1" )
+   endif
+   nFW := UI_GetProp( hForm, "nWidth" )
+   nFH := UI_GetProp( hForm, "nHeight" )
+   nFormClr := UI_GetProp( hForm, "nClrPane" )
+
+   nCount := UI_GetChildCount( hForm )
+
+   // Generate UI_* calls for each control
+   for i := 1 to nCount
+      hCtrl  := UI_GetChild( hForm, i )
+      cName  := UI_GetProp( hCtrl, "cVarName" )
+      cText  := UI_GetProp( hCtrl, "cText" )
+      nL     := UI_GetProp( hCtrl, "nLeft" )
+      nT     := UI_GetProp( hCtrl, "nTop" )
+      nW     := UI_GetProp( hCtrl, "nWidth" )
+      nH     := UI_GetProp( hCtrl, "nHeight" )
+      nType  := UI_GetProp( hCtrl, "nType" )
+      nCtrlClr := UI_GetProp( hCtrl, "nClrPane" )
+
+      if Empty( cName )
+         cName := "ctrl" + LTrim( Str( i ) )
+      endif
+
+      do case
+      case nType == 1  // Label
+         AAdd( aCreate, '   ' + cName + ' := UI_LabelNew( hForm, ' + cQ + cText + cQ + ', ' + ;
+               LTrim(Str(nL)) + ', ' + LTrim(Str(nT)) + ', ' + ;
+               LTrim(Str(nW)) + ', ' + LTrim(Str(nH)) + ' )' )
+      case nType == 2  // Button
+         AAdd( aCreate, '   ' + cName + ' := UI_ButtonNew( hForm, ' + cQ + cText + cQ + ', ' + ;
+               LTrim(Str(nL)) + ', ' + LTrim(Str(nT)) + ', ' + ;
+               LTrim(Str(nW)) + ', ' + LTrim(Str(nH)) + ' )' )
+      case nType == 3  // Edit
+         AAdd( aCreate, '   ' + cName + ' := UI_EditNew( hForm, ' + cQ + cText + cQ + ', ' + ;
+               LTrim(Str(nL)) + ', ' + LTrim(Str(nT)) + ', ' + ;
+               LTrim(Str(nW)) + ', ' + LTrim(Str(nH)) + ' )' )
+      endcase
+
+      // Color
+      if nCtrlClr > 0
+         AAdd( aCreate, '   UI_SetCtrlColor( ' + cName + ', ' + LTrim(Str(nCtrlClr)) + ' )' )
+      endif
+
+      // Font (read from oFont property string "Family,Size")
+      cVal := UI_GetProp( hCtrl, "oFont" )
+      if ! Empty( cVal ) .and. cVal != "System,12" .and. cVal != ".LucidaGrande,13"
+         nPos := At( ",", cVal )
+         if nPos > 0
+            cFontFam  := Left( cVal, nPos - 1 )
+            nFontSize := Val( SubStr( cVal, nPos + 1 ) )
+            if ! Empty( cFontFam ) .or. nFontSize > 0
+               AAdd( aCreate, '   UI_SetCtrlFont( ' + cName + ', ' + cQ + cFontFam + cQ + ', ' + LTrim(Str(nFontSize)) + ' )' )
+            endif
+         endif
+      endif
+
+      // OnClick
+      if ! Empty( cName )
+         AAdd( aBind, '   UI_OnClick( ' + cName + ', {|| ' + cName + '_OnClick() } )' )
+      endif
+   next
+
+   // Assemble the PRG
+   cPRG := '/* Generated by HarbourBuilder - iOS target */' + e + e
+   cPRG += 'PROCEDURE Main()' + e + e
+   cPRG += '   LOCAL hForm' + e
+
+   for i := 1 to nCount
+      hCtrl := UI_GetChild( hForm, i )
+      cName := UI_GetProp( hCtrl, "cVarName" )
+      if Empty( cName )
+         cName := "ctrl" + LTrim( Str( i ) )
+      endif
+      cPRG += '   LOCAL ' + cName + e
+   next
+
+   cPRG += e
+   cPRG += '   hForm := UI_FormNew( ' + cQ + cTitle + cQ + ', ' + ;
+           LTrim(Str(nFW)) + ', ' + LTrim(Str(nFH)) + ' )' + e
+
+   if nFormClr > 0
+      cPRG += '   UI_SetFormColor( ' + LTrim(Str(nFormClr)) + ' )' + e
+   endif
+
+   cPRG += e
+   for i := 1 to Len( aCreate )
+      cPRG += aCreate[i] + e
+   next
+
+   cPRG += e
+   for i := 1 to Len( aBind )
+      cPRG += aBind[i] + e
+   next
+
+   cPRG += e + '   UI_FormRun( hForm )' + e + e
+   cPRG += 'RETURN' + e + e
+
+   // Stub click handlers
+   for i := 1 to nCount
+      hCtrl := UI_GetChild( hForm, i )
+      nType := UI_GetProp( hCtrl, "nType" )
+      if nType == 2  // Button only
+         cName := UI_GetProp( hCtrl, "cVarName" )
+         if Empty( cName )
+            cName := "ctrl" + LTrim( Str( i ) )
+         endif
+         cPRG += 'PROCEDURE ' + cName + '_OnClick()' + e
+         cPRG += '   // TODO: implement' + e
+         cPRG += 'RETURN' + e + e
+      endif
+   next
+
+return cPRG
 
 // Framework
 #include "classes.prg"
