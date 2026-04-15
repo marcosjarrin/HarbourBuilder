@@ -213,7 +213,7 @@ function Main()
    UI_MenuSetBitmapByPos( oRun:hPopup, 4, cIcoDir + "menu_stepover.png" )
    UI_MenuSetBitmapByPos( oRun:hPopup, 5, cIcoDir + "menu_stepinto.png" )
    UI_MenuSetBitmapByPos( oRun:hPopup, 6, cIcoDir + "menu_stop.png" )
-   UI_MenuSetBitmapByPos( oRun:hPopup, 8, cIcoDir + "menu_run.png" )      // Run on iOS
+   UI_MenuSetBitmapByPos( oRun:hPopup, 11, cIcoDir + "menu_run.png" )     // Run on iOS
 
    UI_MenuSetBitmapByPos( oTools:hPopup, 0, cIcoDir + "menu_editor_colors.png" )
    UI_MenuSetBitmapByPos( oTools:hPopup, 1, cIcoDir + "menu_environment_options.png" )
