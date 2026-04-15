@@ -1,6 +1,18 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-15 (macOS: Inspector logical dropdown fix)
+
+  FIXES
+  - Object Inspector: setting a logical property to .F. via the
+    Yes/No dropdown now persists. The logical dropdown previously
+    read [NSMenuItem isHighlighted] after the popup had closed,
+    which is unreliable — selecting "No" often left the value
+    unchanged. Switched to the same action-selector pattern used
+    by the regular dropdown (dropdownMenuSelected: + s_dropdownChoice),
+    so mouse selection of .T./.F. works consistently for
+    lTransparent and any other logical property.
+
 2026-04-15 (macOS: Label nClrText, lTransparent fix, iOS UIKit backend, form designer fixes)
 
   FIXES

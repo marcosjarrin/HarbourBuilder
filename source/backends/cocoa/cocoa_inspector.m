@@ -700,7 +700,8 @@ static HBFontPickerTarget * s_fontTarget = nil;
    [sheet orderOut:nil];
 }
 
-- (void)logicalMenuDummy:(id)sender { /* no-op, enables menu items */ }
+static int s_dropdownChoice = -1;
+- (void)dropdownMenuSelected:(id)sender { s_dropdownChoice = (int)[sender tag]; }
 
 - (void)openLogicalDropdownForRow:(int)nReal inTableView:(NSTableView *)tv atRow:(NSInteger)row
 {
@@ -708,8 +709,8 @@ static HBFontPickerTarget * s_fontTarget = nil;
    int curIdx = curVal ? 0 : 1;
 
    NSMenu * menu = [[NSMenu alloc] init];
-   NSMenuItem * itemYes = [[NSMenuItem alloc] initWithTitle:@"Yes" action:@selector(logicalMenuDummy:) keyEquivalent:@""];
-   NSMenuItem * itemNo  = [[NSMenuItem alloc] initWithTitle:@"No"  action:@selector(logicalMenuDummy:) keyEquivalent:@""];
+   NSMenuItem * itemYes = [[NSMenuItem alloc] initWithTitle:@"Yes" action:@selector(dropdownMenuSelected:) keyEquivalent:@""];
+   NSMenuItem * itemNo  = [[NSMenuItem alloc] initWithTitle:@"No"  action:@selector(dropdownMenuSelected:) keyEquivalent:@""];
    [itemYes setTarget:self];
    [itemNo  setTarget:self];
    [itemYes setTag:1];
@@ -721,29 +722,24 @@ static HBFontPickerTarget * s_fontTarget = nil;
 
    NSRect cellRect = [tv frameOfCellAtColumn:1 row:row];
    NSPoint pt = NSMakePoint( cellRect.origin.x, cellRect.origin.y );
-   BOOL selected = [menu popUpMenuPositioningItem:[menu itemAtIndex:curIdx]
+
+   s_dropdownChoice = -1;
+   [menu popUpMenuPositioningItem:[menu itemAtIndex:curIdx]
       atLocation:pt inView:tv];
-   if( !selected ) return;
 
-   /* Find which item was chosen */
-   for( int i = 0; i < (int)[[menu itemArray] count]; i++ )
+   if( s_dropdownChoice >= 0 )
    {
-      NSMenuItem * mi = [[menu itemArray] objectAtIndex:i];
-      if( [mi isHighlighted] )
-      {
-         BOOL newVal = ( [mi tag] == 1 );
-         strcpy( d->rows[nReal].szValue, newVal ? ".T." : ".F." );
+      BOOL newVal = ( s_dropdownChoice == 1 );
+      strcpy( d->rows[nReal].szValue, newVal ? ".T." : ".F." );
 
-         if( d->hCtrl )
-         {
-            hb_vmPushDynSym( hb_dynsymFind( "UI_SETPROP" ) );
-            hb_vmPushNil();
-            hb_vmPushNumInt( (HB_MAXINT) d->hCtrl );
-            hb_vmPushString( d->rows[nReal].szName, strlen(d->rows[nReal].szName) );
-            hb_vmPushLogical( newVal );
-            hb_vmDo( 3 );
-         }
-         break;
+      if( d->hCtrl )
+      {
+         hb_vmPushDynSym( hb_dynsymFind( "UI_SETPROP" ) );
+         hb_vmPushNil();
+         hb_vmPushNumInt( (HB_MAXINT) d->hCtrl );
+         hb_vmPushString( d->rows[nReal].szName, strlen(d->rows[nReal].szName) );
+         hb_vmPushLogical( newVal );
+         hb_vmDo( 3 );
       }
    }
 
@@ -755,9 +751,6 @@ static HBFontPickerTarget * s_fontTarget = nil;
       hb_vmSend( 0 );
    }
 }
-
-static int s_dropdownChoice = -1;
-- (void)dropdownMenuSelected:(id)sender { s_dropdownChoice = (int)[sender tag]; }
 
 - (void)openDropdownForRow:(int)nReal inTableView:(NSTableView *)tv atRow:(NSInteger)row
 {
