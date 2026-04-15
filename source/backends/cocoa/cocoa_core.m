@@ -1302,11 +1302,15 @@ static int         s_pendingPage   = 0;
    NSString * title = [[NSString stringWithUTF8String:FText]
       stringByReplacingOccurrencesOfString:@"&" withString:@""];
    [btn setTitle:title];
-   [btn setBezelStyle:NSBezelStyleRounded];
+   [btn setBezelStyle:NSBezelStyleRegularSquare];
    [btn setButtonType:NSButtonTypeMomentaryPushIn];
    if( FDefault ) [btn setKeyEquivalent:@"\r"];
    if( FCancel )  [btn setKeyEquivalent:@"\033"];
    if( FFont ) [btn setFont:FFont];
+   btn.wantsLayer = YES;
+   btn.layer.masksToBounds = YES;
+   btn.layer.cornerRadius = 6.0;
+   btn.layer.backgroundColor = [[NSColor controlColor] CGColor];
    [btn setTarget:self]; [btn setAction:@selector(buttonClicked:)];
    [parentView addSubview:btn];
    FView = btn;
