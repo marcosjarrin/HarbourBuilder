@@ -8,6 +8,7 @@
 #import <Cocoa/Cocoa.h>
 #import <MapKit/MapKit.h>
 #import <SceneKit/SceneKit.h>
+#import <WebKit/WebKit.h>
 #if __has_include(<UniformTypeIdentifiers/UniformTypeIdentifiers.h>)
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #define HAS_UTTYPE 1
@@ -161,9 +162,12 @@ typedef struct {
     HBControl * __unsafe_unretained pCtrl;  /* back-pointer to HBControl */
     NSTableView * tableView;
     NSScrollView * scrollView;
+    id /* HBBrowseDelegate* */ delegate;    /* strong ref — NSTableView holds weak only */
     BrowseCol cols[MAX_BROWSE_COLS];
     int nColCount;
-    NSMutableArray * rowData;    /* Array of arrays of NSString */
+    NSMutableArray * rowData;    /* Array of arrays of NSString (TBrowse static) */
+    PHB_ITEM FGetCellBlock;      /* {|nRow,nCol| cVal} — live datasource block (TDBGrid) */
+    int      FLiveRows;          /* row count when using FGetCellBlock */
     PHB_ITEM FOnCellClick, FOnCellDblClick, FOnHeaderClick;
     PHB_ITEM FOnRowSelect, FOnKeyDown;
 } BrowseData;
@@ -171,6 +175,7 @@ typedef struct {
 #define MAX_BROWSES 32
 static BrowseData s_browses[MAX_BROWSES];
 static int s_nBrowses = 0;
+static BrowseData * FindBrowse( HBControl * p );  /* forward declaration */
 
 /* LONG_PTR equivalent for macOS */
 typedef long LONG_PTR_MAC;
@@ -316,6 +321,9 @@ void EnsureNSApp( void )
 
    PHB_ITEM FOnClick, FOnChange, FOnInit, FOnClose;
    PHB_ITEM FOnTimer;
+   /* DBGrid: pre-built row cache stored before BrowseData exists (pre-Activate).
+      NSMutableArray of NSMutableArray of NSString, built by UI_DBGridSetCache. */
+   NSMutableArray * FPendingRowData;
    int      FInterval;       /* Timer interval in milliseconds (default 1000) */
    NSTimer * FTimer;         /* NSTimer for CT_TIMER controls */
 
@@ -354,6 +362,48 @@ void EnsureNSApp( void )
    int         FMapType;           /* TMap type: mtStandard..mtMutedStandard */
    BOOL        FAutoRotate;        /* TEarthView auto-rotation flag */
    NSTimer *   FAutoRotTimer;      /* TEarthView spin timer */
+   /* TDBGrid fields */
+   unsigned int FFixedColor;       /* FixedColor (header/fixed cell bg) */
+   unsigned int FSelectedColor;    /* SelectedColor (selected row bg) */
+   int  FGridLineWidth;            /* GridLineWidth (default 1) */
+   int  FGridBorderStyle;          /* BorderStyle: 0=bsNone, 1=bsSingle */
+   int  FDrawingStyle;             /* DrawingStyle: 0=gdsClassic, 1=gdsThemed */
+   int  FGridAlign;                /* Align: 0=alNone..5=alClient */
+   int  FDefaultRowHeight;         /* DefaultRowHeight (default 20) */
+   int  FDefaultColWidth;          /* DefaultColWidth (default 64) */
+   BOOL FGridEditing;              /* Options: dgEditing (default YES) */
+   BOOL FGridTabs;                 /* Options: dgTabs (default YES) */
+   BOOL FGridRowSelect;            /* Options: dgRowSelect (default NO) */
+   BOOL FGridAlwaysShowSel;        /* Options: dgAlwaysShowSelection (default YES) */
+   BOOL FGridConfirmDelete;        /* Options: dgConfirmDelete (default YES) */
+   BOOL FGridMultiSelect;          /* Options: dgMultiSelect (default NO) */
+   BOOL FGridRowLines;             /* Options: dgRowLines (default YES) */
+   BOOL FGridColLines;             /* Options: dgColLines (default YES) */
+   BOOL FGridColumnResize;         /* Options: dgColumnResize (default YES) */
+   BOOL FGridTitleClick;           /* Options: dgTitleClick (default YES) */
+   BOOL FGridTitleHotTrack;        /* Options: dgTitleHotTrack (default NO) */
+   BOOL FGridReadOnly;             /* Options: lReadOnly (default NO) */
+   /* Layout Align (like C++Builder TAlign) */
+   int  FDockAlign;               /* 0=alNone,1=alTop,2=alBottom,3=alLeft,4=alRight,5=alClient */
+   /* TWebView */
+   char FUrl[1024];               /* URL to navigate to */
+   PHB_ITEM FOnNavigate;          /* fires when navigation starts (cURL passed) */
+   PHB_ITEM FOnLoadFinish;        /* fires when page finishes loading */
+   PHB_ITEM FOnLoadError;         /* fires on navigation error */
+   id       FWebViewDelegate;     /* strong ref — prevents ARC from deallocating WKNavigationDelegate */
+   /* TWebServer */
+   int  FWSPort;              /* nPort (default 8080) */
+   int  FWSPortSSL;           /* nPortSSL (default 8443) */
+   char FWSRoot[512];         /* cRoot (default ".") */
+   BOOL FWSHttps;             /* lHTTPS (default NO) */
+   BOOL FWSTrace;             /* lTrace (default NO) */
+   int  FWSTimeout;           /* nTimeout in seconds (default 30) */
+   int  FWSMaxUpload;         /* nMaxUpload in bytes (default 10485760) */
+   char FWSSessionCookie[64]; /* cSessionCookie (default "HIXSID") */
+   int  FWSSessionTTL;        /* nSessionTTL in seconds (default 3600) */
+   PHB_ITEM FOnStart;         /* TWebServer bOnStart */
+   PHB_ITEM FOnStop;          /* TWebServer bOnStop */
+   PHB_ITEM FOnError;         /* TWebServer bOnError */
 }
 - (void)addChild:(HBControl *)child;
 - (void)setText:(const char *)text;
@@ -367,6 +417,14 @@ void EnsureNSApp( void )
 - (void)stopTimer;
 - (void)timerFired:(NSTimer *)timer;
 @end
+
+/* Align constants (match C++Builder TAlign) */
+#define ALIGN_NONE   0
+#define ALIGN_TOP    1
+#define ALIGN_BOTTOM 2
+#define ALIGN_LEFT   3
+#define ALIGN_RIGHT  4
+#define ALIGN_CLIENT 5
 
 /* BorderStyle constants (match C++Builder) */
 #define BS_NONE        0
@@ -494,6 +552,17 @@ void EnsureNSApp( void )
 - (void)notifySelChange;
 - (NSUInteger)computeStyleMask;
 - (void)applyStyleMask;
+@end
+
+static void UndoPushSnapshot( HBForm * pForm );   /* forward declaration */
+static void ApplyDockAlign( HBForm * form );      /* forward declaration */
+
+/* TWebView navigation delegate */
+@interface HBWebViewDelegate : NSObject <WKNavigationDelegate>
+{
+@public
+   HBControl * __unsafe_unretained pCtrl;
+}
 @end
 
 /* Form content view: fires form OnClick/OnMouseDown/OnMouseUp events at runtime */
@@ -638,6 +707,46 @@ static void HBUpdateTabVisibility( HBControl * owner );
 @public
    __weak HBControl * ownerCtrl;
 }
+@end
+
+@implementation HBWebViewDelegate
+
+- (void)webView:(WKWebView *)webView decidePolicyForNavigationAction:(WKNavigationAction *)action
+                                                    decisionHandler:(void (^)(WKNavigationActionPolicy))handler
+{
+   (void)action;
+   handler( WKNavigationActionPolicyAllow );
+   if( pCtrl && pCtrl->FOnNavigate ) {
+      NSString * urlStr = action.request.URL.absoluteString;
+      const char * cUrl = urlStr ? [urlStr UTF8String] : "";
+      if( hb_vmRequestReenter() ) {
+         hb_vmPushEvalSym();
+         hb_vmPush( pCtrl->FOnNavigate );
+         hb_vmPushString( cUrl, strlen(cUrl) );
+         hb_vmSend( 1 );
+         hb_vmRequestRestore();
+      }
+   }
+}
+
+- (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation
+{
+   (void)webView; (void)navigation;
+   if( pCtrl ) [pCtrl fireEvent:pCtrl->FOnLoadFinish];
+}
+
+- (void)webView:(WKWebView *)webView didFailNavigation:(WKNavigation *)navigation withError:(NSError *)error
+{
+   (void)webView; (void)navigation; (void)error;
+   if( pCtrl ) [pCtrl fireEvent:pCtrl->FOnLoadError];
+}
+
+- (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(WKNavigation *)navigation withError:(NSError *)error
+{
+   (void)webView; (void)navigation; (void)error;
+   if( pCtrl ) [pCtrl fireEvent:pCtrl->FOnLoadError];
+}
+
 @end
 
 @implementation HBTabDelegate
@@ -1311,6 +1420,12 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
       FHeaders[0] = '\0'; FData[0] = '\0'; FDataSource[0] = '\0'; FActive = NO;
       FOnClick = NULL; FOnChange = NULL; FOnInit = NULL; FOnClose = NULL;
       FOnTimer = NULL; FInterval = 1000; FTimer = nil;
+      FWSPort = 8080; FWSPortSSL = 8443; FWSHttps = NO; FWSTrace = NO;
+      FWSTimeout = 30; FWSMaxUpload = 10485760; FWSSessionTTL = 3600;
+      strncpy(FWSRoot, ".", sizeof(FWSRoot)-1);
+      strncpy(FWSSessionCookie, "HIXSID", sizeof(FWSSessionCookie)-1);
+      FOnStart = NULL; FOnStop = NULL; FOnError = NULL;
+      FPendingRowData = nil;
       FCtrlParent = nil; FChildCount = 0;
       memset( FChildren, 0, sizeof(FChildren) );
       FOwnerCtrl = nil; FOwnerPage = 0; FAutoPage = NO; FTransparent = NO; nAlign = 0;
@@ -1324,6 +1439,27 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
       FLat = 40.4168; FLon = -3.7038;  /* Madrid */
       FZoom = 10; FMapType = 0;
       FAutoRotate = YES; FAutoRotTimer = nil;
+      /* TDBGrid defaults */
+      FFixedColor      = 0xFFFFFFFF;
+      FSelectedColor   = 0xFFFFFFFF;
+      FGridLineWidth   = 1;
+      FGridBorderStyle = 1;   /* bsSingle */
+      FDrawingStyle    = 0;   /* gdsClassic */
+      FGridAlign       = 0;   /* alNone */
+      FDefaultRowHeight = 20;
+      FDefaultColWidth  = 64;
+      FGridEditing        = YES;
+      FGridTabs           = YES;
+      FGridRowSelect      = NO;
+      FGridAlwaysShowSel  = YES;
+      FGridConfirmDelete  = YES;
+      FGridMultiSelect    = NO;
+      FGridRowLines       = YES;
+      FGridColLines       = YES;
+      FGridColumnResize   = YES;
+      FGridTitleClick     = YES;
+      FGridTitleHotTrack  = NO;
+      FGridReadOnly       = NO;
    }
    return self;
 }
@@ -1567,6 +1703,27 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
          [mv setRegion:region animated:NO];
          v = mv; break;
       }
+      case CT_WEBVIEW: {
+         WKWebViewConfiguration * cfg = [[WKWebViewConfiguration alloc] init];
+         WKWebView * wv = [[WKWebView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)
+                                             configuration:cfg];
+         HBWebViewDelegate * del = [[HBWebViewDelegate alloc] init];
+         del->pCtrl = self;
+         [wv setNavigationDelegate:del];
+         FWebViewDelegate = del;   /* strong ref — keeps delegate alive */
+         if( FUrl[0] ) {
+            NSString * s = [NSString stringWithUTF8String:FUrl];
+            NSURL * url = [NSURL URLWithString:s];
+            if( !url ) url = [NSURL fileURLWithPath:s];
+            [wv loadRequest:[NSURLRequest requestWithURL:url]];
+         } else {
+            [wv loadHTMLString:@"<html><body style='background:#1a1a2e;color:#eee;"
+                                "font-family:system-ui;display:flex;align-items:center;"
+                                "justify-content:center;height:100vh;margin:0'>"
+                                "<span>TWebView</span></body></html>" baseURL:nil];
+         }
+         v = wv; break;
+      }
       case CT_LISTVIEW: {
          NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
          NSTableView * tv = [[NSTableView alloc] initWithFrame:NSMakeRect(0,0,FWidth,FHeight)];
@@ -1678,6 +1835,7 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
 
          s_browses[bi].tableView = tv;
          s_browses[bi].scrollView = sv;
+         s_browses[bi].delegate  = del;  /* strong ref — prevents ARC dealloc */
          [sv setDocumentView:tv];
          [sv setHasVerticalScroller:YES];
          [sv setHasHorizontalScroller:YES];
@@ -1718,6 +1876,82 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
          if( FClrPane != 0xFFFFFFFF && FBgColor ) {
             [tv setBackgroundColor:FBgColor];
             [tv setUsesAlternatingRowBackgroundColors:NO];
+            [sv setDrawsBackground:YES];
+            [sv setBackgroundColor:FBgColor];
+            [[sv contentView] setDrawsBackground:YES];
+            [(NSClipView *)[sv contentView] setBackgroundColor:FBgColor];
+         }
+
+         v = sv; break;
+      }
+      case CT_DBGRID: {
+         if( s_nBrowses >= MAX_BROWSES ) { v = nil; break; }
+         int bi = s_nBrowses++;
+         memset( (void*)&s_browses[bi], 0, sizeof(BrowseData) );
+         s_browses[bi].pCtrl = self;
+         s_browses[bi].rowData = [[NSMutableArray alloc] init];
+
+         NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         NSTableView * tv = [[NSTableView alloc] initWithFrame:NSMakeRect(0,0,FWidth,FHeight)];
+         [tv setUsesAlternatingRowBackgroundColors:NO];
+
+         NSTableViewGridLineStyle gridMask = 0;
+         if( FGridRowLines ) gridMask |= NSTableViewSolidHorizontalGridLineMask;
+         if( FGridColLines ) gridMask |= NSTableViewSolidVerticalGridLineMask;
+         [tv setGridStyleMask:gridMask];
+         [tv setAllowsColumnReordering:NO];
+         [tv setAllowsColumnResizing:FGridColumnResize];
+         [tv setAllowsMultipleSelection:FGridMultiSelect];
+         [tv setAllowsEmptySelection:YES];
+         [tv setRowHeight:(CGFloat)FDefaultRowHeight];
+
+         HBBrowseDelegate * del = [[HBBrowseDelegate alloc] init];
+         del->browseIdx = bi;
+         [tv setDataSource:del];
+         [tv setDelegate:del];
+
+         s_browses[bi].tableView = tv;
+         s_browses[bi].scrollView = sv;
+         s_browses[bi].delegate  = del;  /* strong ref — prevents ARC dealloc */
+         [sv setDocumentView:tv];
+         [sv setHasVerticalScroller:YES];
+         [sv setHasHorizontalScroller:YES];
+         [sv setBorderType:(FGridBorderStyle == 0) ? NSNoBorder : NSBezelBorder];
+
+         /* If FHeaders was set before view creation, create columns now */
+         if( FHeaders[0] )
+         {
+            BrowseData * bd = &s_browses[bi];
+            const char * src = FHeaders;
+            while( src && *src )
+            {
+               const char * sep = strchr( src, '|' );
+               int len = sep ? (int)(sep - src) : (int)strlen(src);
+               if( len > 0 && bd->nColCount < MAX_BROWSE_COLS )
+               {
+                  int idx = bd->nColCount++;
+                  memset( bd->cols[idx].szTitle, 0, 64 );
+                  if( len > 63 ) len = 63;
+                  memcpy( bd->cols[idx].szTitle, src, (size_t)len );
+                  int colW = FColWidths[idx] > 0 ? FColWidths[idx] : FDefaultColWidth;
+                  bd->cols[idx].nWidth = colW;
+                  bd->cols[idx].nAlign = 0;
+                  bd->cols[idx].szFieldName[0] = 0;
+
+                  NSString * ident = [NSString stringWithFormat:@"%d", idx];
+                  NSTableColumn * col = [[NSTableColumn alloc] initWithIdentifier:ident];
+                  [col setWidth:colW];
+                  [[col headerCell] setStringValue:
+                     [[NSString alloc] initWithBytes:src length:len encoding:NSUTF8StringEncoding]];
+                  [tv addTableColumn:col];
+               }
+               src = sep ? sep + 1 : NULL;
+            }
+         }
+
+         /* Apply nClrPane if set before view creation */
+         if( FClrPane != 0xFFFFFFFF && FBgColor ) {
+            [tv setBackgroundColor:FBgColor];
             [sv setDrawsBackground:YES];
             [sv setBackgroundColor:FBgColor];
             [[sv contentView] setDrawsBackground:YES];
@@ -1818,7 +2052,10 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
    else if( strcasecmp( event, "OnChange" ) == 0 )  ppTarget = &FOnChange;
    else if( strcasecmp( event, "OnInit" ) == 0 )    ppTarget = &FOnInit;
    else if( strcasecmp( event, "OnClose" ) == 0 )   ppTarget = &FOnClose;
-   else if( strcasecmp( event, "OnTimer" ) == 0 )   ppTarget = &FOnTimer;
+   else if( strcasecmp( event, "OnTimer" ) == 0 )       ppTarget = &FOnTimer;
+   else if( strcasecmp( event, "OnNavigate" ) == 0 )    ppTarget = &FOnNavigate;
+   else if( strcasecmp( event, "OnLoad" ) == 0 )        ppTarget = &FOnLoadFinish;
+   else if( strcasecmp( event, "OnError" ) == 0 )       ppTarget = &FOnLoadError;
    /* Form-specific events */
    else if( FControlType == CT_FORM ) {
       HBForm * f = (HBForm *)self;
@@ -1867,7 +2104,12 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
    if( FOnChange ) { hb_itemRelease( FOnChange ); FOnChange = NULL; }
    if( FOnInit )   { hb_itemRelease( FOnInit );   FOnInit = NULL; }
    if( FOnClose )  { hb_itemRelease( FOnClose );  FOnClose = NULL; }
-   if( FOnTimer )  { hb_itemRelease( FOnTimer );  FOnTimer = NULL; }
+   if( FOnTimer )       { hb_itemRelease( FOnTimer );       FOnTimer = NULL; }
+   if( FOnNavigate )    { hb_itemRelease( FOnNavigate );    FOnNavigate = NULL; }
+   if( FOnLoadFinish )  { hb_itemRelease( FOnLoadFinish );  FOnLoadFinish = NULL; }
+   if( FOnLoadError )   { hb_itemRelease( FOnLoadError );   FOnLoadError = NULL; }
+   FWebViewDelegate = nil;
+   FPendingRowData = nil;
    [self stopTimer];
 }
 
@@ -2551,11 +2793,8 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
          }
       }
 
-      /* Select the new control */
-      targetForm->FSelCount = 1;
-      targetForm->FSelected[0] = ctrl;
-
-      /* Fire OnComponentDrop callback */
+      /* Fire OnComponentDrop callback first so InspectorPopulateCombo runs
+       * before we fire notifySelChange (which drives INS_ComboSelect). */
       if( targetForm->FOnComponentDrop &&
           HB_IS_BLOCK( targetForm->FOnComponentDrop ) )
       {
@@ -2569,6 +2808,9 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
          hb_vmPushInteger( 32 );
          hb_vmSend( 6 );
       }
+
+      /* Select after OnComponentDrop so combobox already has the new entry */
+      [targetForm selectControl:ctrl add:NO];
 
       if( targetForm->FOverlayView )
          [targetForm->FOverlayView setNeedsDisplay:YES];
@@ -2681,6 +2923,7 @@ static HBPaletteTarget * s_palTarget = nil;
       if( form->FSelCount == 1 && form->FSelected[0]->FAutoPage ) {
          return;
       }
+      UndoPushSnapshot( form );   /* save state before resize/drag */
       /* Block resize for non-visual components (32x32 fixed) */
       if( form->FSelCount == 1 &&
           form->FSelected[0]->FWidth == 32 && form->FSelected[0]->FHeight == 32 )
@@ -2734,6 +2977,8 @@ static HBPaletteTarget * s_palTarget = nil;
             [form selectControl:hit add:YES];
       } else {
          if( ![form isSelected:hit] ) [form selectControl:hit add:NO];
+         else [form notifySelChange];   /* re-fire so inspector refreshes */
+         UndoPushSnapshot( form );   /* save state before drag-move */
          form->FDragging = YES;
          form->FDragStartX = (int)pt.x; form->FDragStartY = (int)pt.y;
       }
@@ -3327,6 +3572,11 @@ static HBPaletteTarget * s_palTarget = nil;
          [FContentView addSubview:grid];
       }
       [self createAllChildren];
+      if( !FDesignMode ) {
+         [self loadAllDBGrids];
+         ApplyDockAlign( self );
+      }
+
       if( FDesignMode ) {
          HBOverlayView * ov = [[HBOverlayView alloc] initWithFrame:[FContentView bounds]];
          ov->form = self;
@@ -3403,6 +3653,10 @@ static HBPaletteTarget * s_palTarget = nil;
    [FWindow setContentView:FContentView];
 
    [self createAllChildren];
+   if( !FDesignMode ) {
+      [self loadAllDBGrids];
+      ApplyDockAlign( self );
+   }
 
    if( FDesignMode ) {
       HBOverlayView * ov = [[HBOverlayView alloc] initWithFrame:[FContentView bounds]];
@@ -3498,6 +3752,29 @@ static HBPaletteTarget * s_palTarget = nil;
    CGFloat x = scr.origin.x + ( scr.size.width  - win.size.width  ) / 2;
    CGFloat y = scr.origin.y + ( scr.size.height - win.size.height ) / 2;
    [FWindow setFrameOrigin:NSMakePoint( x, y )];
+}
+
+/* Recursive helper: flush FPendingRowData for any CT_DBGRID in the subtree. */
+static void FlushPendingDBGrids( HBControl * node )
+{
+   if( !node ) return;
+   if( node->FControlType == CT_DBGRID ) {
+      BrowseData * bd = FindBrowse(node);
+      if( bd && node->FPendingRowData ) {
+         [bd->rowData removeAllObjects];
+         [bd->rowData addObjectsFromArray: node->FPendingRowData];
+         node->FPendingRowData = nil;
+         [bd->tableView reloadData];
+      }
+   }
+   for( int i = 0; i < node->FChildCount; i++ )
+      FlushPendingDBGrids( node->FChildren[i] );
+}
+
+/* Called after createAllChildren: push pending NSMutableArray cache into rowData. */
+- (void)loadAllDBGrids
+{
+   FlushPendingDBGrids( (HBControl *)self );
 }
 
 - (void)createAllChildren
@@ -3741,6 +4018,8 @@ static HBPaletteTarget * s_palTarget = nil;
       FWidth = (int)fr.size.width;
       FHeight = (int)fr.size.height;
    }
+   ApplyDockAlign( self );
+   if( FDesignMode && FOverlayView ) [(NSView *)FOverlayView setNeedsDisplay:YES];
    if( FOnResize ) [self fireEvent:FOnResize];
 }
 
@@ -3774,10 +4053,12 @@ static HBPaletteTarget * s_palTarget = nil;
 
 @implementation HBBrowseDelegate
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tv {
+    (void)tv;
     if( browseIdx < 0 || browseIdx >= s_nBrowses ) return 0;
-    return [s_browses[browseIdx].rowData count];
+    return (NSInteger)[s_browses[browseIdx].rowData count];
 }
 - (id)tableView:(NSTableView *)tv objectValueForTableColumn:(NSTableColumn *)col row:(NSInteger)row {
+    (void)tv;
     if( browseIdx < 0 || browseIdx >= s_nBrowses ) return @"";
     BrowseData * bd = &s_browses[browseIdx];
     NSInteger colIdx = [[col identifier] integerValue];
@@ -4291,6 +4572,153 @@ HB_FUNC( UI_BROWSENEW )
    if( pForm ) [pForm addChild:p]; RetCtrl( p );
 }
 
+/* UI_DBGridNew( hForm, nLeft, nTop, nWidth, nHeight ) --> hDBGrid */
+HB_FUNC( UI_DBGRIDNEW )
+{
+   HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
+   p->FControlType = CT_DBGRID;
+   strcpy( p->FClassName, "TDBGrid" );
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) [pForm addChild:p]; RetCtrl( p );
+}
+
+HB_FUNC( UI_DATETIMEPICKERNEW )
+{
+   HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
+   p->FControlType = CT_DATETIMEPICKER; p->FWidth = 186; p->FHeight = 24;
+   strcpy( p->FClassName, "TDateTimePicker" );
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) [pForm addChild:p]; RetCtrl( p );
+}
+
+HB_FUNC( UI_MONTHCALENDARNEW )
+{
+   HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
+   p->FControlType = CT_MONTHCALENDAR; p->FWidth = 227; p->FHeight = 155;
+   strcpy( p->FClassName, "TMonthCalendar" );
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) [pForm addChild:p]; RetCtrl( p );
+}
+
+/* -----------------------------------------------------------------------
+ * TWebView HB_FUNCs
+ * ----------------------------------------------------------------------- */
+
+/* UI_WebViewNew( hForm, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_WEBVIEWNEW )
+{
+   HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
+   p->FControlType = CT_WEBVIEW; p->FWidth = 320; p->FHeight = 240;
+   strcpy( p->FClassName, "TWebView" );
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) [pForm addChild:p]; RetCtrl( p );
+}
+
+/* UI_WebViewLoad( hCtrl, cURL ) — navigate to URL */
+HB_FUNC( UI_WEBVIEWLOAD )
+{
+   HBControl * p = GetCtrl(1);
+   const char * cUrl = hb_parc(2);
+   if( !p || !cUrl ) return;
+   strncpy( p->FUrl, cUrl, sizeof(p->FUrl) - 1 );
+   WKWebView * wv = (WKWebView *)p->FView;
+   if( ![wv isKindOfClass:[WKWebView class]] ) return;
+   NSString * s = [NSString stringWithUTF8String:cUrl];
+   NSURL * url = [NSURL URLWithString:s];
+   if( !url || !url.scheme ) url = [NSURL fileURLWithPath:s];
+   [wv loadRequest:[NSURLRequest requestWithURL:url]];
+}
+
+/* UI_WebViewLoadHTML( hCtrl, cHTML, [cBaseURL] ) — load raw HTML */
+HB_FUNC( UI_WEBVIEWLOADHTML )
+{
+   HBControl * p = GetCtrl(1);
+   const char * cHtml = hb_parc(2);
+   if( !p || !cHtml ) return;
+   WKWebView * wv = (WKWebView *)p->FView;
+   if( ![wv isKindOfClass:[WKWebView class]] ) return;
+   NSString * html = [NSString stringWithUTF8String:cHtml];
+   NSURL * base = nil;
+   if( HB_ISCHAR(3) )
+      base = [NSURL URLWithString:[NSString stringWithUTF8String:hb_parc(3)]];
+   [wv loadHTMLString:html baseURL:base];
+}
+
+/* UI_WebViewGoBack( hCtrl ) */
+HB_FUNC( UI_WEBVIEWGOBACK )
+{
+   HBControl * p = GetCtrl(1);
+   WKWebView * wv = p ? (WKWebView *)p->FView : nil;
+   if( [wv isKindOfClass:[WKWebView class]] ) [wv goBack];
+}
+
+/* UI_WebViewGoForward( hCtrl ) */
+HB_FUNC( UI_WEBVIEWGOFORWARD )
+{
+   HBControl * p = GetCtrl(1);
+   WKWebView * wv = p ? (WKWebView *)p->FView : nil;
+   if( [wv isKindOfClass:[WKWebView class]] ) [wv goForward];
+}
+
+/* UI_WebViewReload( hCtrl ) */
+HB_FUNC( UI_WEBVIEWRELOAD )
+{
+   HBControl * p = GetCtrl(1);
+   WKWebView * wv = p ? (WKWebView *)p->FView : nil;
+   if( [wv isKindOfClass:[WKWebView class]] ) [wv reload];
+}
+
+/* UI_WebViewStop( hCtrl ) */
+HB_FUNC( UI_WEBVIEWSTOP )
+{
+   HBControl * p = GetCtrl(1);
+   WKWebView * wv = p ? (WKWebView *)p->FView : nil;
+   if( [wv isKindOfClass:[WKWebView class]] ) [wv stopLoading];
+}
+
+/* UI_WebViewEvaluateJS( hCtrl, cScript ) — fire-and-forget */
+HB_FUNC( UI_WEBVIEWEVALUATEJS )
+{
+   HBControl * p = GetCtrl(1);
+   const char * cScript = hb_parc(2);
+   WKWebView * wv = p ? (WKWebView *)p->FView : nil;
+   if( ![wv isKindOfClass:[WKWebView class]] || !cScript ) return;
+   NSString * script = [NSString stringWithUTF8String:cScript];
+   [wv evaluateJavaScript:script completionHandler:nil];
+}
+
+/* UI_WebViewGetURL( hCtrl ) --> cURL */
+HB_FUNC( UI_WEBVIEWGETURL )
+{
+   HBControl * p = GetCtrl(1);
+   WKWebView * wv = p ? (WKWebView *)p->FView : nil;
+   if( [wv isKindOfClass:[WKWebView class]] ) {
+      NSString * url = wv.URL.absoluteString;
+      hb_retc( url ? [url UTF8String] : "" );
+   } else
+      hb_retc( p ? p->FUrl : "" );
+}
+
+/* UI_WebViewCanGoBack( hCtrl ) --> lBool */
+HB_FUNC( UI_WEBVIEWCANGOBACK )
+{
+   HBControl * p = GetCtrl(1);
+   WKWebView * wv = p ? (WKWebView *)p->FView : nil;
+   hb_retl( [wv isKindOfClass:[WKWebView class]] && [wv canGoBack] );
+}
+
+/* UI_WebViewCanGoForward( hCtrl ) --> lBool */
+HB_FUNC( UI_WEBVIEWCANGOFORWARD )
+{
+   HBControl * p = GetCtrl(1);
+   WKWebView * wv = p ? (WKWebView *)p->FView : nil;
+   hb_retl( [wv isKindOfClass:[WKWebView class]] && [wv canGoForward] );
+}
+
 /* UI_BrowseAddCol( hBrowse, cTitle, cField, nWidth, nAlign ) --> nColIdx */
 HB_FUNC( UI_BROWSEADDCOL )
 {
@@ -4503,6 +4931,49 @@ HB_FUNC( UI_BROWSEREFRESH )
    BrowseData * bd = p ? FindBrowse(p) : NULL;
    if( bd && bd->tableView ) [bd->tableView reloadData];
 }
+
+/* UI_DBGridSetDataBlock( hGrid, nRows, bGetCell )
+   Stores {|nRow,nCol| cValue} block; does NOT call reloadData yet.
+   Call UI_DBGridFetch afterwards to populate rowData and schedule refresh. */
+/* UI_DBGridSetCache( hGrid, aRows )
+   aRows: Harbour array of arrays of strings — {{"v11","v12",...}, {"v21",...}, ...}
+   Converts to NSMutableArray and stores on HBControl (safe before createViewInParent:).
+   Also pushes straight into rowData if BrowseData already exists (Refresh path). */
+HB_FUNC( UI_DBGRIDSETCACHE )
+{
+   HBControl * p = GetCtrl(1);
+   PHB_ITEM    aRows = hb_param( 2, HB_IT_ARRAY );
+   if( !p || !aRows ) return;
+
+   HB_SIZE nRows = hb_arrayLen( aRows );
+   NSMutableArray * cache = [[NSMutableArray alloc] initWithCapacity:(NSUInteger)nRows];
+
+   for( HB_SIZE r = 0; r < nRows; r++ ) {
+      PHB_ITEM aRow = hb_arrayGetItemPtr( aRows, r + 1 );
+      HB_SIZE  nCols = aRow ? hb_arrayLen( aRow ) : 0;
+      NSMutableArray * rowArr = [[NSMutableArray alloc] initWithCapacity:(NSUInteger)nCols];
+      for( HB_SIZE c = 0; c < nCols; c++ ) {
+         const char * sz = hb_arrayGetCPtr( aRow, c + 1 );
+         [rowArr addObject: sz ? [NSString stringWithUTF8String:sz] : @""];
+      }
+      [cache addObject:rowArr];
+   }
+
+   p->FPendingRowData = cache;
+
+   /* If BrowseData already exists (Refresh after show), update it directly */
+   BrowseData * bd = FindBrowse(p);
+   if( bd ) {
+      [bd->rowData removeAllObjects];
+      [bd->rowData addObjectsFromArray:cache];
+      p->FPendingRowData = nil;
+      NSTableView * tv = bd->tableView;
+      dispatch_async( dispatch_get_main_queue(), ^{ [tv reloadData]; });
+   }
+}
+
+/* UI_DBGridFetch — kept as no-op for backward compat; Refresh() uses UI_DBGridSetCache */
+HB_FUNC( UI_DBGRIDFETCH ) { (void)hb_param(1,HB_IT_ANY); }
 
 /* UI_BrowseOnEvent( hBrowse, cEvent, bBlock ) */
 HB_FUNC( UI_BROWSEONEVENT )
@@ -4776,6 +5247,29 @@ HB_FUNC( UI_SETPROP )
          if( img ) [(NSImageView *)p->FView setImageScaling:NSImageScaleProportionallyUpOrDown];
       }
    }
+   else if( strcasecmp(szProp,"nControlAlign")==0 && HB_ISNUM(3) )
+   {
+      p->FDockAlign = hb_parni(3);
+      /* Immediately apply if form is already visible */
+      if( p->FCtrlParent && [p->FCtrlParent isKindOfClass:[HBForm class]] ) {
+         HBForm * pf = (HBForm *)p->FCtrlParent;
+         ApplyDockAlign( pf );
+         if( pf->FOverlayView ) [(NSView *)pf->FOverlayView setNeedsDisplay:YES];
+      }
+   }
+   else if( p->FControlType == CT_WEBVIEW && strcasecmp(szProp,"cUrl")==0 )
+   {
+      if( HB_ISCHAR(3) ) {
+         strncpy( p->FUrl, hb_parc(3), sizeof(p->FUrl)-1 );
+         WKWebView * wv = (WKWebView *)p->FView;
+         if( [wv isKindOfClass:[WKWebView class]] && p->FUrl[0] ) {
+            NSString * s = [NSString stringWithUTF8String:p->FUrl];
+            NSURL * url = [NSURL URLWithString:s];
+            if( !url || !url.scheme ) url = [NSURL fileURLWithPath:s];
+            [wv loadRequest:[NSURLRequest requestWithURL:url]];
+         }
+      }
+   }
    else if( p->FControlType == CT_SCENE3D &&
             ( strcasecmp(szProp,"cSceneFile")==0 || strcasecmp(szProp,"cPicture")==0 ) )
    {
@@ -5026,7 +5520,7 @@ HB_FUNC( UI_SETPROP )
       }
 
       /* For Browse controls, create/update NSTableView columns immediately */
-      if( p->FControlType == CT_BROWSE )
+      if( p->FControlType == CT_BROWSE || p->FControlType == CT_DBGRID )
       {
          BrowseData * bd = FindBrowse( p );
          if( bd && bd->tableView )
@@ -5225,11 +5719,169 @@ HB_FUNC( UI_SETPROP )
       strncpy( p->FData, hb_parc(3), sizeof(p->FData)-1 );
    else if( strcasecmp(szProp,"cDataSource")==0 && HB_ISCHAR(3) )
       strncpy( p->FDataSource, hb_parc(3), sizeof(p->FDataSource)-1 );
+   else if( strcasecmp(szProp,"oDataSource")==0 && p->FControlType == CT_DBGRID ) {
+      if( HB_ISCHAR(3) ) {
+         /* Called from code restore: store name directly */
+         strncpy( p->FDataSource, hb_parc(3), sizeof(p->FDataSource)-1 );
+      } else if( HB_ISNUM(3) ) {
+         /* Called from inspector dropdown: resolve index → datasource name */
+         int selIdx = hb_parni(3);
+         if( selIdx == 0 ) {
+            p->FDataSource[0] = 0;  /* (none) */
+         } else {
+            HBControl * form = p->FCtrlParent;
+            if( form ) {
+               int dsCount = 0;
+               for( int _i = 0; _i < form->FChildCount; _i++ ) {
+                  HBControl * ch = form->FChildren[_i];
+                  int ct = ch->FControlType;
+                  if( (ct >= CT_DBFTABLE && ct <= CT_MONGODB) || ct == CT_COMPARRAY ) {
+                     dsCount++;
+                     if( dsCount == selIdx ) {
+                        strncpy( p->FDataSource, ch->FName, sizeof(p->FDataSource)-1 );
+                        break;
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+   /* --- TDBGrid properties --- */
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"nFixedColor")==0 ) {
+      p->FFixedColor = (unsigned int)hb_parnint(3);
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->tableView ) [bd->tableView setNeedsDisplay:YES];
+   }
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"nSelectedColor")==0 ) {
+      p->FSelectedColor = (unsigned int)hb_parnint(3);
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->tableView ) [bd->tableView setNeedsDisplay:YES];
+   }
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"nGridLineWidth")==0 )
+      p->FGridLineWidth = hb_parni(3);
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"nBorderStyle")==0 ) {
+      p->FGridBorderStyle = hb_parni(3);
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->scrollView )
+         [bd->scrollView setBorderType:(p->FGridBorderStyle == 0) ? NSNoBorder : NSBezelBorder];
+   }
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"nDrawingStyle")==0 )
+      p->FDrawingStyle = hb_parni(3);
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"nAlign")==0 )
+      p->FGridAlign = hb_parni(3);
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"nDefaultRowHeight")==0 ) {
+      p->FDefaultRowHeight = hb_parni(3);
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->tableView ) {
+         [bd->tableView setRowHeight:(CGFloat)p->FDefaultRowHeight];
+         [bd->tableView reloadData];
+      }
+   }
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"nDefaultColWidth")==0 )
+      p->FDefaultColWidth = hb_parni(3);
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lEditing")==0 ) {
+      p->FGridEditing = hb_parl(3);
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->tableView ) [bd->tableView reloadData];
+   }
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lTabs")==0 )
+      p->FGridTabs = hb_parl(3);
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lRowSelect")==0 ) {
+      p->FGridRowSelect = hb_parl(3);
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->tableView ) [bd->tableView setNeedsDisplay:YES];
+   }
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lAlwaysShowSelection")==0 )
+      p->FGridAlwaysShowSel = hb_parl(3);
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lConfirmDelete")==0 )
+      p->FGridConfirmDelete = hb_parl(3);
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lMultiSelect")==0 ) {
+      p->FGridMultiSelect = hb_parl(3);
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->tableView )
+         [bd->tableView setAllowsMultipleSelection:p->FGridMultiSelect];
+   }
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lRowLines")==0 ) {
+      p->FGridRowLines = hb_parl(3);
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->tableView ) {
+         NSTableViewGridLineStyle m = [bd->tableView gridStyleMask];
+         if( p->FGridRowLines ) m |=  NSTableViewSolidHorizontalGridLineMask;
+         else                   m &= ~NSTableViewSolidHorizontalGridLineMask;
+         [bd->tableView setGridStyleMask:m];
+      }
+   }
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lColLines")==0 ) {
+      p->FGridColLines = hb_parl(3);
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->tableView ) {
+         NSTableViewGridLineStyle m = [bd->tableView gridStyleMask];
+         if( p->FGridColLines ) m |=  NSTableViewSolidVerticalGridLineMask;
+         else                   m &= ~NSTableViewSolidVerticalGridLineMask;
+         [bd->tableView setGridStyleMask:m];
+      }
+   }
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lColumnResize")==0 ) {
+      p->FGridColumnResize = hb_parl(3);
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->tableView )
+         [bd->tableView setAllowsColumnResizing:p->FGridColumnResize];
+   }
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lTitleClick")==0 )
+      p->FGridTitleClick = hb_parl(3);
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lTitleHotTrack")==0 )
+      p->FGridTitleHotTrack = hb_parl(3);
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"lReadOnly")==0 ) {
+      p->FGridReadOnly = hb_parl(3);
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->tableView ) [bd->tableView reloadData];
+   }
+   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"aColumns")==0 && HB_ISCHAR(3) ) {
+      strncpy( p->FHeaders, hb_parc(3), sizeof(p->FHeaders)-1 );
+      BrowseData * bd = FindBrowse(p);
+      if( bd && bd->tableView ) {
+         while( [[bd->tableView tableColumns] count] > 0 )
+            [bd->tableView removeTableColumn:[[bd->tableView tableColumns] lastObject]];
+         bd->nColCount = 0;
+         const char * src = p->FHeaders;
+         while( src && *src ) {
+            const char * sep = strchr(src, '|');
+            int len = sep ? (int)(sep - src) : (int)strlen(src);
+            if( len > 0 && bd->nColCount < MAX_BROWSE_COLS ) {
+               int idx = bd->nColCount++;
+               memset(bd->cols[idx].szTitle, 0, 64);
+               if( len > 63 ) len = 63;
+               memcpy(bd->cols[idx].szTitle, src, (size_t)len);
+               bd->cols[idx].nWidth = p->FDefaultColWidth;
+               NSString * ident = [NSString stringWithFormat:@"%d", idx];
+               NSTableColumn * col = [[NSTableColumn alloc] initWithIdentifier:ident];
+               [col setWidth:p->FDefaultColWidth];
+               [[col headerCell] setStringValue:
+                  [[NSString alloc] initWithBytes:src length:len encoding:NSUTF8StringEncoding]];
+               [bd->tableView addTableColumn:col];
+            }
+            src = sep ? sep + 1 : NULL;
+         }
+         [bd->tableView reloadData];
+      }
+   }
    else if( strcasecmp(szProp,"lActive")==0 )
       p->FActive = hb_parl(3);
    else if( strcasecmp(szProp,"nInterval")==0 && p->FControlType == CT_TIMER ) {
       p->FInterval = hb_parni(3);
       if( p->FEnabled && p->FOnTimer ) [p startTimer];
+   }
+   else if( p->FControlType == CT_WEBSERVER ) {
+      if( strcasecmp(szProp,"nPort")==0 )            p->FWSPort = hb_parni(3);
+      else if( strcasecmp(szProp,"nPortSSL")==0 )    p->FWSPortSSL = hb_parni(3);
+      else if( strcasecmp(szProp,"cRoot")==0 )       { strncpy(p->FWSRoot, hb_parc(3), sizeof(p->FWSRoot)-1); }
+      else if( strcasecmp(szProp,"lHTTPS")==0 )      p->FWSHttps = hb_parl(3);
+      else if( strcasecmp(szProp,"lTrace")==0 )      p->FWSTrace = hb_parl(3);
+      else if( strcasecmp(szProp,"nTimeout")==0 )    p->FWSTimeout = hb_parni(3);
+      else if( strcasecmp(szProp,"nMaxUpload")==0 )  p->FWSMaxUpload = hb_parni(3);
+      else if( strcasecmp(szProp,"cSessionCookie")==0 ) { strncpy(p->FWSSessionCookie, hb_parc(3), sizeof(p->FWSSessionCookie)-1); }
+      else if( strcasecmp(szProp,"nSessionTTL")==0 ) p->FWSSessionTTL = hb_parni(3);
    }
    else if( strcasecmp(szProp,"lSizable")==0 && p->FControlType == CT_FORM )
       ((HBForm *)p)->FSizable = hb_parl(3);
@@ -5328,7 +5980,7 @@ HB_FUNC( UI_SETPROP )
             if( ch->FTransparent && ch->FView ) [ch->FView setNeedsDisplay:YES];
          }
       }
-      else if( p->FControlType == CT_BROWSE )
+      else if( p->FControlType == CT_BROWSE || p->FControlType == CT_DBGRID )
       {
          BrowseData * bd = FindBrowse( p );
          if( bd && bd->tableView ) {
@@ -5459,6 +6111,10 @@ HB_FUNC( UI_GETPROP )
             ( p->FControlType==CT_BITBTN || p->FControlType==CT_SPEEDBTN ||
               p->FControlType==CT_IMAGE ) )
       hb_retc( p->FPicture );
+   else if( strcasecmp(szProp,"nControlAlign")==0 )
+      hb_retni( p->FDockAlign );
+   else if( strcasecmp(szProp,"cUrl")==0 && p->FControlType==CT_WEBVIEW )
+      hb_retc( p->FUrl );
    else if( strcasecmp(szProp,"cSceneFile")==0 && p->FControlType==CT_SCENE3D )
       hb_retc( p->FPicture );
    else if( strcasecmp(szProp,"nModalResult")==0 && p->FControlType==CT_BITBTN )
@@ -5510,11 +6166,65 @@ HB_FUNC( UI_GETPROP )
       hb_retc( p->FHeaders );
    else if( strcasecmp(szProp,"aData")==0 )     hb_retc( p->FData );
    else if( strcasecmp(szProp,"cDataSource")==0 ) hb_retc( p->FDataSource );
+   else if( strcasecmp(szProp,"oDataSource")==0 && p->FControlType==CT_DBGRID )
+      hb_retc( p->FDataSource );
+   /* --- TDBGrid GET properties --- */
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"nFixedColor")==0 )
+      hb_retnint( (HB_MAXINT)p->FFixedColor );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"nSelectedColor")==0 )
+      hb_retnint( (HB_MAXINT)p->FSelectedColor );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"nGridLineWidth")==0 )
+      hb_retni( p->FGridLineWidth );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"nBorderStyle")==0 )
+      hb_retni( p->FGridBorderStyle );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"nDrawingStyle")==0 )
+      hb_retni( p->FDrawingStyle );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"nAlign")==0 )
+      hb_retni( p->FGridAlign );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"nDefaultRowHeight")==0 )
+      hb_retni( p->FDefaultRowHeight );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"nDefaultColWidth")==0 )
+      hb_retni( p->FDefaultColWidth );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lEditing")==0 )
+      hb_retl( p->FGridEditing );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lTabs")==0 )
+      hb_retl( p->FGridTabs );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lRowSelect")==0 )
+      hb_retl( p->FGridRowSelect );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lAlwaysShowSelection")==0 )
+      hb_retl( p->FGridAlwaysShowSel );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lConfirmDelete")==0 )
+      hb_retl( p->FGridConfirmDelete );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lMultiSelect")==0 )
+      hb_retl( p->FGridMultiSelect );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lRowLines")==0 )
+      hb_retl( p->FGridRowLines );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lColLines")==0 )
+      hb_retl( p->FGridColLines );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lColumnResize")==0 )
+      hb_retl( p->FGridColumnResize );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lTitleClick")==0 )
+      hb_retl( p->FGridTitleClick );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lTitleHotTrack")==0 )
+      hb_retl( p->FGridTitleHotTrack );
+   else if( p->FControlType==CT_DBGRID && strcasecmp(szProp,"lReadOnly")==0 )
+      hb_retl( p->FGridReadOnly );
    else if( strcasecmp(szProp,"lActive")==0 )   hb_retl( p->FActive );
    else if( strcasecmp(szProp,"lTransparent")==0 ) hb_retl( p->FTransparent );
    else if( strcasecmp(szProp,"nAlign")==0 ) hb_retni( p->nAlign );
    else if( strcasecmp(szProp,"nInterval")==0 && p->FControlType==CT_TIMER )
       hb_retni( p->FInterval );
+   else if( p->FControlType == CT_WEBSERVER ) {
+      if( strcasecmp(szProp,"nPort")==0 )            hb_retni( p->FWSPort );
+      else if( strcasecmp(szProp,"nPortSSL")==0 )    hb_retni( p->FWSPortSSL );
+      else if( strcasecmp(szProp,"cRoot")==0 )       hb_retc( p->FWSRoot );
+      else if( strcasecmp(szProp,"lHTTPS")==0 )      hb_retl( p->FWSHttps );
+      else if( strcasecmp(szProp,"lTrace")==0 )      hb_retl( p->FWSTrace );
+      else if( strcasecmp(szProp,"nTimeout")==0 )    hb_retni( p->FWSTimeout );
+      else if( strcasecmp(szProp,"nMaxUpload")==0 )  hb_retni( p->FWSMaxUpload );
+      else if( strcasecmp(szProp,"cSessionCookie")==0 ) hb_retc( p->FWSSessionCookie );
+      else if( strcasecmp(szProp,"nSessionTTL")==0 ) hb_retni( p->FWSSessionTTL );
+   }
    else if( strcasecmp(szProp,"lSizable")==0 && p->FControlType==CT_FORM )
       hb_retl( ((HBForm *)p)->FSizable );
    else if( strcasecmp(szProp,"lAppBar")==0 && p->FControlType==CT_FORM )
@@ -5681,11 +6391,15 @@ HB_FUNC( UI_GETALLPROPS )
 
    ADD_S("cClassName",p->FClassName,"Info");
    ADD_S("cName",p->FName,"Appearance");
-   ADD_S("cText",p->FText,"Appearance");
+   /* cText is meaningless for non-visual DB components (CT_DBFTABLE..CT_MONGODB) */
+   if( p->FControlType < CT_DBFTABLE || p->FControlType > CT_MONGODB )
+      { ADD_S("cText",p->FText,"Appearance"); }
    ADD_N("nLeft",p->FLeft,"Position"); ADD_N("nTop",p->FTop,"Position");
    ADD_N("nWidth",p->FWidth,"Position"); ADD_N("nHeight",p->FHeight,"Position");
    ADD_L("lVisible",p->FVisible,"Behavior"); ADD_L("lEnabled",p->FEnabled,"Behavior");
    ADD_L("lTabStop",p->FTabStop,"Behavior");
+   if( p->FControlType != CT_FORM )
+      ADD_D("nControlAlign",p->FDockAlign,"alNone|alTop|alBottom|alLeft|alRight|alClient","Layout");
 
    { char sf[192]="System,12";
      if(p->FFont) {
@@ -5778,6 +6492,8 @@ HB_FUNC( UI_GETALLPROPS )
          ADD_D("nMapType", p->FMapType,
             "mtStandard|mtSatellite|mtHybrid|mtMutedStandard", "Appearance"); break;
       }
+      case CT_WEBVIEW:
+         ADD_S("cUrl", p->FUrl, "Data"); break;
       case CT_SCENE3D:
          ADD_P("cSceneFile", p->FPicture, "Data"); break;
       case CT_EARTHVIEW: {
@@ -5816,8 +6532,66 @@ HB_FUNC( UI_GETALLPROPS )
       case CT_BROWSE:
          ADD_A("aColumns",p->FHeaders,"Data");
          ADD_S("cDataSource",p->FDataSource,"Data"); break;
+      case CT_DBGRID: {
+         ADD_A("aColumns",          p->FHeaders,           "Data");
+         /* oDataSource: build dynamic dropdown from DB components on the same form */
+         {
+            HBControl * form = p->FCtrlParent;
+            char dsOpts[1024] = "(none)";
+            int curIdx = 0, dsCount = 0;
+            if( form ) {
+               for( int _i = 0; _i < form->FChildCount; _i++ ) {
+                  HBControl * ch = form->FChildren[_i];
+                  int ct = ch->FControlType;
+                  if( (ct >= CT_DBFTABLE && ct <= CT_MONGODB) || ct == CT_COMPARRAY ) {
+                     dsCount++;
+                     strncat( dsOpts, "|", sizeof(dsOpts)-strlen(dsOpts)-1 );
+                     strncat( dsOpts, ch->FName, sizeof(dsOpts)-strlen(dsOpts)-1 );
+                     if( p->FDataSource[0] && strcasecmp(p->FDataSource, ch->FName) == 0 )
+                        curIdx = dsCount;
+                  }
+               }
+            }
+            char _db[1200];
+            snprintf(_db, sizeof(_db), "%d|%s", curIdx, dsOpts);
+            pRow=hb_itemArrayNew(4); hb_arraySetC(pRow,1,"oDataSource"); hb_arraySetC(pRow,2,_db);
+            hb_arraySetC(pRow,3,"Data"); hb_arraySetC(pRow,4,"D");
+            hb_arrayAdd(pArray,pRow); hb_itemRelease(pRow);
+         }
+         ADD_C("nFixedColor",       p->FFixedColor,        "Appearance");
+         ADD_C("nSelectedColor",    p->FSelectedColor,     "Appearance");
+         ADD_N("nGridLineWidth",    p->FGridLineWidth,     "Appearance");
+         ADD_D("nBorderStyle",      p->FGridBorderStyle,   "bsNone|bsSingle", "Appearance");
+         ADD_D("nDrawingStyle",     p->FDrawingStyle,      "gdsClassic|gdsThemed", "Appearance");
+         ADD_D("nAlign",            p->FGridAlign,         "alNone|alTop|alBottom|alLeft|alRight|alClient", "Position");
+         ADD_N("nDefaultRowHeight", p->FDefaultRowHeight,  "Layout");
+         ADD_N("nDefaultColWidth",  p->FDefaultColWidth,   "Layout");
+         ADD_L("lEditing",          p->FGridEditing,       "Behavior");
+         ADD_L("lTabs",             p->FGridTabs,          "Behavior");
+         ADD_L("lRowSelect",        p->FGridRowSelect,     "Behavior");
+         ADD_L("lAlwaysShowSelection", p->FGridAlwaysShowSel, "Behavior");
+         ADD_L("lConfirmDelete",    p->FGridConfirmDelete, "Behavior");
+         ADD_L("lMultiSelect",      p->FGridMultiSelect,   "Behavior");
+         ADD_L("lRowLines",         p->FGridRowLines,      "Behavior");
+         ADD_L("lColLines",         p->FGridColLines,      "Behavior");
+         ADD_L("lColumnResize",     p->FGridColumnResize,  "Behavior");
+         ADD_L("lTitleClick",       p->FGridTitleClick,    "Behavior");
+         ADD_L("lTitleHotTrack",    p->FGridTitleHotTrack, "Behavior");
+         ADD_L("lReadOnly",         p->FGridReadOnly,      "Behavior"); break;
+      }
       case CT_TIMER:
          ADD_N("nInterval",p->FInterval,"Behavior"); break;
+      case CT_WEBSERVER:
+         ADD_N("nPort",           p->FWSPort,           "Network");
+         ADD_N("nPortSSL",        p->FWSPortSSL,        "Network");
+         ADD_S("cRoot",           p->FWSRoot,           "Data");
+         ADD_L("lHTTPS",          p->FWSHttps,          "Network");
+         ADD_L("lTrace",          p->FWSTrace,          "Behavior");
+         ADD_N("nTimeout",        p->FWSTimeout,        "Network");
+         ADD_N("nMaxUpload",      p->FWSMaxUpload,      "Data");
+         ADD_S("cSessionCookie",  p->FWSSessionCookie,  "Data");
+         ADD_N("nSessionTTL",     p->FWSSessionTTL,     "Data");
+         break;
       case CT_TABCONTROL2:
          ADD_A("aTabs",p->FHeaders,"Behavior"); break;
       case CT_TREEVIEW:
@@ -5936,6 +6710,12 @@ HB_FUNC( UI_GETALLEVENTS )
          ADD_E("OnMouseDown",   0,                     "Mouse");
          ADD_E("OnMouseUp",     0,                     "Mouse");
          ADD_E("OnMouseMove",   0,                     "Mouse");
+         break;
+      case CT_WEBVIEW:
+         ADD_E("OnNavigate",    p->FOnNavigate != NULL,   "Navigation");
+         ADD_E("OnLoad",        p->FOnLoadFinish != NULL, "Navigation");
+         ADD_E("OnError",       p->FOnLoadError != NULL,  "Navigation");
+         ADD_E("OnClick",       p->FOnClick != NULL,      "Mouse");
          break;
       default:
          /* Generic fallback */
@@ -6428,43 +7208,105 @@ HB_FUNC( UI_PALETTELOADIMAGES )
       int flat = 0;
       for( int t = 0; t < pd->nTabCount; t++ ) {
          for( int i = 0; i < pd->tabs[t].nBtnCount; i++ ) {
-            NSString * sym = nil;
+            NSString * sym   = nil;
+            NSColor  * clr   = nil;   /* nil = multicolor / default */
             int ct = pd->tabs[t].btns[i].nControlType;
-            if( ct == CT_MASKEDIT2 ) sym = @"textformat.123";
-            else if( ct == CT_MAP )       sym = @"map.fill";
-            else if( ct == CT_SCENE3D )   sym = @"cube.transparent.fill";
-            else if( ct == CT_EARTHVIEW ) sym = @"globe.americas.fill";
+            if( ct == CT_MASKEDIT2 )           { sym = @"textformat.123";         clr = [NSColor systemBlueColor];   }
+            else if( ct == CT_MAP )            { sym = @"map.fill";               clr = [NSColor systemGreenColor];  }
+            else if( ct == CT_SCENE3D )        { sym = @"cube.transparent.fill";  clr = [NSColor systemPurpleColor]; }
+            else if( ct == CT_EARTHVIEW )      { sym = @"globe.americas.fill";    clr = nil; /* multicolor */        }
+            else if( ct == CT_TIMER )          { sym = @"timer";                  clr = [NSColor systemOrangeColor]; }
+            else if( ct == CT_UPDOWN )         { sym = @"chevron.up.chevron.down"; clr = [NSColor systemIndigoColor];}
+            else if( ct == CT_DATETIMEPICKER ) { sym = @"calendar.badge.clock";   clr = nil; /* multicolor */        }
+            else if( ct == CT_MONTHCALENDAR )  { sym = @"calendar";               clr = [NSColor systemRedColor];    }
+            else if( ct == CT_TRACKBAR )       { sym = @"slider.horizontal.3";    clr = [NSColor systemBlueColor];   }
+            else if( ct == CT_PAINTBOX )       { sym = @"paintpalette.fill";      clr = nil; /* multicolor */        }
+            else if( ct == CT_WEBVIEW )        { sym = @"safari";                 clr = nil; /* multicolor */        }
+            else if( ct == CT_WEBSERVER )      { sym = @"network";                clr = [NSColor systemTealColor];   }
             if( sym && flat < (int)[icons count] ) {
                NSImage * glyph = [NSImage imageWithSystemSymbolName:sym
                   accessibilityDescription:nil];
                if( glyph ) {
+                  /* Apply color configuration on macOS 12+ */
+                  if( @available(macOS 12.0, *) ) {
+                     NSImageSymbolConfiguration * cfg;
+                     if( clr )
+                        cfg = [NSImageSymbolConfiguration
+                               configurationWithHierarchicalColor:clr];
+                     else
+                        cfg = [NSImageSymbolConfiguration
+                               configurationPreferringMulticolor];
+                     glyph = [glyph imageWithSymbolConfiguration:cfg];
+                  } else {
+                     /* macOS 11: monochrome tinted with the chosen color */
+                     glyph = [glyph copy];
+                     [glyph setTemplate:YES];
+                  }
+
                   NSImage * composed = [[NSImage alloc] initWithSize:NSMakeSize(32, 32)];
                   [composed lockFocus];
-                  /* Low-profile light-grey pill, height matches other
-                   * icons' visual weight (~18px) centered vertically. */
-                  CGFloat bgH = 18, bgY = ( 32 - bgH ) / 2.0;
+                  /* Light-grey rounded-rect background */
+                  CGFloat bgH = 22, bgY = (32 - bgH) / 2.0;
                   NSBezierPath * bg = [NSBezierPath bezierPathWithRoundedRect:
-                     NSMakeRect(2, bgY, 28, bgH) xRadius:3 yRadius:3];
-                  [[NSColor colorWithCalibratedWhite:0.92 alpha:1.0] setFill];
+                     NSMakeRect(2, bgY, 28, bgH) xRadius:4 yRadius:4];
+                  [[NSColor colorWithCalibratedWhite:0.93 alpha:1.0] setFill];
                   [bg fill];
-                  [[NSColor colorWithCalibratedWhite:0.60 alpha:1.0] setStroke];
-                  [bg setLineWidth:1.0];
+                  [[NSColor colorWithCalibratedWhite:0.75 alpha:1.0] setStroke];
+                  [bg setLineWidth:0.5];
                   [bg stroke];
-                  /* Glyph centered, height equal to the pill */
+                  /* Symbol centered inside the background */
                   CGFloat gH = bgH - 4;
-                  NSRect gRect = NSMakeRect((32-gH)/2.0, bgY + 2, gH, gH);
-                  NSImage * tinted = [glyph copy];
-                  [tinted setTemplate:YES];
-                  [[NSColor colorWithCalibratedWhite:0.15 alpha:1.0] set];
-                  NSRect srcRect = NSMakeRect(0, 0, [tinted size].width, [tinted size].height);
-                  [tinted drawInRect:gRect fromRect:srcRect
-                     operation:NSCompositingOperationSourceOver fraction:1.0
-                     respectFlipped:YES hints:nil];
+                  NSRect gRect = NSMakeRect((32 - gH) / 2.0, bgY + 2, gH, gH);
+                  if( @available(macOS 12.0, *) ) {
+                     /* Colored image — draw directly, no template */
+                     NSRect srcRect = NSMakeRect(0, 0, [glyph size].width, [glyph size].height);
+                     [glyph drawInRect:gRect fromRect:srcRect
+                        operation:NSCompositingOperationSourceOver fraction:1.0
+                        respectFlipped:YES hints:nil];
+                  } else {
+                     /* macOS 11: use template + color or dark grey */
+                     NSColor * drawClr = clr ? clr : [NSColor colorWithCalibratedWhite:0.15 alpha:1.0];
+                     [drawClr set];
+                     NSRect srcRect = NSMakeRect(0, 0, [glyph size].width, [glyph size].height);
+                     [glyph drawInRect:gRect fromRect:srcRect
+                        operation:NSCompositingOperationSourceOver fraction:1.0
+                        respectFlipped:YES hints:nil];
+                  }
                   [composed unlockFocus];
                   icons[flat] = composed;
                }
             }
             flat++;
+         }
+      }
+   }
+
+   /* Use CT_SQLSERVER icon for all other Data Access components (CT_DBFTABLE..CT_MONGODB) */
+   {
+      NSImage * mssqlIcon = nil;
+      int flat = 0;
+      /* First pass: find the MSSQL Server icon */
+      for( int t = 0; t < pd->nTabCount && !mssqlIcon; t++ ) {
+         for( int i = 0; i < pd->tabs[t].nBtnCount; i++ ) {
+            if( pd->tabs[t].btns[i].nControlType == CT_SQLSERVER ) {
+               if( flat < (int)[icons count] )
+                  mssqlIcon = icons[flat];
+            }
+            flat++;
+         }
+      }
+      /* Second pass: copy to all other Data Access DB components */
+      if( mssqlIcon ) {
+         flat = 0;
+         for( int t = 0; t < pd->nTabCount; t++ ) {
+            for( int i = 0; i < pd->tabs[t].nBtnCount; i++ ) {
+               int ct = pd->tabs[t].btns[i].nControlType;
+               if( ct != CT_SQLSERVER &&
+                   ct >= CT_DBFTABLE && ct <= CT_MONGODB &&
+                   flat < (int)[icons count] )
+                  icons[flat] = mssqlIcon;
+               flat++;
+            }
          }
       }
    }
@@ -7029,13 +7871,21 @@ HB_FUNC( UI_FORMPASTECONTROLS )
          c->FHeight = s_clipboard[i].nHeight;
          strncpy( c->FText, s_clipboard[i].szText, sizeof(c->FText) - 1 );
          [pForm addChild:c];
+         /* Create the actual NSView so the control is visible */
+         if( pForm->FContentView )
+            [c createViewInParent:(NSView *)pForm->FContentView];
          if( pForm->FSelCount < MAX_CHILDREN )
             pForm->FSelected[pForm->FSelCount++] = c;
       }
    }
 
+   /* Bring overlay on top so selection handles draw over the new controls */
    if( pForm->FOverlayView )
+   {
+      [(NSView *)pForm->FOverlayView removeFromSuperview];
+      [(NSView *)pForm->FContentView addSubview:(NSView *)pForm->FOverlayView];
       [(NSView *)pForm->FOverlayView setNeedsDisplay:YES];
+   }
 
    hb_retni( s_clipCount );
 }
@@ -7044,6 +7894,47 @@ HB_FUNC( UI_FORMPASTECONTROLS )
 HB_FUNC( UI_FORMGETCLIPCOUNT )
 {
    hb_retni( s_clipCount );
+}
+
+/* UI_FormSelCount( hForm ) --> nCount — number of selected controls */
+HB_FUNC( UI_FORMSELCOUNT )
+{
+   HBForm * pForm = (__bridge HBForm *)(void *)(HB_PTRUINT) hb_parnint(1);
+   hb_retni( pForm ? pForm->FSelCount : 0 );
+}
+
+/* UI_FormDeleteSelected( hForm ) — delete selected controls from form */
+HB_FUNC( UI_FORMDELETESELECTED )
+{
+   HBForm * pForm = (__bridge HBForm *)(void *)(HB_PTRUINT) hb_parnint(1);
+   if( !pForm || pForm->FSelCount == 0 ) return;
+
+   for( int i = 0; i < pForm->FSelCount; i++ )
+   {
+      HBControl * c = pForm->FSelected[i];
+      /* Remove view from superview */
+      if( c->FView )
+      {
+         [(NSView *)c->FView removeFromSuperview];
+         c->FView = nil;
+      }
+      /* Remove from FChildren array */
+      for( int j = 0; j < pForm->FChildCount; j++ )
+      {
+         if( pForm->FChildren[j] == c )
+         {
+            [s_allControls removeObject:c];
+            pForm->FChildren[j] = pForm->FChildren[--pForm->FChildCount];
+            pForm->FChildren[pForm->FChildCount] = nil;
+            break;
+         }
+      }
+   }
+
+   [pForm clearSelection];
+
+   if( pForm->FOverlayView )
+      [(NSView *)pForm->FOverlayView setNeedsDisplay:YES];
 }
 
 /* -----------------------------------------------------------------------
@@ -7136,17 +8027,38 @@ HB_FUNC( UI_FORMALIGNSELECTED )
          }
          break;
       }
+      case 9: /* Same Width — use first selected control as reference */
+      {
+         int refW = pForm->FSelected[0]->FWidth;
+         for( i = 1; i < n; i++ ) pForm->FSelected[i]->FWidth = refW;
+         break;
+      }
+      case 10: /* Same Height */
+      {
+         int refH = pForm->FSelected[0]->FHeight;
+         for( i = 1; i < n; i++ ) pForm->FSelected[i]->FHeight = refH;
+         break;
+      }
+      case 11: /* Same Size */
+      {
+         int refW = pForm->FSelected[0]->FWidth;
+         int refH = pForm->FSelected[0]->FHeight;
+         for( i = 1; i < n; i++ ) {
+            pForm->FSelected[i]->FWidth  = refW;
+            pForm->FSelected[i]->FHeight = refH;
+         }
+         break;
+      }
    }
 
-   /* Update all views — reposition NSViews to match new FLeft/FTop */
+   /* Update all views — sync NSView frame to match new FLeft/FTop/FWidth/FHeight */
    for( i = 0; i < n; i++ )
    {
       HBControl * c = pForm->FSelected[i];
       if( c->FView )
       {
-         NSRect f = [(NSView *)c->FView frame];
-         f.origin.x = c->FLeft;
-         f.origin.y = c->FTop + pForm->FClientTop;
+         NSRect f = NSMakeRect( c->FLeft, c->FTop + pForm->FClientTop,
+                                c->FWidth, c->FHeight );
          [(NSView *)c->FView setFrame:f];
       }
    }
@@ -7177,6 +8089,79 @@ typedef struct {
 static UNDO_SNAPSHOT s_undoStack[UNDO_MAX_STEPS];
 static int s_undoPos = -1;
 static int s_undoCount = 0;
+
+/* -----------------------------------------------------------------------
+ * Layout: ApplyDockAlign — resize/reposition children by their FDockAlign.
+ * Processes in C++Builder order: Top → Bottom → Left → Right → Client.
+ * Called at runtime after window creation and on every resize.
+ * ----------------------------------------------------------------------- */
+static void ApplyDockAlign( HBForm * form )
+{
+   if( !form || !form->FContentView ) return;
+
+   NSRect bounds = [(NSView *)form->FContentView bounds];
+   int totalW = (int)bounds.size.width;
+   int totalH = (int)bounds.size.height;
+
+   /* Available area in flipped-view coordinates (y=0 is top visually) */
+   int cTop    = form->FClientTop;   /* below toolbars */
+   int cBottom = totalH;
+   int cLeft   = 0;
+   int cRight  = totalW;
+
+   /* Pass 1 — alTop */
+   for( int i = 0; i < form->FChildCount; i++ ) {
+      HBControl * c = form->FChildren[i];
+      if( c->FDockAlign != ALIGN_TOP || c->FAutoPage || !c->FView ) continue;
+      c->FLeft  = cLeft;
+      c->FTop   = cTop - form->FClientTop;
+      c->FWidth = cRight - cLeft;
+      [(NSView*)c->FView setFrame:NSMakeRect(cLeft, cTop, cRight - cLeft, c->FHeight)];
+      cTop += c->FHeight;
+   }
+   /* Pass 2 — alBottom */
+   for( int i = form->FChildCount - 1; i >= 0; i-- ) {
+      HBControl * c = form->FChildren[i];
+      if( c->FDockAlign != ALIGN_BOTTOM || c->FAutoPage || !c->FView ) continue;
+      int vy = cBottom - c->FHeight;
+      c->FLeft  = cLeft;
+      c->FTop   = vy - form->FClientTop;
+      c->FWidth = cRight - cLeft;
+      [(NSView*)c->FView setFrame:NSMakeRect(cLeft, vy, cRight - cLeft, c->FHeight)];
+      cBottom -= c->FHeight;
+   }
+   /* Pass 3 — alLeft */
+   for( int i = 0; i < form->FChildCount; i++ ) {
+      HBControl * c = form->FChildren[i];
+      if( c->FDockAlign != ALIGN_LEFT || c->FAutoPage || !c->FView ) continue;
+      c->FLeft   = cLeft;
+      c->FTop    = cTop - form->FClientTop;
+      c->FHeight = cBottom - cTop;
+      [(NSView*)c->FView setFrame:NSMakeRect(cLeft, cTop, c->FWidth, cBottom - cTop)];
+      cLeft += c->FWidth;
+   }
+   /* Pass 4 — alRight */
+   for( int i = form->FChildCount - 1; i >= 0; i-- ) {
+      HBControl * c = form->FChildren[i];
+      if( c->FDockAlign != ALIGN_RIGHT || c->FAutoPage || !c->FView ) continue;
+      int vx = cRight - c->FWidth;
+      c->FLeft   = vx;
+      c->FTop    = cTop - form->FClientTop;
+      c->FHeight = cBottom - cTop;
+      [(NSView*)c->FView setFrame:NSMakeRect(vx, cTop, c->FWidth, cBottom - cTop)];
+      cRight -= c->FWidth;
+   }
+   /* Pass 5 — alClient (fills remaining area) */
+   for( int i = 0; i < form->FChildCount; i++ ) {
+      HBControl * c = form->FChildren[i];
+      if( c->FDockAlign != ALIGN_CLIENT || c->FAutoPage || !c->FView ) continue;
+      c->FLeft   = cLeft;
+      c->FTop    = cTop - form->FClientTop;
+      c->FWidth  = cRight - cLeft;
+      c->FHeight = cBottom - cTop;
+      [(NSView*)c->FView setFrame:NSMakeRect(cLeft, cTop, cRight - cLeft, cBottom - cTop)];
+   }
+}
 
 static void UndoPushSnapshot( HBForm * pForm )
 {
@@ -7220,6 +8205,12 @@ static void UndoRestoreSnapshot( HBForm * pForm, UNDO_SNAPSHOT * snap )
       [(NSView *)pForm->FOverlayView setNeedsDisplay:YES];
 }
 
+/* UI_FormUndoCount() — how many design undo steps are available */
+HB_FUNC( UI_FORMUNDOCOUNT )
+{
+   hb_retni( s_undoCount );
+}
+
 /* UI_FormUndoPush( hForm ) — save state before operation */
 HB_FUNC( UI_FORMUNDOPUSH )
 {
@@ -7232,10 +8223,12 @@ HB_FUNC( UI_FORMUNDO )
 {
    HBForm * pForm = (__bridge HBForm *)(void *)(HB_PTRUINT) hb_parnint(1);
    if( !pForm || s_undoCount <= 0 ) return;
+   /* Restore from the snapshot at s_undoPos (saved BEFORE the last operation),
+      then retreat the pointer so the next undo goes one step further back. */
+   UndoRestoreSnapshot( pForm, &s_undoStack[s_undoPos] );
    s_undoPos--;
    if( s_undoPos < 0 ) s_undoPos = UNDO_MAX_STEPS - 1;
    s_undoCount--;
-   UndoRestoreSnapshot( pForm, &s_undoStack[s_undoPos] );
 }
 
 
@@ -7686,19 +8679,6 @@ HB_FUNC( UI_HTTPPOST )
                        url, body ? (int)strlen(body) : 0 );
    else buf[0] = 0;
    hb_retc( buf );
-}
-
-/* UI_WebServerStart( nPort ) --> lSuccess */
-HB_FUNC( UI_WEBSERVERSTART )
-{
-   /* Placeholder */
-   hb_retl( HB_TRUE );
-}
-
-/* UI_WebServerStop() */
-HB_FUNC( UI_WEBSERVERSTOP )
-{
-   /* Placeholder */
 }
 
 /* ======================================================================

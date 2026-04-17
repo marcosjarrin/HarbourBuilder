@@ -1,7 +1,17 @@
+// Project1.prg
+//--------------------------------------------------------------------
 #include "hbbuilder.ch"
+//--------------------------------------------------------------------
 
-function main()
-   local oApp := TApplication():New()
-   local oForm := Form1():New()
+PROCEDURE Main()
+
+   local oApp
+
+   oApp := TApplication():New()
+   oApp:Title := "WebServer Demo"
+   oApp:CreateForm( TForm1():New() )
    oApp:Run()
-return nil
+
+return
+//--------------------------------------------------------------------
+

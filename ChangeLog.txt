@@ -1,6 +1,40 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-17 (macOS: TWebServer component — embedded HTTP server)
+
+  FEATURES
+  - TWebServer non-visual component (CT_WEBSERVER = 71) with embedded HTTP
+    server using BSD sockets + GCD. Drop from palette, configure nPort /
+    cRoot / lTrace in Inspector, wire OnStart / OnStop / OnError events,
+    call :Start() / :Stop() from code.
+  - HIX runtime (hix_runtime.prg): U* functions compatible with the HIX web
+    framework — UGet, UPost, UWrite, UView, UUrlEncode/Decode, UHtmlEncode,
+    UServer, USetStatusCode, UAddHeader, ULink, ULoadHtml, UExecutePrg, etc.
+  - HIX template engine (hix_template.prg): lightweight server-side templates
+    with {{ expr }}, @args, @foreach/@endforeach, @if/@else/@endif directives.
+  - TWebServer:AddRoute(cMethod, cPath, bHandler) for GET/POST routes;
+    unmatched paths fall back to static file serving from cRoot.
+  - SF Symbol "network" (teal) as the TWebServer palette icon.
+  - Inspector integration: nPort, nPortSSL, cRoot, lHTTPS, lTrace, nTimeout,
+    nMaxUpload, cSessionCookie, nSessionTTL (Network/Data/Behavior categories)
+    and OnStart, OnStop, OnError events.
+  - HB_CreateComponent handles CT_WEBSERVER so the COMPONENT keyword works
+    in generated CreateForm() code.
+  - Enabled ACCESS/ASSIGN added to TControl so all controls support :Enabled.
+
+  FIXES
+  - Non-visual component drop: selectControl: fires after OnComponentDrop so
+    InspectorPopulateCombo runs first — combobox correctly selects new item.
+  - Clicking an already-selected non-visual component re-fires notifySelChange
+    so Inspector and combobox update correctly.
+
+  SAMPLES
+  - samples/projects/webserver: TWebServer demo — Start/Stop, embedded
+    WebView, "Open in Browser" button, /api/time and /api/echo routes.
+  - samples/projects/hix_app: MVC web app using HIX-style controllers and
+    HTML templates.
+
 2026-04-17 (win: fix link errors for WebView, DateTimePicker, MonthCalendar, DbGrid)
 
   FIXES

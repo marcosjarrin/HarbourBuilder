@@ -281,6 +281,14 @@
       <oCtrl> := TMemo():New( <oParent>, <cVar>, <nLeft>, <nTop>, <nWidth>, <nHeight> )
 
 // Browse
+#xcommand @ <nTop>, <nLeft> WEBVIEW <oCtrl> ;
+      [ OF <oParent> ] ;
+      [ SIZE <nWidth>, <nHeight> ] ;
+      [ URL <cURL> ] ;
+   => ;
+      <oCtrl> := TWebView():New( <oParent>, <nLeft>, <nTop>, <nWidth>, <nHeight> ) ;
+      [; <oCtrl>:Navigate( <cURL> ) ]
+
 #xcommand @ <nTop>, <nLeft> TREEVIEW <oCtrl> ;
       [ OF <oParent> ] ;
       [ SIZE <nWidth>, <nHeight> ] ;
@@ -288,6 +296,18 @@
    => ;
       <oCtrl> := TTreeView():New( <oParent>, <nLeft>, <nTop>, <nWidth>, <nHeight> ) ;
       [; <oCtrl>:SetItems( \{ <items> \} ) ]
+
+#xcommand @ <nTop>, <nLeft> DATETIMEPICKER <oCtrl> ;
+      [ OF <oParent> ] ;
+      [ SIZE <nWidth>, <nHeight> ] ;
+   => ;
+      <oCtrl> := TDateTimePicker():New( <oParent>, <nLeft>, <nTop>, <nWidth>, <nHeight> )
+
+#xcommand @ <nTop>, <nLeft> MONTHCALENDAR <oCtrl> ;
+      [ OF <oParent> ] ;
+      [ SIZE <nWidth>, <nHeight> ] ;
+   => ;
+      <oCtrl> := TMonthCalendar():New( <oParent>, <nLeft>, <nTop>, <nWidth>, <nHeight> )
 
 #xcommand @ <nTop>, <nLeft> FOLDER <oCtrl> ;
       [ OF <oParent> ] ;
@@ -309,6 +329,15 @@
       [; <oCtrl>:SetColSizes( \{ <sizes> \} ) ] ;
       [; <oCtrl>:SetFooters( \{ <ftrs> \} ) ]
 
+// DBGrid
+#xcommand @ <nTop>, <nLeft> DBGRID <oCtrl> ;
+      [ OF <oParent> ] ;
+      [ SIZE <nWidth>, <nHeight> ] ;
+      [ HEADERS <hdrs,...> ] ;
+   => ;
+      <oCtrl> := TDBGrid():New( <oParent>, <nLeft>, <nTop>, <nWidth>, <nHeight> ) ;
+      [; <oCtrl>:SetupColumns( \{ <hdrs> \} ) ]
+
 // CheckBox
 #xcommand @ <nTop>, <nLeft> CHECKBOX <oCtrl> ;
       PROMPT <cText> ;
@@ -322,11 +351,11 @@
 // ComboBox
 #xcommand @ <nTop>, <nLeft> COMBOBOX <oCtrl> ;
       [ OF <oParent> ] ;
-      [ ITEMS <aItems> ] ;
       [ SIZE <nWidth> [, <nHeight>] ] ;
+      [ ITEMS <items,...> ] ;
    => ;
       <oCtrl> := TComboBox():New( <oParent>, <nLeft>, <nTop>, <nWidth>, <nHeight> ) ;
-      [; <oCtrl>:FillItems( <aItems> ) ]
+      [; <oCtrl>:FillItems( \{ <items> \} ) ]
 
 // RadioButton
 #xcommand @ <nTop>, <nLeft> RADIOBUTTON <oCtrl> ;

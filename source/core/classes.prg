@@ -36,6 +36,9 @@ CLASS TControl
    ACCESS Text      INLINE UI_GetProp( ::hCpp, "cText" )
    ASSIGN Text( c ) INLINE UI_SetProp( ::hCpp, "cText", c )
 
+   ACCESS Enabled        INLINE UI_GetProp( ::hCpp, "lEnabled" )
+   ASSIGN Enabled( l )   INLINE UI_SetProp( ::hCpp, "lEnabled", l )
+
    ASSIGN OnClick( b )  INLINE UI_OnEvent( ::hCpp, "OnClick", b )
    ASSIGN OnChange( b ) INLINE UI_OnEvent( ::hCpp, "OnChange", b )
    ASSIGN OnClose( b )  INLINE UI_OnEvent( ::hCpp, "OnClose", b )
@@ -3418,6 +3421,7 @@ function HB_CreateComponent( nType, oParent )
             oComp:hCpp := UI_TimerNew( oParent:hCpp, 1000 )
          endif
          return oComp
+      case nType == CT_WEBSERVER;  return TWebServer():New()
    endcase
 return nil
 

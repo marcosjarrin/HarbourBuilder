@@ -36,6 +36,9 @@ CLASS TControl
    ACCESS Text      INLINE UI_GetProp( ::hCpp, "cText" )
    ASSIGN Text( c ) INLINE UI_SetProp( ::hCpp, "cText", c )
 
+   ACCESS Enabled        INLINE UI_GetProp( ::hCpp, "lEnabled" )
+   ASSIGN Enabled( l )   INLINE UI_SetProp( ::hCpp, "lEnabled", l )
+
    ASSIGN OnClick( b )  INLINE UI_OnEvent( ::hCpp, "OnClick", b )
    ASSIGN OnChange( b ) INLINE UI_OnEvent( ::hCpp, "OnChange", b )
    ASSIGN OnClose( b )  INLINE UI_OnEvent( ::hCpp, "OnClose", b )
@@ -58,6 +61,9 @@ CLASS TControl
 
    ACCESS nAlign           INLINE UI_GetProp( ::hCpp, "nAlign" )
    ASSIGN nAlign( n )      INLINE UI_SetProp( ::hCpp, "nAlign", n )
+
+   ACCESS ControlAlign     INLINE UI_GetProp( ::hCpp, "nControlAlign" )
+   ASSIGN ControlAlign( n ) INLINE UI_SetProp( ::hCpp, "nControlAlign", n )
 
    // TPageControl ownership
    ASSIGN oOwner( o )      INLINE UI_SetCtrlOwner( ::hCpp, ;
@@ -890,6 +896,110 @@ return Self
 
 //----------------------------------------------------------------------------//
 
+CLASS TWebView INHERIT TControl
+
+   DATA cUrl    INIT ""
+
+   METHOD New( oParent, nLeft, nTop, nWidth, nHeight )
+   METHOD Navigate( cUrl )
+   METHOD LoadHTML( cHTML, cBaseUrl )
+   METHOD GoBack()
+   METHOD GoForward()
+   METHOD Reload()
+   METHOD Stop()
+   METHOD EvaluateJS( cScript )
+   METHOD GetUrl()
+   METHOD CanGoBack()
+   METHOD CanGoForward()
+
+ENDCLASS
+
+METHOD New( oParent, nLeft, nTop, nWidth, nHeight ) CLASS TWebView
+
+   if nWidth  == nil; nWidth  := 320; endif
+   if nHeight == nil; nHeight := 240; endif
+
+   ::oParent := oParent
+   ::hCpp := UI_WebViewNew( oParent:hCpp, nLeft, nTop, nWidth, nHeight )
+
+return Self
+
+METHOD Navigate( cUrl ) CLASS TWebView
+   ::cUrl := cUrl
+   UI_WebViewLoad( ::hCpp, cUrl )
+return Self
+
+METHOD LoadHTML( cHTML, cBaseUrl ) CLASS TWebView
+   UI_WebViewLoadHTML( ::hCpp, cHTML, cBaseUrl )
+return Self
+
+METHOD GoBack() CLASS TWebView
+   UI_WebViewGoBack( ::hCpp )
+return Self
+
+METHOD GoForward() CLASS TWebView
+   UI_WebViewGoForward( ::hCpp )
+return Self
+
+METHOD Reload() CLASS TWebView
+   UI_WebViewReload( ::hCpp )
+return Self
+
+METHOD Stop() CLASS TWebView
+   UI_WebViewStop( ::hCpp )
+return Self
+
+METHOD EvaluateJS( cScript ) CLASS TWebView
+   UI_WebViewEvaluateJS( ::hCpp, cScript )
+return Self
+
+METHOD GetUrl() CLASS TWebView
+return UI_WebViewGetUrl( ::hCpp )
+
+METHOD CanGoBack() CLASS TWebView
+return UI_WebViewCanGoBack( ::hCpp )
+
+METHOD CanGoForward() CLASS TWebView
+return UI_WebViewCanGoForward( ::hCpp )
+
+//----------------------------------------------------------------------------//
+
+CLASS TDateTimePicker INHERIT TControl
+
+   METHOD New( oParent, nLeft, nTop, nWidth, nHeight )
+
+ENDCLASS
+
+METHOD New( oParent, nLeft, nTop, nWidth, nHeight ) CLASS TDateTimePicker
+
+   if nWidth  == nil; nWidth  := 186; endif
+   if nHeight == nil; nHeight := 24;  endif
+
+   ::oParent := oParent
+   ::hCpp := UI_DateTimePickerNew( oParent:hCpp, nLeft, nTop, nWidth, nHeight )
+
+return Self
+
+//----------------------------------------------------------------------------//
+
+CLASS TMonthCalendar INHERIT TControl
+
+   METHOD New( oParent, nLeft, nTop, nWidth, nHeight )
+
+ENDCLASS
+
+METHOD New( oParent, nLeft, nTop, nWidth, nHeight ) CLASS TMonthCalendar
+
+   if nWidth  == nil; nWidth  := 227; endif
+   if nHeight == nil; nHeight := 155; endif
+
+   ::oParent := oParent
+   ::hCpp := UI_MonthCalendarNew( oParent:hCpp, nLeft, nTop, nWidth, nHeight )
+
+return Self
+
+//----------------------------------------------------------------------------//
+
 CLASS TBrowse INHERIT TControl
 
    DATA aColumns    INIT {}         // Array of TBrwColumn objects
@@ -1039,6 +1149,146 @@ METHOD LoadFromDataSource( oForm ) CLASS TBrowse
       endif
    endif
 
+return Self
+
+//----------------------------------------------------------------------------//
+// TDBGrid - Database-aware grid control
+//----------------------------------------------------------------------------//
+
+CLASS TDBGrid INHERIT TControl
+
+   DATA aColumns      INIT {}
+   DATA oDataSource   INIT ""
+   DATA oForm         INIT nil   // kept for Refresh()
+
+   METHOD New( oParent, nLeft, nTop, nWidth, nHeight )
+   METHOD SetupColumns( cColumnsDef )
+   METHOD AddColumn( cTitle, nWidth, nAlign )
+   METHOD LoadFromDataSource( oForm )
+   METHOD Refresh()
+
+ENDCLASS
+
+METHOD New( oParent, nLeft, nTop, nWidth, nHeight ) CLASS TDBGrid
+
+   if nWidth == nil;  nWidth := 400; endif
+   if nHeight == nil; nHeight := 200; endif
+
+   ::oParent := oParent
+   ::hCpp := UI_DBGridNew( oParent:hCpp, nLeft, nTop, nWidth, nHeight )
+
+return Self
+
+METHOD SetupColumns( aColsDef ) CLASS TDBGrid
+
+   local i, cTitle, nWidth
+
+   if ValType( aColsDef ) != "A"; return Self; endif
+   for i := 1 to Len( aColsDef )
+      if ValType( aColsDef[i] ) == "A"
+         cTitle := aColsDef[i][1]
+         nWidth := iif( Len( aColsDef[i] ) > 1, aColsDef[i][2], 100 )
+      else
+         cTitle := aColsDef[i]
+         nWidth := 100
+      endif
+      ::AddColumn( cTitle, nWidth )
+   next
+
+return Self
+
+METHOD AddColumn( cTitle, nWidth, nAlign ) CLASS TDBGrid
+
+   local hCol
+
+   if nWidth == nil; nWidth := 100; endif
+   if nAlign == nil; nAlign := 0; endif
+   hCol := UI_BrowseAddCol( ::hCpp, cTitle, "", nWidth, nAlign )
+   AAdd( ::aColumns, hCol )
+
+return Self
+
+METHOD LoadFromDataSource( oForm ) CLASS TDBGrid
+
+   local cDS, oComp, nFields, i, aData, aHeaders, j
+   local aAllRows := {}, aRow, xVal
+
+   ::oForm := oForm
+   cDS := ::oDataSource
+   if Empty( cDS )
+      return Self
+   endif
+
+   if ! __objHasMsg( oForm, "o" + cDS )
+      return Self
+   endif
+   oComp := __objSendMsg( oForm, "o" + cDS )
+   if oComp == nil
+      return Self
+   endif
+
+   if ! __objHasMethod( oComp, "FIELDCOUNT" )
+      // TCompArray datasource
+      if ! __objHasMethod( oComp, "GETARRAY" )
+         return Self
+      endif
+      aData    := oComp:GetArray()
+      aHeaders := oComp:GetHeaders()
+      if Len( ::aColumns ) == 0
+         for i := 1 to Len( aHeaders )
+            ::AddColumn( aHeaders[i], 100 )
+         next
+      endif
+      for i := 1 to Len( aData )
+         aRow := {}
+         if ValType( aData[i] ) == "A"
+            for j := 1 to Len( aData[i] )
+               AAdd( aRow, hb_ValToStr( aData[i][j] ) )
+            next
+         else
+            AAdd( aRow, hb_ValToStr( aData[i] ) )
+         endif
+         AAdd( aAllRows, aRow )
+      next
+   else
+      // DB datasource
+      if ! oComp:lConnected
+         return Self
+      endif
+      nFields := oComp:FieldCount()
+      if Len( ::aColumns ) == 0
+         for i := 1 to nFields
+            ::AddColumn( oComp:FieldName(i), 100 )
+         next
+      else
+         nFields := Min( nFields, Len( ::aColumns ) )
+      endif
+      // Read all records into Harbour array (safe — pure Harbour code)
+      oComp:GoTop()
+      do while ! oComp:Eof()
+         aRow := {}
+         for i := 1 to nFields
+            xVal := oComp:FieldGet(i)
+            AAdd( aRow, AllTrim( hb_ValToStr( xVal ) ) )
+         next
+         AAdd( aAllRows, aRow )
+         oComp:Skip(1)
+      enddo
+   endif
+
+   // Hand the pre-built array to C. If BrowseData exists (post-Activate/Refresh),
+   // it updates rowData + schedules reloadData. If not yet (pre-Activate),
+   // it stores in FPendingRowData and loadAllDBGrids applies it after createAllChildren.
+   UI_DBGridSetCache( ::hCpp, aAllRows )
+
+return Self
+
+METHOD Refresh() CLASS TDBGrid
+   // Re-read datasource into Harbour array, then push to rowData + reloadData
+   if ::hCpp != 0 .and. ::oForm != nil
+      ::aColumns := {}
+      ::LoadFromDataSource( ::oForm )
+   endif
 return Self
 
 //----------------------------------------------------------------------------//
@@ -1238,6 +1488,7 @@ METHOD CreateForm( oForm ) CLASS TApplication
    endif
 
    // Call the form's CreateForm method (like C++Builder constructor)
+   // TDBGrid:LoadFromDataSource is called explicitly in the generated CreateForm code
    if __objHasMethod( oForm, "CREATEFORM" )
       oForm:CreateForm()
    endif
@@ -2465,38 +2716,114 @@ return cCode
 //============================================================================//
 
 CLASS TWebServer
-   DATA nPort        INIT 8080
-   DATA cRoot        INIT "."       // Document root
-   DATA lRunning     INIT .F.
-   DATA bOnRequest   INIT nil       // { |cMethod, cPath, cBody| cResponse }
-   DATA aRoutes      INIT {}        // { { cMethod, cPath, bHandler }, ... }
+   DATA nPort          INIT 8080
+   DATA nPortSSL       INIT 8443
+   DATA cRoot          INIT "."
+   DATA lHTTPS         INIT .F.
+   DATA cSSLCert       INIT ""
+   DATA cSSLKey        INIT ""
+   DATA lRunning       INIT .F.
+   DATA lTrace         INIT .F.
+   DATA nTimeout       INIT 30
+   DATA nMaxUpload     INIT 10485760
+   DATA cSessionCookie INIT "HIXSID"
+   DATA nSessionTTL    INIT 3600
+   DATA aRoutes        INIT {}
+   DATA hErrorPages    INIT { => }
+
+   DATA bOnStart       INIT nil
+   DATA bOnStop        INIT nil
+   DATA bOnError       INIT nil
+
    METHOD New() CONSTRUCTOR
-   METHOD AddRoute( cMethod, cPath, bHandler )
    METHOD Start()
    METHOD Stop()
-   METHOD ServeStatic( cPath )
+   METHOD AddRoute( cMethod, cPath, xHandler )
+   METHOD SetSSL( cCert, cKey )
+   METHOD SetErrorPage( nCode, cFile )
+   METHOD Dispatch( cMethod, cPath, cQuery, cBody, cIP )
 ENDCLASS
 
 METHOD New() CLASS TWebServer
 return Self
 
-METHOD AddRoute( cMethod, cPath, bHandler ) CLASS TWebServer
-   AAdd( ::aRoutes, { Upper(cMethod), cPath, bHandler } )
-return nil
-
 METHOD Start() CLASS TWebServer
-   ::lRunning := .T.
-return nil
+   if UI_WebServerStart( ::nPort, ::nPortSSL, ::cRoot, ::lTrace, Self )
+      ::lRunning := .T.
+      if ::bOnStart != nil; Eval( ::bOnStart ); endif
+   endif
+return Self
 
 METHOD Stop() CLASS TWebServer
+   UI_WebServerStop()
    ::lRunning := .F.
-return nil
+   if ::bOnStop != nil; Eval( ::bOnStop ); endif
+return Self
 
-METHOD ServeStatic( cPath ) CLASS TWebServer
-   if File( ::cRoot + "/" + cPath )
-      return MemoRead( ::cRoot + "/" + cPath )
+METHOD AddRoute( cMethod, cPath, xHandler ) CLASS TWebServer
+   AAdd( ::aRoutes, { Upper(cMethod), cPath, xHandler } )
+return Self
+
+METHOD SetSSL( cCert, cKey ) CLASS TWebServer
+   ::cSSLCert := cCert
+   ::cSSLKey  := cKey
+   ::lHTTPS   := .T.
+return Self
+
+METHOD SetErrorPage( nCode, cFile ) CLASS TWebServer
+   ::hErrorPages[ nCode ] := cFile
+return Self
+
+METHOD Dispatch( cMethod, cPath, cQuery, cBody, cIP ) CLASS TWebServer
+   local i, aRoute, xHandler
+   local cFilePath
+
+   HB_SYMBOL_UNUSED( cQuery )
+   HB_SYMBOL_UNUSED( cBody )
+   HB_SYMBOL_UNUSED( cIP )
+
+   // Set cRoot for UView() and static file helpers
+   HIX_SetRoot( ::cRoot )
+
+   // Guard against path traversal
+   if ".." $ cPath
+      UI_HIX_SETSTATUS( 400 )
+      UI_HIX_WRITE( "<h1>400 Bad Request</h1>" )
+      return nil
    endif
-return "404 Not Found"
+
+   // Try registered routes first
+   for i := 1 to Len( ::aRoutes )
+      aRoute := ::aRoutes[ i ]
+      if ( aRoute[1] == "*" .or. aRoute[1] == Upper(cMethod) ) .and. aRoute[2] == cPath
+         xHandler := aRoute[3]
+         if ValType( xHandler ) == "B"
+            Eval( xHandler )
+         elseif ValType( xHandler ) == "C"
+            HIX_ExecPrg( ::cRoot + "/" + xHandler )
+         endif
+         return nil
+      endif
+   next
+
+   // Fall back to static file
+   cFilePath := ::cRoot + cPath
+   if cPath == "/"
+      cFilePath := ::cRoot + "/index.html"
+   endif
+   if File( cFilePath )
+      HIX_ServeStatic( cFilePath )
+   else
+      UI_HIX_SETSTATUS( 404 )
+      if hb_hHasKey( ::hErrorPages, 404 ) .and. File( ::hErrorPages[ 404 ] )
+         HIX_ServeStatic( ::hErrorPages[ 404 ] )
+      else
+         UI_HIX_WRITE( "<h1>404 Not Found</h1><p>" + cPath + "</p>" )
+      endif
+      if ::bOnError != nil; Eval( ::bOnError, 404, cPath ); endif
+   endif
+
+return nil
 
 //----------------------------------------------------------------------------//
 
@@ -3094,6 +3421,7 @@ function HB_CreateComponent( nType, oParent )
             oComp:hCpp := UI_TimerNew( oParent:hCpp, 1000 )
          endif
          return oComp
+      case nType == CT_WEBSERVER;  return TWebServer():New()
    endcase
 return nil
 

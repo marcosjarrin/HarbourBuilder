@@ -2793,11 +2793,8 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
          }
       }
 
-      /* Select the new control */
-      targetForm->FSelCount = 1;
-      targetForm->FSelected[0] = ctrl;
-
-      /* Fire OnComponentDrop callback */
+      /* Fire OnComponentDrop callback first so InspectorPopulateCombo runs
+       * before we fire notifySelChange (which drives INS_ComboSelect). */
       if( targetForm->FOnComponentDrop &&
           HB_IS_BLOCK( targetForm->FOnComponentDrop ) )
       {
@@ -2811,6 +2808,9 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
          hb_vmPushInteger( 32 );
          hb_vmSend( 6 );
       }
+
+      /* Select after OnComponentDrop so combobox already has the new entry */
+      [targetForm selectControl:ctrl add:NO];
 
       if( targetForm->FOverlayView )
          [targetForm->FOverlayView setNeedsDisplay:YES];
@@ -2977,6 +2977,7 @@ static HBPaletteTarget * s_palTarget = nil;
             [form selectControl:hit add:YES];
       } else {
          if( ![form isSelected:hit] ) [form selectControl:hit add:NO];
+         else [form notifySelChange];   /* re-fire so inspector refreshes */
          UndoPushSnapshot( form );   /* save state before drag-move */
          form->FDragging = YES;
          form->FDragStartX = (int)pt.x; form->FDragStartY = (int)pt.y;
