@@ -15,6 +15,8 @@ FUNCTION HIX_RenderTemplate( cTpl, aArgs )
    local j, k, m, cSpec, nIn, cArrName
    local cExprIf
 
+   if aArgs == nil; aArgs := {}; endif
+
    aLines      := hb_aTokens( cTpl, Chr(10) )
    cOut        := ""
    hVars       := { => }
@@ -77,7 +79,7 @@ FUNCTION HIX_RenderTemplate( cTpl, aArgs )
          cExprIf   := AllTrim( SubStr(LTrim(cLine),4) )
          lInIf     := .T.
          lInElse   := .F.
-         lIfResult := ( HIX_EvalExpr( cExprIf, hVars ) == .T. )
+         lIfResult := hb_defaultValue( HIX_EvalExpr( cExprIf, hVars ), .F. )
          loop
       endif
       if lInIf .and. AllTrim(cLine) == "@else"
