@@ -188,7 +188,7 @@ return nil
 FUNCTION _d( ... )
    local i
    for i := 1 to PCount()
-      hb_ToOutErr( hb_CStr( hb_pValue(i) ) + Chr(10) )
+      OutErr( hb_CStr( hb_pValue(i) ) + Chr(10) )
    next
 return nil
 
