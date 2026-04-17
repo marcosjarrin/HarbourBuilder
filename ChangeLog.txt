@@ -1,6 +1,34 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-17 (TReport visual designer — Option B, form-based bands)
+
+  FEATURES
+  - CT_BAND (132): new visual control type for report band strips.
+  - TBand class: TControl subclass with 5 band types (Header, PageHeader,
+    Detail, PageFooter, Footer), auto-stack by type order, aFields array,
+    bOnPrint/bOnAfterPrint event hooks.
+  - TReportField: added oBand reference and Render() method (label/data/
+    image/line field types dispatch to TPrinter:PrintLine/PrintRect/PrintImage).
+  - TReport:Print(): full band loop with page-break detection, RenderBand(),
+    GetDesignBand() (dual-array search for TBand and legacy TReportBand).
+    GetValue(): expression strings evaluated via Harbour macro operator.
+    PageFooter double-render on final page corrected.
+  - HBBandView NSView: colored background per band type (blue=Header,
+    green=PageHeader/PageFooter, gray=Footer, white=Detail), centered
+    type label, bottom hairline. Registers in the Printing palette tab.
+  - UI_BandNew / UI_BandGetType / UI_BandSetType / UI_BandSetLayout:
+    native functions for palette drop, inspector, and auto-stacking.
+  - cocoa_inspector.m: CT_BAND events tab (OnPrint, OnAfterPrint).
+  - hbbuilder_macos.prg: BAND and REPORTFIELD line parsing in
+    RestoreFormFromCode; BAND and REPORTFIELD emitting in RegenerateFormCode.
+    REPORTFIELD serialization via FData (pipe-delimited, 14 fields/record,
+    3900-byte overflow guard, pipe/BOLD-in-font-name sanitization).
+  - include/hbbuilder.ch: BAND, @ BAND, REPORTFIELD xcommand macros.
+  - include/hbide.ch: CT_BAND = 132 constant.
+  - samples/projects/report/: Product Inventory report demo — 5 band types,
+    label/line/data REPORTFIELD fields, Print and Printer Setup buttons.
+
 2026-04-17 (macOS: TPrinter — printer selection and native print panel)
 
   FEATURES
