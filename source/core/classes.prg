@@ -2556,6 +2556,9 @@ CLASS TReport
    DATA nMarginRight   INIT 15
    DATA nMarginTop     INIT 15
    DATA nMarginBottom  INIT 15
+   DATA nCurrentY      INIT 0
+   DATA nCurrentPage   INIT 0
+   DATA nUsableHeight  INIT 0
    METHOD New( oPrn ) CONSTRUCTOR
    METHOD AddBand( cName, bBlock )
    METHOD AddColumn( cTitle, cField, nWidth )
@@ -2564,6 +2567,7 @@ CLASS TReport
    METHOD AddDesignBand( oBand )
    METHOD RemoveDesignBand( nIndex )
    METHOD GetDesignBand( cName )
+   METHOD RenderBand( oBand )
    METHOD GenerateCode( cClassName )
 ENDCLASS
 
@@ -2606,34 +2610,50 @@ METHOD Preview() CLASS TReport
 return nil
 
 METHOD Print() CLASS TReport
-   local i
+   local oBand
    if ::oPrinter == nil; return nil; endif
+
+   ::nCurrentPage  := 0
+   ::nCurrentY     := ::nMarginTop
+   ::nUsableHeight := ::nPageHeight - ::nMarginTop - ::nMarginBottom
+
    ::oPrinter:BeginDoc( ::cTitle )
-   // Header band
-   for i := 1 to Len( ::aBands )
-      if ::aBands[i][1] == "Header" .and. ::aBands[i][2] != nil
-         Eval( ::aBands[i][2], ::oPrinter )
-      endif
-   next
-   // Detail band (iterate datasource)
-   if ::oDataSource != nil .and. ::oDataSource:oDatabase != nil
-      ::oDataSource:oDatabase:GoTop()
-      while ! ::oDataSource:oDatabase:Eof()
-         for i := 1 to Len( ::aBands )
-            if ::aBands[i][1] == "Detail" .and. ::aBands[i][2] != nil
-               Eval( ::aBands[i][2], ::oPrinter, ::oDataSource:oDatabase )
-            endif
-         next
-         ::oDataSource:oDatabase:Skip()
+   ::nCurrentPage := 1
+
+   ::RenderBand( ::GetDesignBand( "Header" ) )
+   ::RenderBand( ::GetDesignBand( "PageHeader" ) )
+
+   if ::oDataSource != nil
+      ::oDataSource:GoFirst()
+      while ! ::oDataSource:Eof()
+         oBand := ::GetDesignBand( "Detail" )
+         if oBand != nil .and. ::nCurrentY + oBand:nHeight > ::nMarginTop + ::nUsableHeight
+            ::RenderBand( ::GetDesignBand( "PageFooter" ) )
+            ::oPrinter:NewPage()
+            ::nCurrentPage++
+            ::nCurrentY := ::nMarginTop
+            ::RenderBand( ::GetDesignBand( "PageHeader" ) )
+         endif
+         ::RenderBand( oBand )
+         ::oDataSource:Skip()
       enddo
    endif
-   // Footer band
-   for i := 1 to Len( ::aBands )
-      if ::aBands[i][1] == "Footer" .and. ::aBands[i][2] != nil
-         Eval( ::aBands[i][2], ::oPrinter )
-      endif
-   next
+
+   ::RenderBand( ::GetDesignBand( "PageFooter" ) )
+   ::RenderBand( ::GetDesignBand( "Footer" ) )
+
    ::oPrinter:EndDoc()
+return nil
+
+METHOD RenderBand( oBand ) CLASS TReport
+   local oField
+   if oBand == nil .or. ! oBand:lVisible
+      return nil
+   endif
+   for each oField in oBand:aFields
+      oField:Render( ::oPrinter, ::nCurrentY, ::oDataSource )
+   next
+   ::nCurrentY += oBand:nHeight
 return nil
 
 METHOD AddDesignBand( oBand ) CLASS TReport
@@ -3122,9 +3142,11 @@ CLASS TReportField
    DATA nBackColor    INIT -1
    DATA nBorderWidth  INIT 0
    DATA cFieldType    INIT "text"
+   DATA oBand         INIT nil
    METHOD New( cName ) CONSTRUCTOR
    METHOD IsDataBound()
    METHOD GetValue( oDataSource )
+   METHOD Render( oPrinter, nBaseY, oDataSource )
 ENDCLASS
 
 METHOD New( cName ) CLASS TReportField
@@ -3143,6 +3165,22 @@ METHOD GetValue( oDataSource ) CLASS TReportField
       endif
    endif
 return xValue
+
+METHOD Render( oPrinter, nBaseY, oDataSource ) CLASS TReportField
+   local nAbsY := nBaseY + ::nTop
+   local cVal
+   do case
+   case ::cFieldType == "label"
+      oPrinter:PrintLine( nAbsY, ::nLeft, ::cText )
+   case ::cFieldType == "data"
+      cVal := ::GetValue( oDataSource )
+      oPrinter:PrintLine( nAbsY, ::nLeft, cVal )
+   case ::cFieldType == "image"
+      oPrinter:PrintImage( nAbsY, ::nLeft, ::nWidth, ::nHeight, ::cText )
+   case ::cFieldType == "line"
+      oPrinter:PrintRect( nAbsY, ::nLeft, ::nWidth, ::nBorderWidth )
+   endcase
+return nil
 
 // Helper functions for report xcommand macros
 function RPT_NewTextField( oBand, cText, nTop, nLeft, nW, nH, cFont, nFSize, lBold, lItalic, nAlign )
