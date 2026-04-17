@@ -2610,7 +2610,7 @@ METHOD Preview() CLASS TReport
 return nil
 
 METHOD Print() CLASS TReport
-   local oBand
+   local oBand, lPageFooterRendered := .F.
    if ::oPrinter == nil; return nil; endif
 
    ::nCurrentPage  := 0
@@ -2629,9 +2629,11 @@ METHOD Print() CLASS TReport
          oBand := ::GetDesignBand( "Detail" )
          if oBand != nil .and. ::nCurrentY + oBand:nHeight > ::nMarginTop + ::nUsableHeight
             ::RenderBand( ::GetDesignBand( "PageFooter" ) )
+            lPageFooterRendered := .T.
             ::oPrinter:NewPage()
             ::nCurrentPage++
             ::nCurrentY := ::nMarginTop
+            lPageFooterRendered := .F.
             ::RenderBand( ::GetDesignBand( "PageHeader" ) )
          endif
          ::RenderBand( oBand )
@@ -2639,7 +2641,9 @@ METHOD Print() CLASS TReport
       enddo
    endif
 
-   ::RenderBand( ::GetDesignBand( "PageFooter" ) )
+   if ! lPageFooterRendered
+      ::RenderBand( ::GetDesignBand( "PageFooter" ) )
+   endif
    ::RenderBand( ::GetDesignBand( "Footer" ) )
 
    ::oPrinter:EndDoc()
@@ -3170,11 +3174,19 @@ return ! Empty( ::cFieldName )
 
 METHOD GetValue( oDataSource ) CLASS TReportField
    local xValue := nil
-   if oDataSource != nil .and. oDataSource:oDatabase != nil .and. ! Empty( ::cFieldName )
-      xValue := oDataSource:oDatabase:FieldGet( ::cFieldName )
-      if ! Empty( ::cFormat ) .and. xValue != nil
+   if ! Empty( ::cFieldName )
+      if "(" $ ::cFieldName
+         // Expression field: evaluate as a Harbour macro
+         xValue := &( ::cFieldName )
+      elseif oDataSource != nil .and. oDataSource:oDatabase != nil
+         xValue := oDataSource:oDatabase:FieldGet( ::cFieldName )
+      endif
+      if xValue != nil .and. ! Empty( ::cFormat )
          xValue := Transform( xValue, ::cFormat )
       endif
+   endif
+   if ValType( xValue ) != "C"
+      xValue := hb_ValToStr( xValue )
    endif
 return xValue
 

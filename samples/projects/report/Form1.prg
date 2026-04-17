@@ -126,6 +126,8 @@ return nil
 //--------------------------------------------------------------------
 
 METHOD OnStartClick() CLASS TForm1
+   // NOTE: TPrinter methods (BeginDoc, NewPage, PrintLine, EndDoc, etc.) are stubs.
+   // Output will be silent until the printing backend is implemented for this platform.
    // Wire bands to report and print
    ::oReport1:aDesignBands := { ::oBand1, ::oBand2, ::oBand3, ::oBand4, ::oBand5 }
    ::oReport1:nPageWidth   := 210
