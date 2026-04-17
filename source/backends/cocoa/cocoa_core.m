@@ -8628,19 +8628,6 @@ HB_FUNC( UI_HTTPPOST )
    hb_retc( buf );
 }
 
-/* UI_WebServerStart( nPort ) --> lSuccess */
-HB_FUNC( UI_WEBSERVERSTART )
-{
-   /* Placeholder */
-   hb_retl( HB_TRUE );
-}
-
-/* UI_WebServerStop() */
-HB_FUNC( UI_WEBSERVERSTOP )
-{
-   /* Placeholder */
-}
-
 /* ======================================================================
  * Menu and Toolbar utilities
  * ====================================================================== */
