@@ -1677,6 +1677,13 @@ static void InsPopulateEvents( INSDATA * d )
          AC("Action");
          AE("OnTimer");
          break;
+      case 71: /* CT_WEBSERVER */
+         AC("Lifecycle");
+         AE("OnStart");
+         AE("OnStop");
+         AC("Error");
+         AE("OnError");
+         break;
       case 22: /* CT_PROGRESSBAR */
          break;
       case 34: /* CT_TRACKBAR */

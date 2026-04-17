@@ -647,6 +647,7 @@ static function RegenerateFormCode( cName, hForm )
    local cParent, nOwnerH, nPos, nPos2, cLine
    local aMethodNames, cMethodName
    local lCommented
+   local nWSPort, cWSRoot, nWSTimeout, nWSMaxUpload, lWSHttps, lWSTrace, cWSCookie, nWSTTL
 
    // Read existing code to find declared event handlers
    cExistingCode := ""
@@ -1043,6 +1044,39 @@ static function RegenerateFormCode( cName, hForm )
                      nInterval := UI_GetProp( hCtrl, "nInterval" )
                      if ValType( nInterval ) == "N" .and. nInterval != 1000
                         cCreate += '   ::o' + cCtrlName + ':nInterval := ' + LTrim( Str( nInterval ) ) + e
+                     endif
+                  elseif nType == 71  // CT_WEBSERVER
+                     nWSPort     := UI_GetProp( hCtrl, "nPort" )
+                     cWSRoot     := UI_GetProp( hCtrl, "cRoot" )
+                     nWSTimeout  := UI_GetProp( hCtrl, "nTimeout" )
+                     nWSMaxUpload := UI_GetProp( hCtrl, "nMaxUpload" )
+                     lWSHttps    := UI_GetProp( hCtrl, "lHTTPS" )
+                     lWSTrace    := UI_GetProp( hCtrl, "lTrace" )
+                     cWSCookie   := UI_GetProp( hCtrl, "cSessionCookie" )
+                     nWSTTL      := UI_GetProp( hCtrl, "nSessionTTL" )
+                     if ValType( nWSPort ) == "N" .and. nWSPort != 8080
+                        cCreate += '   ::o' + cCtrlName + ':nPort := ' + LTrim( Str( nWSPort ) ) + e
+                     endif
+                     if ValType( cWSRoot ) == "C" .and. ! Empty( cWSRoot ) .and. cWSRoot != "."
+                        cCreate += '   ::o' + cCtrlName + ':cRoot := "' + cWSRoot + '"' + e
+                     endif
+                     if ValType( lWSHttps ) == "L" .and. lWSHttps
+                        cCreate += '   ::o' + cCtrlName + ':lHTTPS := .T.' + e
+                     endif
+                     if ValType( lWSTrace ) == "L" .and. lWSTrace
+                        cCreate += '   ::o' + cCtrlName + ':lTrace := .T.' + e
+                     endif
+                     if ValType( nWSTimeout ) == "N" .and. nWSTimeout != 30
+                        cCreate += '   ::o' + cCtrlName + ':nTimeout := ' + LTrim( Str( nWSTimeout ) ) + e
+                     endif
+                     if ValType( nWSMaxUpload ) == "N" .and. nWSMaxUpload != 10485760
+                        cCreate += '   ::o' + cCtrlName + ':nMaxUpload := ' + LTrim( Str( nWSMaxUpload ) ) + e
+                     endif
+                     if ValType( cWSCookie ) == "C" .and. ! Empty( cWSCookie ) .and. cWSCookie != "HIXSID"
+                        cCreate += '   ::o' + cCtrlName + ':cSessionCookie := "' + cWSCookie + '"' + e
+                     endif
+                     if ValType( nWSTTL ) == "N" .and. nWSTTL != 3600
+                        cCreate += '   ::o' + cCtrlName + ':nSessionTTL := ' + LTrim( Str( nWSTTL ) ) + e
                      endif
                   endif
                else
@@ -1532,6 +1566,64 @@ static function RestoreFormFromCode( hForm, cCode )
                hCtrl := UI_GetChild( hForm, j )
                if hCtrl != 0 .and. UI_GetProp( hCtrl, "cName" ) == cName
                   UI_SetProp( hCtrl, "nInterval", Val( cVal ) )
+                  exit
+               endif
+            next
+         endif
+         loop
+      endif
+
+      // Parse TWebServer properties: ::oName:nPort := value, ::oName:cRoot := "v", etc.
+      if Left( cTrim, 3 ) == "::o" .and. ":=" $ cTrim .and. nType == 71 .and. ;
+         ( ":nPort " $ cTrim .or. ":nPortSSL " $ cTrim .or. ":cRoot " $ cTrim .or. ;
+           ":lHTTPS " $ cTrim .or. ":lTrace " $ cTrim .or. ":nTimeout " $ cTrim .or. ;
+           ":nMaxUpload " $ cTrim .or. ":cSessionCookie " $ cTrim .or. ":nSessionTTL " $ cTrim )
+         if ":nPort " $ cTrim
+            nPos := At( ":nPort ", cTrim )
+         elseif ":nPortSSL " $ cTrim
+            nPos := At( ":nPortSSL ", cTrim )
+         elseif ":cRoot " $ cTrim
+            nPos := At( ":cRoot ", cTrim )
+         elseif ":lHTTPS " $ cTrim
+            nPos := At( ":lHTTPS ", cTrim )
+         elseif ":lTrace " $ cTrim
+            nPos := At( ":lTrace ", cTrim )
+         elseif ":nTimeout " $ cTrim
+            nPos := At( ":nTimeout ", cTrim )
+         elseif ":nMaxUpload " $ cTrim
+            nPos := At( ":nMaxUpload ", cTrim )
+         elseif ":cSessionCookie " $ cTrim
+            nPos := At( ":cSessionCookie ", cTrim )
+         else
+            nPos := At( ":nSessionTTL ", cTrim )
+         endif
+         if nPos > 0
+            cName := SubStr( cTrim, 4, nPos - 4 )
+            if Right( cName, 1 ) == ":"; cName := Left( cName, Len(cName) - 1 ); endif
+            cVal := AllTrim( SubStr( cTrim, At( ":=", cTrim ) + 2 ) )
+            nCount := UI_GetChildCount( hForm )
+            for j := 1 to nCount
+               hCtrl := UI_GetChild( hForm, j )
+               if hCtrl != 0 .and. UI_GetProp( hCtrl, "cName" ) == cName
+                  if ":nPort " $ cTrim
+                     UI_SetProp( hCtrl, "nPort", Val(cVal) )
+                  elseif ":nPortSSL " $ cTrim
+                     UI_SetProp( hCtrl, "nPortSSL", Val(cVal) )
+                  elseif ":cRoot " $ cTrim
+                     UI_SetProp( hCtrl, "cRoot", StrTran( StrTran( cVal, '"', '' ), "'", '' ) )
+                  elseif ":lHTTPS " $ cTrim
+                     UI_SetProp( hCtrl, "lHTTPS", Upper(cVal) == ".T." )
+                  elseif ":lTrace " $ cTrim
+                     UI_SetProp( hCtrl, "lTrace", Upper(cVal) == ".T." )
+                  elseif ":nTimeout " $ cTrim
+                     UI_SetProp( hCtrl, "nTimeout", Val(cVal) )
+                  elseif ":nMaxUpload " $ cTrim
+                     UI_SetProp( hCtrl, "nMaxUpload", Val(cVal) )
+                  elseif ":cSessionCookie " $ cTrim
+                     UI_SetProp( hCtrl, "cSessionCookie", StrTran( StrTran( cVal, '"', '' ), "'", '' ) )
+                  else
+                     UI_SetProp( hCtrl, "nSessionTTL", Val(cVal) )
+                  endif
                   exit
                endif
             next

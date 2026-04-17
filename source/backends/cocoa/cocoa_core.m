@@ -391,6 +391,19 @@ void EnsureNSApp( void )
    PHB_ITEM FOnLoadFinish;        /* fires when page finishes loading */
    PHB_ITEM FOnLoadError;         /* fires on navigation error */
    id       FWebViewDelegate;     /* strong ref — prevents ARC from deallocating WKNavigationDelegate */
+   /* TWebServer */
+   int  FWSPort;              /* nPort (default 8080) */
+   int  FWSPortSSL;           /* nPortSSL (default 8443) */
+   char FWSRoot[512];         /* cRoot (default ".") */
+   BOOL FWSHttps;             /* lHTTPS (default NO) */
+   BOOL FWSTrace;             /* lTrace (default NO) */
+   int  FWSTimeout;           /* nTimeout in seconds (default 30) */
+   int  FWSMaxUpload;         /* nMaxUpload in bytes (default 10485760) */
+   char FWSSessionCookie[64]; /* cSessionCookie (default "HIXSID") */
+   int  FWSSessionTTL;        /* nSessionTTL in seconds (default 3600) */
+   PHB_ITEM FOnStart;         /* TWebServer bOnStart */
+   PHB_ITEM FOnStop;          /* TWebServer bOnStop */
+   PHB_ITEM FOnError;         /* TWebServer bOnError */
 }
 - (void)addChild:(HBControl *)child;
 - (void)setText:(const char *)text;
@@ -1407,6 +1420,11 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
       FHeaders[0] = '\0'; FData[0] = '\0'; FDataSource[0] = '\0'; FActive = NO;
       FOnClick = NULL; FOnChange = NULL; FOnInit = NULL; FOnClose = NULL;
       FOnTimer = NULL; FInterval = 1000; FTimer = nil;
+      FWSPort = 8080; FWSPortSSL = 8443; FWSHttps = NO; FWSTrace = NO;
+      FWSTimeout = 30; FWSMaxUpload = 10485760; FWSSessionTTL = 3600;
+      strncpy(FWSRoot, ".", sizeof(FWSRoot)-1);
+      strncpy(FWSSessionCookie, "HIXSID", sizeof(FWSSessionCookie)-1);
+      FOnStart = NULL; FOnStop = NULL; FOnError = NULL;
       FPendingRowData = nil;
       FCtrlParent = nil; FChildCount = 0;
       memset( FChildren, 0, sizeof(FChildren) );
@@ -5853,6 +5871,17 @@ HB_FUNC( UI_SETPROP )
       p->FInterval = hb_parni(3);
       if( p->FEnabled && p->FOnTimer ) [p startTimer];
    }
+   else if( p->FControlType == CT_WEBSERVER ) {
+      if( strcasecmp(szProp,"nPort")==0 )            p->FWSPort = hb_parni(3);
+      else if( strcasecmp(szProp,"nPortSSL")==0 )    p->FWSPortSSL = hb_parni(3);
+      else if( strcasecmp(szProp,"cRoot")==0 )       { strncpy(p->FWSRoot, hb_parc(3), sizeof(p->FWSRoot)-1); }
+      else if( strcasecmp(szProp,"lHTTPS")==0 )      p->FWSHttps = hb_parl(3);
+      else if( strcasecmp(szProp,"lTrace")==0 )      p->FWSTrace = hb_parl(3);
+      else if( strcasecmp(szProp,"nTimeout")==0 )    p->FWSTimeout = hb_parni(3);
+      else if( strcasecmp(szProp,"nMaxUpload")==0 )  p->FWSMaxUpload = hb_parni(3);
+      else if( strcasecmp(szProp,"cSessionCookie")==0 ) { strncpy(p->FWSSessionCookie, hb_parc(3), sizeof(p->FWSSessionCookie)-1); }
+      else if( strcasecmp(szProp,"nSessionTTL")==0 ) p->FWSSessionTTL = hb_parni(3);
+   }
    else if( strcasecmp(szProp,"lSizable")==0 && p->FControlType == CT_FORM )
       ((HBForm *)p)->FSizable = hb_parl(3);
    else if( strcasecmp(szProp,"lAppBar")==0 && p->FControlType == CT_FORM ) {
@@ -6184,6 +6213,17 @@ HB_FUNC( UI_GETPROP )
    else if( strcasecmp(szProp,"nAlign")==0 ) hb_retni( p->nAlign );
    else if( strcasecmp(szProp,"nInterval")==0 && p->FControlType==CT_TIMER )
       hb_retni( p->FInterval );
+   else if( p->FControlType == CT_WEBSERVER ) {
+      if( strcasecmp(szProp,"nPort")==0 )            hb_retni( p->FWSPort );
+      else if( strcasecmp(szProp,"nPortSSL")==0 )    hb_retni( p->FWSPortSSL );
+      else if( strcasecmp(szProp,"cRoot")==0 )       hb_retc( p->FWSRoot );
+      else if( strcasecmp(szProp,"lHTTPS")==0 )      hb_retl( p->FWSHttps );
+      else if( strcasecmp(szProp,"lTrace")==0 )      hb_retl( p->FWSTrace );
+      else if( strcasecmp(szProp,"nTimeout")==0 )    hb_retni( p->FWSTimeout );
+      else if( strcasecmp(szProp,"nMaxUpload")==0 )  hb_retni( p->FWSMaxUpload );
+      else if( strcasecmp(szProp,"cSessionCookie")==0 ) hb_retc( p->FWSSessionCookie );
+      else if( strcasecmp(szProp,"nSessionTTL")==0 ) hb_retni( p->FWSSessionTTL );
+   }
    else if( strcasecmp(szProp,"lSizable")==0 && p->FControlType==CT_FORM )
       hb_retl( ((HBForm *)p)->FSizable );
    else if( strcasecmp(szProp,"lAppBar")==0 && p->FControlType==CT_FORM )
@@ -6540,6 +6580,17 @@ HB_FUNC( UI_GETALLPROPS )
       }
       case CT_TIMER:
          ADD_N("nInterval",p->FInterval,"Behavior"); break;
+      case CT_WEBSERVER:
+         ADD_N("nPort",           p->FWSPort,           "Network");
+         ADD_N("nPortSSL",        p->FWSPortSSL,        "Network");
+         ADD_S("cRoot",           p->FWSRoot,           "Data");
+         ADD_L("lHTTPS",          p->FWSHttps,          "Network");
+         ADD_L("lTrace",          p->FWSTrace,          "Behavior");
+         ADD_N("nTimeout",        p->FWSTimeout,        "Network");
+         ADD_N("nMaxUpload",      p->FWSMaxUpload,      "Data");
+         ADD_S("cSessionCookie",  p->FWSSessionCookie,  "Data");
+         ADD_N("nSessionTTL",     p->FWSSessionTTL,     "Data");
+         break;
       case CT_TABCONTROL2:
          ADD_A("aTabs",p->FHeaders,"Behavior"); break;
       case CT_TREEVIEW:
@@ -7170,6 +7221,7 @@ HB_FUNC( UI_PALETTELOADIMAGES )
             else if( ct == CT_TRACKBAR )       { sym = @"slider.horizontal.3";    clr = [NSColor systemBlueColor];   }
             else if( ct == CT_PAINTBOX )       { sym = @"paintpalette.fill";      clr = nil; /* multicolor */        }
             else if( ct == CT_WEBVIEW )        { sym = @"safari";                 clr = nil; /* multicolor */        }
+            else if( ct == CT_WEBSERVER )      { sym = @"network";                clr = [NSColor systemTealColor];   }
             if( sym && flat < (int)[icons count] ) {
                NSImage * glyph = [NSImage imageWithSystemSymbolName:sym
                   accessibilityDescription:nil];
