@@ -7168,6 +7168,7 @@ HB_FUNC( UI_PALETTELOADIMAGES )
             else if( ct == CT_MONTHCALENDAR )  sym = @"calendar";
             else if( ct == CT_TRACKBAR )   sym = @"slider.horizontal.3";
             else if( ct == CT_PAINTBOX )   sym = @"paintpalette.fill";
+            else if( ct == CT_WEBVIEW )    sym = @"safari";
             if( sym && flat < (int)[icons count] ) {
                NSImage * glyph = [NSImage imageWithSystemSymbolName:sym
                   accessibilityDescription:nil];
