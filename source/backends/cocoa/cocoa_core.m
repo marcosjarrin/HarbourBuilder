@@ -5232,8 +5232,11 @@ HB_FUNC( UI_SETPROP )
    {
       p->FDockAlign = hb_parni(3);
       /* Immediately apply if form is already visible */
-      if( p->FCtrlParent && [p->FCtrlParent isKindOfClass:[HBForm class]] )
-         ApplyDockAlign( (HBForm *)p->FCtrlParent );
+      if( p->FCtrlParent && [p->FCtrlParent isKindOfClass:[HBForm class]] ) {
+         HBForm * pf = (HBForm *)p->FCtrlParent;
+         ApplyDockAlign( pf );
+         if( pf->FOverlayView ) [(NSView *)pf->FOverlayView setNeedsDisplay:YES];
+      }
    }
    else if( p->FControlType == CT_WEBVIEW && strcasecmp(szProp,"cUrl")==0 )
    {
