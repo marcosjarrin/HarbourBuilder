@@ -1402,6 +1402,7 @@ static function RestoreFormFromCode( hForm, cCode )
    local cFldName, cFldType, cFldPrompt, cFldField, cFldFormat
    local cFldFont, nFldFontSize, lFldBold, lFldItalic, nFldAlign
    local cBandName, hBandCtrl, cFldSerial, cExistFields
+   local cTail, nLastQ, nQpos
 
    if Empty( cCode ) .or. hForm == 0
       return nil
@@ -1794,9 +1795,17 @@ static function RestoreFormFromCode( hForm, cCode )
             endif
          endif
 
-         // Extract BOLD and ITALIC flags
-         lFldBold   := " BOLD"   $ Upper( cTrim )
-         lFldItalic := " ITALIC" $ Upper( cTrim )
+         // Extract BOLD and ITALIC flags — search only in the unquoted tail
+         // to avoid false matches inside quoted strings like FONT "Helvetica-Bold"
+         nLastQ := 0
+         nQpos  := At( '"', cTrim )
+         do while nQpos > 0
+            nLastQ += nQpos
+            nQpos  := At( '"', SubStr( cTrim, nLastQ + 1 ) )
+         enddo
+         cTail := iif( nLastQ > 0, Upper( SubStr( cTrim, nLastQ + 1 ) ), Upper( cTrim ) )
+         lFldBold   := " BOLD"   $ cTail
+         lFldItalic := " ITALIC" $ cTail
 
          // Extract ALIGN n
          nFldAlign := 0
@@ -1817,8 +1826,11 @@ static function RestoreFormFromCode( hForm, cCode )
                endif
             next
             if hBandCtrl != 0
-               cFldSerial := cFldName + "|" + cFldType + "|" + cFldPrompt + "|" + ;
-                  cFldField + "|" + cFldFormat + "|" + ;
+               cFldSerial := StrTran( cFldName,   "|", "" ) + "|" + ;
+                  StrTran( cFldType,   "|", "" ) + "|" + ;
+                  StrTran( cFldPrompt, "|", "" ) + "|" + ;
+                  StrTran( cFldField,  "|", "" ) + "|" + ;
+                  StrTran( cFldFormat, "|", "" ) + "|" + ;
                   LTrim(Str(nT)) + "|" + LTrim(Str(nL)) + "|" + ;
                   LTrim(Str(nW)) + "|" + LTrim(Str(nH)) + "|" + ;
                   cFldFont + "|" + LTrim(Str(nFldFontSize)) + "|" + ;
@@ -1826,10 +1838,14 @@ static function RestoreFormFromCode( hForm, cCode )
                   iif( lFldItalic, "1", "0" ) + "|" + ;
                   LTrim(Str(nFldAlign))
                cExistFields := UI_GetProp( hBandCtrl, "aData" )
-               if Empty( cExistFields )
-                  UI_SetProp( hBandCtrl, "aData", cFldSerial )
-               else
-                  UI_SetProp( hBandCtrl, "aData", cExistFields + Chr(10) + cFldSerial )
+               // Each field record is ~170 bytes; guard against FData[4096] overflow
+               if Len( cExistFields ) + Len( cFldSerial ) + 1 < 3900
+                  if Empty( cExistFields )
+                     UI_SetProp( hBandCtrl, "aData", cFldSerial )
+                  else
+                     UI_SetProp( hBandCtrl, "aData", cExistFields + Chr(10) + cFldSerial )
+                  endif
+               // else: silently skip — field data would truncate the 4096-byte FData buffer
                endif
             endif
          endif
