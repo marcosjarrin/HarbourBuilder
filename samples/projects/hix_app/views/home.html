@@ -1,0 +1,32 @@
+@args aTickets, cUser
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HIX App — Ticket Tracker</title>
+<link rel="stylesheet" href="/www/style.css">
+</head>
+<body>
+<div class="container">
+  <h1>Ticket Tracker</h1>
+  <p>Welcome, <strong>{{ cUser }}</strong></p>
+
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Description</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      @foreach oRow IN aTickets
+      <tr>
+        <td>{{ oRow[1] }}</td>
+        <td>{{ oRow[2] }}</td>
+        <td class="status">{{ oRow[3] }}</td>
+      </tr>
+      @endforeach
+    </tbody>
+  </table>
+
+  <p><a href="/api/info">View API info (JSON)</a></p>
+</div>
+</body>
+</html>

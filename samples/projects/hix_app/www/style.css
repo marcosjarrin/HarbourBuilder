@@ -1,0 +1,9 @@
+body { font-family: system-ui, sans-serif; background: #f0f4f8; margin: 0; padding: 20px; }
+.container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+h1 { color: #2b6cb0; margin-top: 0; }
+table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+th { background: #2b6cb0; color: white; padding: 10px 14px; text-align: left; }
+td { padding: 9px 14px; border-bottom: 1px solid #e2e8f0; }
+tr:hover td { background: #ebf8ff; }
+.status { font-weight: 600; color: #2d3748; }
+a { color: #2b6cb0; }
