@@ -1833,7 +1833,7 @@ static function RestoreFormFromCode( hForm, cCode )
                   StrTran( cFldFormat, "|", "" ) + "|" + ;
                   LTrim(Str(nT)) + "|" + LTrim(Str(nL)) + "|" + ;
                   LTrim(Str(nW)) + "|" + LTrim(Str(nH)) + "|" + ;
-                  cFldFont + "|" + LTrim(Str(nFldFontSize)) + "|" + ;
+                  StrTran( cFldFont, "|", "" ) + "|" + LTrim(Str(nFldFontSize)) + "|" + ;
                   iif( lFldBold, "1", "0" ) + "|" + ;
                   iif( lFldItalic, "1", "0" ) + "|" + ;
                   LTrim(Str(nFldAlign))
