@@ -1909,6 +1909,22 @@ static function RestoreFormFromCode( hForm, cCode )
                   UI_SetProp( hCtrl, "aColumns", cVal )
                endif
             endif
+         case " WEBVIEW " $ Upper( cTrim )
+            hCtrl := UI_WebViewNew( hForm, nL, nT, nW, nH )
+            if hCtrl != 0
+               nPos := At( 'URL "', cTrim )
+               if nPos > 0
+                  cVal := SubStr( cTrim, nPos + 5 )
+                  nPos2 := At( '"', cVal )
+                  if nPos2 > 0
+                     UI_SetProp( hCtrl, "cUrl", Left( cVal, nPos2 - 1 ) )
+                  endif
+               endif
+            endif
+         case " DATETIMEPICKER " $ Upper( cTrim )
+            hCtrl := UI_DateTimePickerNew( hForm, nL, nT, nW, nH )
+         case " MONTHCALENDAR " $ Upper( cTrim )
+            hCtrl := UI_MonthCalendarNew( hForm, nL, nT, nW, nH )
       endcase
 
       // Set the control name
@@ -2000,6 +2016,8 @@ static function RestoreFormFromCode( hForm, cCode )
          UI_SetProp( hCtrl, "lTransparent", cText == ".T." )
       elseif cVal == "nAlign"
          UI_SetProp( hCtrl, "nAlign", Val( cText ) )
+      elseif cVal == "ControlAlign"
+         UI_SetProp( hCtrl, "nControlAlign", Val( cText ) )
       elseif cVal == "PenColor"
          UI_SetProp( hCtrl, "nPenColor", Val( cText ) )
       elseif cVal == "PenWidth"
