@@ -72,7 +72,7 @@ METHOD CreateForm() CLASS TForm1
    REPORTFIELD ::oFldTitle TYPE "label" PROMPT "Product Inventory" ;
       OF ::oBand1 AT 12, 10 SIZE 300, 16 FONT ".AppleSystemUIFont", 14 BOLD
 
-   REPORTFIELD ::oFldDate TYPE "label" PROMPT "Date Report" ;
+   REPORTFIELD ::oFldDate TYPE "data" FIELD "DToC(Date())" ;
       OF ::oBand1 AT 12, 480 SIZE 130, 16 FONT ".AppleSystemUIFont", 11
 
    // PageHeader: separator line and column labels
@@ -83,10 +83,10 @@ METHOD CreateForm() CLASS TForm1
       OF ::oBand2 AT 4, 10 SIZE 200, 14 BOLD
 
    REPORTFIELD ::oFldHdrPrice TYPE "label" PROMPT "Price" ;
-      OF ::oBand2 AT 4, 220 SIZE 80, 14 BOLD
+      OF ::oBand2 AT 4, 220 SIZE 80, 14 BOLD ALIGN 2
 
    REPORTFIELD ::oFldHdrStock TYPE "label" PROMPT "Stock" ;
-      OF ::oBand2 AT 4, 310 SIZE 60, 14 BOLD
+      OF ::oBand2 AT 4, 310 SIZE 60, 14 BOLD ALIGN 2
 
    // Detail: data-bound fields
    REPORTFIELD ::oFldName TYPE "data" FIELD "NAME" ;
@@ -99,7 +99,7 @@ METHOD CreateForm() CLASS TForm1
       OF ::oBand3 AT 2, 310 SIZE 60, 14
 
    // PageFooter: page number
-   REPORTFIELD ::oFldPageNo TYPE "label" PROMPT "Page 1" ;
+   REPORTFIELD ::oFldPageNo TYPE "data" FIELD "hb_ntos( ::oReport1:nCurrentPage )" ;
       OF ::oBand4 AT 4, 280 SIZE 60, 14
 
    // Footer: separator and end label
