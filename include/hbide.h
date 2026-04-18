@@ -157,6 +157,9 @@ class TComponentPalette;
 
 /* Report designer band */
 #define CT_BAND       132
+#define CT_REPORTLABEL  133
+#define CT_REPORTFIELD  134
+#define CT_REPORTIMAGE  135
 
 /* Threading components */
 #define CT_THREAD     63
@@ -271,6 +274,7 @@ public:
 
    /* Parent/children */
    TControl *   FCtrlParent;
+   TControl *   FBandParent;   /* non-NULL for report controls; points to owning CT_BAND */
    TControl *   FChildren[MAX_CHILDREN];
    int          FChildCount;
 

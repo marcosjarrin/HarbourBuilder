@@ -66,6 +66,7 @@ TControl::TControl()
    FPageOwner = NULL;
    FPageIndex = 0;   /* TLabel overrides to TRUE in its own ctor */
    FCtrlParent = NULL;
+   FBandParent = NULL;
    FChildCount = 0;
    memset( FChildren, 0, sizeof(FChildren) );
    FOnClick = NULL;
