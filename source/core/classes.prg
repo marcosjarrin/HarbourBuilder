@@ -3160,6 +3160,7 @@ CLASS TReportField
    DATA cFieldType    INIT "text"
    DATA oBand         INIT nil
    METHOD New( cName ) CONSTRUCTOR
+   METHOD SetOpts( cText, cField, cFmt, cFont, nFSize, lBold, lItalic, nAlign )
    METHOD IsDataBound()
    METHOD GetValue( oDataSource )
    METHOD Render( oPrinter, nBaseY, oDataSource )
@@ -3167,6 +3168,17 @@ ENDCLASS
 
 METHOD New( cName ) CLASS TReportField
    if cName != nil; ::cName := cName; endif
+return Self
+
+METHOD SetOpts( cText, cField, cFmt, cFont, nFSize, lBold, lItalic, nAlign ) CLASS TReportField
+   if cText   != nil; ::cText      := cText;   endif
+   if cField  != nil; ::cFieldName := cField;  endif
+   if cFmt    != nil; ::cFormat    := cFmt;    endif
+   if cFont   != nil; ::cFontName  := cFont;   endif
+   if nFSize  != nil; ::nFontSize  := nFSize;  endif
+   if lBold   != nil; ::lBold      := lBold;   endif
+   if lItalic != nil; ::lItalic    := lItalic; endif
+   if nAlign  != nil; ::nAlignment := nAlign;  endif
 return Self
 
 METHOD IsDataBound() CLASS TReportField
