@@ -23,9 +23,10 @@ static COLORREF BandColor( const char * szType )
 {
    if( lstrcmpiA( szType, "Header" ) == 0 )     return RGB(59, 130, 246);
    if( lstrcmpiA( szType, "PageHeader" ) == 0 ) return RGB(34, 197, 94);
+   if( lstrcmpiA( szType, "Detail" ) == 0 )     return RGB(225, 225, 225);
    if( lstrcmpiA( szType, "PageFooter" ) == 0 ) return RGB(34, 197, 94);
    if( lstrcmpiA( szType, "Footer" ) == 0 )     return RGB(107, 114, 128);
-   return RGB(240, 240, 240);
+   return RGB(225, 225, 225);
 }
 
 static LRESULT CALLBACK BandWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
@@ -53,7 +54,10 @@ static LRESULT CALLBACK BandWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM 
            DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Segoe UI" );
         HFONT hFontOld = (HFONT) SelectObject( hdc, hFont );
         SetBkMode( hdc, TRANSPARENT );
-        SetTextColor( hdc, RGB(255,255,255) );
+        /* Dark text on light bands, white on dark */
+        { int r=GetRValue(clr),g=GetGValue(clr),b=GetBValue(clr);
+          int lum = (r*299+g*587+b*114)/1000;
+          SetTextColor( hdc, lum > 160 ? RGB(60,60,60) : RGB(255,255,255) ); }
         DrawTextA( hdc, szType, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE );
         SelectObject( hdc, hFontOld );
         DeleteObject( hFont ); }
@@ -126,6 +130,75 @@ static LRESULT CALLBACK RulerWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM
    return DefWindowProc( hWnd, msg, wParam, lParam );
 }
 
+static LRESULT CALLBACK ReportCtrlWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
+{
+   if( msg == WM_PAINT )
+   {
+      PAINTSTRUCT ps;
+      HDC hdc = BeginPaint( hWnd, &ps );
+      RECT rc;
+      GetClientRect( hWnd, &rc );
+      TControl * p = (TControl *) GetWindowLongPtr( hWnd, GWLP_USERDATA );
+
+      /* White background */
+      HBRUSH hBr = CreateSolidBrush( RGB(255,255,255) );
+      FillRect( hdc, &rc, hBr );
+      DeleteObject( hBr );
+
+      /* Blue dashed border */
+      HPEN hPen = CreatePen( PS_DASH, 1, RGB(0,100,220) );
+      HPEN hOld = (HPEN) SelectObject( hdc, hPen );
+      SelectObject( hdc, GetStockObject(NULL_BRUSH) );
+      Rectangle( hdc, rc.left, rc.top, rc.right-1, rc.bottom-1 );
+      SelectObject( hdc, hOld );
+      DeleteObject( hPen );
+
+      if( p )
+      {
+         BYTE ct = p->FControlType;
+         SetBkMode( hdc, TRANSPARENT );
+         HFONT hFont = CreateFontA( -11, 0, 0, 0,
+            FW_NORMAL, ct==CT_REPORTFIELD ? TRUE : FALSE, 0, 0,
+            ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            DEFAULT_QUALITY, DEFAULT_PITCH|FF_SWISS, "Segoe UI" );
+         HFONT hFontOld = (HFONT) SelectObject( hdc, hFont );
+         SetTextColor( hdc, RGB(30,30,30) );
+
+         if( ct == CT_REPORTLABEL )
+         {
+            const char * sz = p->FText[0] ? p->FText : "Label";
+            DrawTextA( hdc, sz, -1, &rc, DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS );
+         }
+         else if( ct == CT_REPORTFIELD )
+         {
+            char buf[320];
+            if( p->FFileName[0] )
+               wsprintfA( buf, "[%s]", p->FFileName );
+            else if( p->FData[0] )
+               wsprintfA( buf, "[%s]", p->FData );
+            else
+               lstrcpyA( buf, "[field]" );
+            DrawTextA( hdc, buf, -1, &rc, DT_CENTER|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS );
+         }
+         else /* CT_REPORTIMAGE */
+         {
+            HPEN hPDiag = CreatePen( PS_SOLID, 1, RGB(180,180,180) );
+            SelectObject( hdc, hPDiag );
+            MoveToEx( hdc, rc.left+2, rc.top+2, NULL );
+            LineTo( hdc, rc.right-2, rc.bottom-2 );
+            MoveToEx( hdc, rc.right-2, rc.top+2, NULL );
+            LineTo( hdc, rc.left+2, rc.bottom-2 );
+            DeleteObject( hPDiag );
+         }
+         SelectObject( hdc, hFontOld );
+         DeleteObject( hFont );
+      }
+      EndPaint( hWnd, &ps );
+      return 0;
+   }
+   return DefWindowProc( hWnd, msg, wParam, lParam );
+}
+
 static void RegisterBandClasses()
 {
    static BOOL bRegistered = FALSE;
@@ -133,6 +206,7 @@ static void RegisterBandClasses()
    bRegistered = TRUE;
    WNDCLASSA wc = {0};
    HINSTANCE hInst = GetModuleHandleA(NULL);
+   wc.style         = CS_HREDRAW | CS_VREDRAW;
    wc.lpfnWndProc   = BandWndProc;
    wc.hInstance     = hInst;
    wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
@@ -141,6 +215,13 @@ static void RegisterBandClasses()
    RegisterClassA( &wc );
    wc.lpfnWndProc   = RulerWndProc;
    wc.lpszClassName = "HBRulerView";
+   RegisterClassA( &wc );
+   wc.style         = CS_HREDRAW | CS_VREDRAW;
+   wc.lpfnWndProc   = ReportCtrlWndProc;
+   wc.hInstance     = hInst;
+   wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
+   wc.hbrBackground = NULL;
+   wc.lpszClassName = "HBReportCtrl";
    RegisterClassA( &wc );
 }
 
