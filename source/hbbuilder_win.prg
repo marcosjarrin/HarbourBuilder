@@ -499,6 +499,7 @@ static function CreatePalette()
    oPal:AddComp( nTab, "PDl",  "PrintDialog",   107 )
    oPal:AddComp( nTab, "RVw",  "ReportViewer",  108 )
    oPal:AddComp( nTab, "BPr",  "BarcodePrinter", 109 )
+   oPal:AddComp( nTab, "Bnd",  "Band",          132 )
 
    // ERP tab (enterprise / business components)
    nTab := oPal:AddTab( "ERP" )
@@ -717,6 +718,7 @@ static function RegenerateFormCode( cName, hForm )
    local cExistingCode, aEvents, j, cEvName, cEvSuffix, cHandlerName
    local cVal, aHdrs, kk, nColCount, aColProps, nColW, nInterval
    local aCtrlMap := {}, cOf, hOwner, nPg, kk2, nLen0, cSlice, lRealCreate, nVal
+   local cBandFields, aBandField, cBandFldLine, aBandRec
 
    // Read existing code to find declared event handlers
    cExistingCode := ""
@@ -945,6 +947,49 @@ static function RegenerateFormCode( cName, hForm )
                if ! Empty( cVal )
                   cCreate += '   ::o' + cCtrlName + ':cDataSource := "' + cVal + '"' + e
                endif
+            case nType == 132  // Band
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' BAND ::o' + cCtrlName + ' OF Self SIZE ' + ;
+                  LTrim(Str(nCW)) + ", " + LTrim(Str(nCH))
+               cVal := UI_GetProp( hCtrl, "cBandType" )
+               if ! Empty( cVal ) .and. cVal != "Detail"
+                  cCreate += ' TYPE "' + cVal + '"'
+               endif
+               cCreate += e
+               cBandFields := UI_GetProp( hCtrl, "aData" )
+               if ! Empty( cBandFields )
+                  aBandField := hb_ATokens( cBandFields, Chr(10) )
+                  for kk := 1 to Len( aBandField )
+                     cBandFldLine := AllTrim( aBandField[kk] )
+                     if Empty( cBandFldLine ); loop; endif
+                     aBandRec := hb_ATokens( cBandFldLine, "|" )
+                     if Len( aBandRec ) >= 14
+                        cCreate += '   REPORTFIELD ::o' + aBandRec[1] + ;
+                           ' TYPE "' + aBandRec[2] + '"'
+                        if ! Empty( aBandRec[3] )
+                           cCreate += ' PROMPT "' + aBandRec[3] + '"'
+                        endif
+                        if ! Empty( aBandRec[4] )
+                           cCreate += ' FIELD "' + aBandRec[4] + '"'
+                        endif
+                        if ! Empty( aBandRec[5] )
+                           cCreate += ' FORMAT "' + aBandRec[5] + '"'
+                        endif
+                        cCreate += ' OF ::o' + cCtrlName + ;
+                           ' AT ' + aBandRec[6] + ',' + aBandRec[7] + ;
+                           ' SIZE ' + aBandRec[8] + ',' + aBandRec[9]
+                        if aBandRec[10] != "Sans" .or. Val(aBandRec[11]) != 10
+                           cCreate += ' FONT "' + aBandRec[10] + '",' + aBandRec[11]
+                        endif
+                        if aBandRec[12] == "1"; cCreate += ' BOLD';   endif
+                        if aBandRec[13] == "1"; cCreate += ' ITALIC'; endif
+                        if Val(aBandRec[14]) != 0
+                           cCreate += ' ALIGN ' + aBandRec[14]
+                        endif
+                        cCreate += e
+                     endif
+                  next
+               endif
             otherwise
                if IsNonVisual( nType )
                   cCreate += '   COMPONENT ::o' + cCtrlName + ' TYPE ' + ;
@@ -1009,6 +1054,12 @@ static function RegenerateFormCode( cName, hForm )
             if ! Empty( cVal ) .and. cVal != "System,12" .and. cVal != "Segoe UI,9"
                cCreate += '   ::o' + cCtrlName + ':oFont := "' + cVal + '"' + e
             endif
+         endif
+
+         // ControlAlign (non-zero = non-default)
+         cVal := UI_GetProp( hCtrl, "nControlAlign" )
+         if ValType( cVal ) == "N" .and. cVal != 0
+            cCreate += '   ::o' + cCtrlName + ':ControlAlign := ' + LTrim( Str( cVal ) ) + e
          endif
 
          // Scan for event handlers matching this control
@@ -1283,16 +1334,45 @@ return cHandler
 static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
 
    local cName, nCount, hCtrl
+   local nBandCount, iBand
    static aCnt := nil
 
    // Initialize counters on first call (indexed by control type)
    if aCnt == nil
-      aCnt := Array( 120 )
+      aCnt := Array( 133 )
       AFill( aCnt, 0 )
    endif
 
+   // Band drop: handled entirely via UI_BandNew
+   if nType == 132
+      aCnt[ nType ]++
+      cName := "Band" + LTrim(Str(aCnt[nType]))
+      nBandCount := 0
+      for iBand := 1 to UI_GetChildCount( hForm )
+         if UI_GetType( UI_GetChild( hForm, iBand ) ) == 132
+            nBandCount++
+         endif
+      next
+      hCtrl := UI_BandNew( hForm, "Detail", 20, 20, UI_GetProp(hForm,"nWidth") - 20, 65 )
+      if hCtrl != 0
+         UI_SetProp( hCtrl, "cName", cName )
+         if nBandCount == 0
+            UI_SetProp( hForm, "cText", "Report" )
+            UI_SetProp( hForm, "nWidth", 850 )
+            UI_SetProp( hForm, "nHeight", 450 )
+         endif
+         UI_BandSetLayout( hCtrl )
+      endif
+      SyncDesignerToCode()
+      nCount := UI_GetChildCount( hForm )
+      InspectorPopulateCombo( hForm )
+      INS_ComboSelect( _InsGetData(), nCount )
+      InspectorRefresh( hCtrl )
+      return nil
+   endif
+
    // Auto-name the new control (C++Builder style: Button1, Button2...)
-   if nType < 1 .or. nType > 119; return nil; endif
+   if nType < 1 .or. nType > 131; return nil; endif
    aCnt[ nType ]++
 
    do case
@@ -1400,6 +1480,7 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
       case nType == 107; cName := "PrintDialog"   + LTrim(Str(aCnt[nType]))
       case nType == 108; cName := "ReportViewer"  + LTrim(Str(aCnt[nType]))
       case nType == 109; cName := "BarcodePrinter" + LTrim(Str(aCnt[nType]))
+      case nType == 132; cName := "Band" + LTrim(Str(aCnt[nType]))
       // ERP tab
       case nType == 90; cName := "Preprocessor"   + LTrim(Str(aCnt[nType]))
       case nType == 91; cName := "ScriptEngine"   + LTrim(Str(aCnt[nType]))
@@ -1814,6 +1895,10 @@ static function RestoreFormFromCode( hForm, cCode )
    local nT, nL, nW, nH, cText, cName, hCtrl, cVal
    local nPos, nPos2, cTitle, nCh, cProp, cTypeStr
    local cFolderName, hFolder, nPageIdx, kkF, hChildN
+   local cFldName, cFldType, cFldPrompt, cFldField, cFldFormat, cBandName
+   local cFldFont, nFldFontSize, lFldBold, lFldItalic, nFldAlign
+   local cFldSerial, cExistFields, hBandCtrl, nLastQ, nQpos, cTail, cBandFields
+   local aBandField, cBandFldLine, aBandRec
 
    if Empty( cCode ) .or. hForm == 0
       return nil
@@ -1898,6 +1983,122 @@ static function RestoreFormFromCode( hForm, cCode )
                endif
                if nType >= 38
                   hCtrl := UI_DropNonVisual( hForm, nType, cName )
+               endif
+            endif
+         endif
+         loop
+      endif
+
+      // Parse REPORTFIELD lines
+      if Left( Upper( AllTrim( cLine ) ), 12 ) == "REPORTFIELD "
+         cFldName := ""; cFldType := "text"; cFldPrompt := ""; cFldField := ""
+         cFldFormat := ""; cBandName := ""; cFldFont := "Sans"; nFldFontSize := 10
+         lFldBold := .F.; lFldItalic := .F.; nFldAlign := 0
+         cTrim := AllTrim( cLine )
+         nPos := At( "::o", cTrim )
+         if nPos > 0
+            cFldName := SubStr( cTrim, nPos + 3 )
+            nPos2 := At( " ", cFldName )
+            if nPos2 > 0; cFldName := Left( cFldName, nPos2 - 1 ); endif
+         endif
+         nPos := At( ' TYPE "', cTrim )
+         if nPos > 0
+            cFldType := SubStr( cTrim, nPos + 7 )
+            nPos2 := At( '"', cFldType )
+            if nPos2 > 0; cFldType := Left( cFldType, nPos2 - 1 ); endif
+         endif
+         nPos := At( ' PROMPT "', cTrim )
+         if nPos > 0
+            cFldPrompt := SubStr( cTrim, nPos + 9 )
+            nPos2 := At( '"', cFldPrompt )
+            if nPos2 > 0; cFldPrompt := Left( cFldPrompt, nPos2 - 1 ); endif
+         endif
+         nPos := At( ' FIELD "', cTrim )
+         if nPos > 0
+            cFldField := SubStr( cTrim, nPos + 8 )
+            nPos2 := At( '"', cFldField )
+            if nPos2 > 0; cFldField := Left( cFldField, nPos2 - 1 ); endif
+         endif
+         nPos := At( ' FORMAT "', cTrim )
+         if nPos > 0
+            cFldFormat := SubStr( cTrim, nPos + 9 )
+            nPos2 := At( '"', cFldFormat )
+            if nPos2 > 0; cFldFormat := Left( cFldFormat, nPos2 - 1 ); endif
+         endif
+         nPos := At( " OF ::o", cTrim )
+         if nPos > 0
+            cBandName := SubStr( cTrim, nPos + 7 )
+            nPos2 := At( " ", cBandName )
+            if nPos2 > 0; cBandName := Left( cBandName, nPos2 - 1 ); endif
+         endif
+         nT := 0; nL := 0
+         nPos := At( " AT ", Upper( cTrim ) )
+         if nPos > 0
+            cVal := AllTrim( SubStr( cTrim, nPos + 4 ) )
+            nT := Val( cVal )
+            nPos2 := At( ",", cVal )
+            if nPos2 > 0; nL := Val( SubStr( cVal, nPos2 + 1 ) ); endif
+         endif
+         nW := 80; nH := 14
+         nPos := At( " SIZE ", Upper( cTrim ) )
+         if nPos > 0
+            cVal := AllTrim( SubStr( cTrim, nPos + 6 ) )
+            nW := Val( cVal )
+            nPos2 := At( ",", cVal )
+            if nPos2 > 0; nH := Val( SubStr( cVal, nPos2 + 1 ) ); endif
+         endif
+         nPos := At( ' FONT "', cTrim )
+         if nPos > 0
+            cFldFont := SubStr( cTrim, nPos + 7 )
+            nPos2 := At( '"', cFldFont )
+            if nPos2 > 0
+               cFldFont := Left( cFldFont, nPos2 - 1 )
+               cVal := AllTrim( SubStr( cTrim, nPos + 7 + nPos2 ) )
+               if Left( cVal, 1 ) == ","
+                  nFldFontSize := Val( AllTrim( SubStr( cVal, 2 ) ) )
+                  if nFldFontSize < 1; nFldFontSize := 10; endif
+               endif
+            endif
+         endif
+         nLastQ := 0; nQpos := At( '"', cTrim )
+         do while nQpos > 0
+            nLastQ += nQpos
+            nQpos := At( '"', SubStr( cTrim, nLastQ + 1 ) )
+         enddo
+         cTail := iif( nLastQ > 0, Upper( SubStr( cTrim, nLastQ + 1 ) ), Upper( cTrim ) )
+         lFldBold   := " BOLD"   $ cTail
+         lFldItalic := " ITALIC" $ cTail
+         nPos := At( " ALIGN ", Upper( cTrim ) )
+         if nPos > 0
+            nFldAlign := Val( AllTrim( SubStr( cTrim, nPos + 7 ) ) )
+         endif
+         if ! Empty( cBandName )
+            hBandCtrl := 0
+            for kk := 1 to UI_GetChildCount( hForm )
+               if AllTrim( UI_GetProp( UI_GetChild( hForm, kk ), "cName" ) ) == cBandName
+                  hBandCtrl := UI_GetChild( hForm, kk )
+                  exit
+               endif
+            next
+            if hBandCtrl != 0
+               cFldSerial := StrTran( cFldName,   "|", "" ) + "|" + ;
+                  StrTran( cFldType,   "|", "" ) + "|" + ;
+                  StrTran( cFldPrompt, "|", "" ) + "|" + ;
+                  StrTran( cFldField,  "|", "" ) + "|" + ;
+                  StrTran( cFldFormat, "|", "" ) + "|" + ;
+                  LTrim(Str(nT)) + "|" + LTrim(Str(nL)) + "|" + ;
+                  LTrim(Str(nW)) + "|" + LTrim(Str(nH)) + "|" + ;
+                  StrTran( cFldFont, "|", "" ) + "|" + LTrim(Str(nFldFontSize)) + "|" + ;
+                  iif( lFldBold, "1", "0" ) + "|" + ;
+                  iif( lFldItalic, "1", "0" ) + "|" + ;
+                  LTrim(Str(nFldAlign))
+               cExistFields := UI_GetProp( hBandCtrl, "aData" )
+               if Len( cExistFields ) + Len( cFldSerial ) + 1 < 3900
+                  if Empty( cExistFields )
+                     UI_SetProp( hBandCtrl, "aData", cFldSerial )
+                  else
+                     UI_SetProp( hBandCtrl, "aData", cExistFields + Chr(10) + cFldSerial )
+                  endif
                endif
             endif
          endif
@@ -2099,6 +2300,19 @@ static function RestoreFormFromCode( hForm, cCode )
                   cText := SubStr( cText, nPos2 + 1 )
                enddo
             endif
+         case " BAND " $ Upper( cTrim )
+            hCtrl := UI_BandNew( hForm, "Detail", nL, nT, nW, nH )
+            if hCtrl != 0
+               nPos := At( 'TYPE "', cTrim )
+               if nPos > 0
+                  cVal := SubStr( cTrim, nPos + 6 )
+                  nPos2 := At( '"', cVal )
+                  if nPos2 > 0
+                     UI_SetProp( hCtrl, "cBandType", Left( cVal, nPos2 - 1 ) )
+                  endif
+               endif
+               UI_BandSetLayout( hCtrl )
+            endif
       endcase
 
       // Set the control name
@@ -2127,7 +2341,8 @@ static function RestoreFormFromCode( hForm, cCode )
       // Only process known properties
       if ! ( cProp == "nClrPane" .or. cProp == "Color" .or. cProp == "cDataSource" .or. ;
              cProp == "nInterval" .or. cProp == "oFont" .or. ;
-             cProp == "cFileName" .or. cProp == "cRDD" .or. cProp == "lActive" )
+             cProp == "cFileName" .or. cProp == "cRDD" .or. cProp == "lActive" .or. ;
+             cProp == "ControlAlign" )
          loop
       endif
 
@@ -2163,6 +2378,8 @@ static function RestoreFormFromCode( hForm, cCode )
          UI_SetProp( hCtrl, cProp, cText )
       elseif cProp == "lActive"
          UI_SetProp( hCtrl, "lActive", Upper( AllTrim( cText ) ) == ".T." )
+      elseif cProp == "ControlAlign"
+         UI_SetProp( hCtrl, "nControlAlign", Val( cText ) )
       endif
    next
 
@@ -2698,10 +2915,37 @@ static function TBRun()
    local cCompiler, cMsvcBase, cWinKit, cWinKitVer
    local cMsvcInc, cMsvcLib, cUcrtInc, cUmInc, cSharedInc, cUcrtLib, cUmLib
    local cRsp, cRspContent, aCI, cAppName, cAppTitle, cExePath
+   local hRunForm, nRunCount, hRunCtrl, oRunReport, oRunBand, cRunType, nRunH
    static nLastHash := 0
 
    SaveActiveFormCode()
    SyncDesignerToCode()  // Ensure event bindings are up to date
+
+   // If active form has Band controls, route to report print instead of compile
+   if nActiveForm > 0 .and. nActiveForm <= Len( aForms ) .and. ;
+      aForms[ nActiveForm ][ 2 ] != nil
+      hRunForm  := aForms[ nActiveForm ][ 2 ]:hCpp
+      nRunCount := UI_GetChildCount( hRunForm )
+      oRunReport := nil
+      for i := 1 to nRunCount
+         hRunCtrl := UI_GetChild( hRunForm, i )
+         if UI_GetType( hRunCtrl ) == 132
+            if oRunReport == nil
+               oRunReport := TReport():New()
+               oRunReport:nPageWidth  := UI_GetProp( hRunForm, "nWidth" )
+               oRunReport:nPageHeight := UI_GetProp( hRunForm, "nHeight" )
+            endif
+            cRunType := UI_GetProp( hRunCtrl, "cBandType" )
+            nRunH    := UI_GetProp( hRunCtrl, "nHeight" )
+            oRunBand := TBand():New( nil, cRunType, nRunH )
+            oRunReport:AddDesignBand( oRunBand )
+         endif
+      next
+      if oRunReport != nil
+         oRunReport:Print()
+         return nil
+      endif
+   endif
 
    cBuildDir := "c:\hbbuilder_build"
 
@@ -5168,7 +5412,7 @@ static function IsNonVisual( nType )
    // CT_BROWSE=79, CT_DBGRID=80, CT_DBNAVIGATOR=81, CT_DBTEXT=82,
    // CT_DBEDIT=83, CT_DBCOMBOBOX=84, CT_DBCHECKBOX=85, CT_DBIMAGE=86,
    // CT_WEBVIEW=62
-   if nType == 62 .or. ( nType >= 79 .and. nType <= 86 )
+   if nType == 62 .or. ( nType >= 79 .and. nType <= 86 ) .or. nType == 132
       return .F.
    endif
 return nType >= 38
@@ -5197,6 +5441,7 @@ static function ComponentTypeName( nType )
       case nType == 64;  return "CT_WEBSOCKET"
       case nType == 65;  return "CT_HTTPCLIENT"
       case nType == 131; return "CT_COMPARRAY"
+      case nType == 132; return "CT_BAND"
    endcase
 return "CT_UNKNOWN_" + LTrim( Str( nType ) )
 
@@ -5244,7 +5489,8 @@ static function ComponentTypeFromName( cName )
       { "CT_GITDIFF", 125 }, { "CT_GITREMOTE", 126 }, ;
       { "CT_GITSTASH", 127 }, { "CT_GITTAG", 128 }, ;
       { "CT_GITBLAME", 129 }, { "CT_GITMERGE", 130 }, ;
-      { "CT_COMPARRAY", 131 } }
+      { "CT_COMPARRAY", 131 }, ;
+      { "CT_BAND", 132 } }
    for i := 1 to Len( aMap )
       if Upper( cName ) == aMap[i][1]
          return aMap[i][2]
