@@ -4,6 +4,10 @@
 
 #include "hbide.h"
 #include <string.h>
+
+/* Forward declaration: defined in hbbridge.cpp */
+void BandStackAll( HWND hParent );
+
 /* Global dark mode flag for forms — set from Harbour via W32_SetIDEDarkMode */
 /* Defined here, declared extern in tcontrols.cpp / inspector / hbbuilder_win */
 extern "C" { int g_bDarkIDE = 1; }
@@ -868,7 +872,7 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
             FireEvent( FOnResize );
             ApplyDockAlign( this );
          }
-         /* Resize ruler overlays (band designer) */
+         /* Resize rulers and restack bands (band designer) */
          {
             HWND hRH = (HWND)(INT_PTR) GetPropA( FHandle, "RulerH" );
             HWND hRV = (HWND)(INT_PTR) GetPropA( FHandle, "RulerV" );
@@ -877,6 +881,7 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
                RECT rc; GetClientRect( FHandle, &rc );
                if( hRH ) SetWindowPos( hRH, HWND_TOP, 20, 0, rc.right - 20, 20, SWP_NOACTIVATE );
                if( hRV ) SetWindowPos( hRV, HWND_TOP,  0, 0, 20, rc.bottom,   SWP_NOACTIVATE );
+               BandStackAll( FHandle );
             }
          }
          break;
@@ -891,13 +896,16 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
          FInSizeMove = FALSE;
          FireEvent( FOnResize );
          ApplyDockAlign( this );
-         HWND hRH = (HWND)(INT_PTR) GetPropA( FHandle, "RulerH" );
-         HWND hRV = (HWND)(INT_PTR) GetPropA( FHandle, "RulerV" );
-         if( hRH || hRV )
          {
-            RECT rc; GetClientRect( FHandle, &rc );
-            if( hRH ) SetWindowPos( hRH, HWND_TOP, 20, 0, rc.right - 20, 20, SWP_NOACTIVATE );
-            if( hRV ) SetWindowPos( hRV, HWND_TOP,  0, 0, 20, rc.bottom,   SWP_NOACTIVATE );
+            HWND hRH = (HWND)(INT_PTR) GetPropA( FHandle, "RulerH" );
+            HWND hRV = (HWND)(INT_PTR) GetPropA( FHandle, "RulerV" );
+            if( hRH || hRV )
+            {
+               RECT rc; GetClientRect( FHandle, &rc );
+               if( hRH ) SetWindowPos( hRH, HWND_TOP, 20, 0, rc.right - 20, 20, SWP_NOACTIVATE );
+               if( hRV ) SetWindowPos( hRV, HWND_TOP,  0, 0, 20, rc.bottom,   SWP_NOACTIVATE );
+               BandStackAll( FHandle );
+            }
          }
          break;
       }
@@ -1264,10 +1272,6 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
                /* Create the control via factory */
                {
                   TControl * newCtrl = CreateControlByType( (BYTE) ctrlType );
-                  { FILE*f=fopen("c:\\HarbourBuilder\\drop_trace.log","a");
-                    if(f){fprintf(f,"CreateControlByType(%d) -> %p text='%s' class='%s'\n",
-                      ctrlType, newCtrl, newCtrl?newCtrl->FText:"(null)",
-                      newCtrl?newCtrl->FClassName:"(null)");fclose(f);} }
                   if( newCtrl )
                   {
                      newCtrl->FLeft = rx1;
@@ -1307,9 +1311,6 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
                         DWORD dwStyle, dwExStyle;
                         const char * szClass;
                         newCtrl->CreateParams( &dwStyle, &dwExStyle, &szClass );
-                        { FILE*f=fopen("c:\\HarbourBuilder\\drop_trace.log","a");
-                          if(f){fprintf(f,"  CreateWindowEx: class='%s' text='%s' style=0x%08X\n",
-                            szClass, newCtrl->FText, dwStyle);fclose(f);} }
                         newCtrl->FHandle = CreateWindowExA( dwExStyle, szClass,
                            newCtrl->FText, dwStyle,
                            newCtrl->FLeft, newCtrl->FTop + FClientTop,
@@ -1325,20 +1326,23 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
 
                      /* Subclass the new control so clicks go to the form in design mode */
                      SubclassChildren();
+                  }
 
-                     /* Fire OnComponentDrop callback */
-                     if( FOnComponentDrop && HB_IS_BLOCK( FOnComponentDrop ) )
-                     {
-                        hb_vmPushEvalSym();
-                        hb_vmPush( FOnComponentDrop );
-                        hb_vmPushNumInt( (HB_PTRUINT) this );
-                        hb_vmPushInteger( ctrlType );
-                        hb_vmPushInteger( rx1 );
-                        hb_vmPushInteger( ry1 );
-                        hb_vmPushInteger( rw );
-                        hb_vmPushInteger( rh );
-                        hb_vmSend( 6 );
-                     }
+                  /* Fire OnComponentDrop callback — runs even when CreateControlByType
+                     returns NULL (e.g. CT_BAND creates its own control via UI_BandNew) */
+                  if( FOnComponentDrop && HB_IS_BLOCK( FOnComponentDrop ) )
+                  {
+                     hb_vmPushEvalSym();
+                     hb_vmPush( FOnComponentDrop );
+                     hb_vmPushNumInt( (HB_PTRUINT) this );
+                     hb_vmPushInteger( ctrlType );
+                     hb_vmPushInteger( rx1 );
+                     hb_vmPushInteger( ry1 );
+                     hb_vmPushInteger( rw );
+                     hb_vmPushInteger( rh );
+                     hb_vmSend( 6 );
+                     /* After callback, subclass any newly created children */
+                     SubclassChildren();
                   }
                }
                return 0;

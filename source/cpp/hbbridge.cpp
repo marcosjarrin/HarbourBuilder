@@ -141,7 +141,7 @@ static void RegisterBandClasses()
 #define RULER_H_PROP "RulerH"
 #define RULER_V_PROP "RulerV"
 
-static void BandStackAll( HWND hParent )
+void BandStackAll( HWND hParent )
 {
    if( !hParent ) return;
    RECT rcParent;
