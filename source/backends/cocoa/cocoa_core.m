@@ -5039,12 +5039,13 @@ static void BandStackAll( HBControl * parent )
       inDesign = ((HBForm *)parent)->FDesignMode;
    }
 
-   /* In design mode rulers occupy the top 20px — stack bands below them */
+   /* In design mode rulers occupy the top 20px and left 20px */
    CGFloat y = inDesign ? 20.0 : 0.0;
+   CGFloat x = inDesign ? 20.0 : 0.0;
    for( HBControl * b in bands ) {
-      b->FLeft = 0;
+      b->FLeft = (int)x;
       b->FTop  = (int)y;
-      if( formW > 0 ) b->FWidth = (int)formW;
+      if( formW > 0 ) b->FWidth = (int)(formW - x);
       y += b->FHeight;
       [b updateViewFrame];
       if( b->FView ) [b->FView setNeedsDisplay:YES];

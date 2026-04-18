@@ -12,6 +12,8 @@ HarbourBuilder - Cross-platform visual IDE for Harbour
     inset (20px top + left) automatically after band add/delete.
   - BandStackAll(): bands start at y=20 in design mode (below ruler); mouseUp:
     snaps any dragged band back into stacked position.
+  - BandStackAll(): bands now start at x=20 in design mode (right of left ruler);
+    width adjusted to formW-20 so bands fill the area to the right of the ruler.
   - Run on a report form (form with CT_BAND children) opens macOS Preview
     instead of compile+run pipeline. Builds TReport from design bands and calls
     TReport:Preview().
