@@ -902,6 +902,97 @@ HB_FUNC( UI_BANDNEW )
    RetCtrl( p );
 }
 
+/* UI_ReportCtrlNew( hForm, hBand, nCtrlType, nLeft, nTop, nWidth, nHeight ) --> hCtrl */
+HB_FUNC( UI_REPORTCTRLNEW )
+{
+   TForm    * pForm = (TForm *)    GetCtrl(1);
+   TControl * pBand = (TControl *) GetCtrl(2);
+   int ct   = hb_parni(3);
+   int nL   = hb_parni(4), nT = hb_parni(5);
+   int nW   = hb_parni(6), nH = hb_parni(7);
+
+   if( !pForm || !pBand ) { hb_retnint(0); return; }
+   RegisterBandClasses();
+
+   TControl * p = new TControl();
+   p->FControlType = (BYTE) ct;
+   p->FBandParent  = pBand;
+   p->FLeft  = nL;
+   p->FTop   = nT;
+   p->FWidth  = nW < 10 ? 120 : nW;
+   p->FHeight = nH < 6  ? 20  : nH;
+   p->FFont   = pForm->FFormFont;
+   p->FVisible = TRUE;
+   p->FEnabled = TRUE;
+
+   pForm->AddChild( p );
+
+   if( pBand->FHandle )
+   {
+      p->FHandle = CreateWindowExA( 0, "HBReportCtrl", "",
+         WS_CHILD | WS_VISIBLE,
+         p->FLeft, p->FTop, p->FWidth, p->FHeight,
+         pBand->FHandle, NULL, GetModuleHandleA(NULL), NULL );
+      if( p->FHandle )
+         SetWindowLongPtr( p->FHandle, GWLP_USERDATA, (LONG_PTR) p );
+   }
+
+   pForm->SelectControl( p, FALSE );
+   pForm->SubclassChildren();
+
+   hb_retnint( (HB_PTRUINT) p );
+}
+
+/* UI_SyncBandData( hForm ) — rebuild FData on every band from live report controls */
+HB_FUNC( UI_SYNCBANDDATA )
+{
+   TForm * pForm = (TForm *) GetCtrl(1);
+   if( !pForm ) return;
+   int i;
+
+   /* Clear FData on all bands */
+   for( i = 0; i < pForm->FChildCount; i++ )
+   {
+      TControl * c = pForm->FChildren[i];
+      if( c && c->FControlType == CT_BAND )
+         c->FData[0] = '\0';
+   }
+
+   /* Serialize each report control into its band's FData */
+   for( i = 0; i < pForm->FChildCount; i++ )
+   {
+      TControl * p = pForm->FChildren[i];
+      if( !p || !p->FBandParent ) continue;
+
+      const char * szType =
+         p->FControlType == CT_REPORTLABEL ? "label" :
+         p->FControlType == CT_REPORTFIELD ? "field" : "image";
+
+      char rec[600];
+      /* Format: cName|type|cText|cFieldName|cFormat|nTop|nLeft|nW|nH|font|sz|bold|italic|align */
+      wsprintfA( rec, "%s|%s|%s|%s||%d|%d|%d|%d|Sans|10|0|0|0",
+         p->FName[0] ? p->FName : "rctrl",
+         szType,
+         p->FText,
+         p->FControlType == CT_REPORTFIELD ? p->FFileName : "",
+         p->FTop, p->FLeft, p->FWidth, p->FHeight );
+
+      TControl * pBand = p->FBandParent;
+      int curLen = lstrlenA( pBand->FData );
+      int recLen = lstrlenA( rec );
+      if( curLen + recLen + 2 < (int)sizeof(pBand->FData) )
+      {
+         if( curLen > 0 )
+         {
+            pBand->FData[curLen] = '\n';
+            lstrcpyA( pBand->FData + curLen + 1, rec );
+         }
+         else
+            lstrcpyA( pBand->FData, rec );
+      }
+   }
+}
+
 /* UI_BandGetType( hCtrl ) --> cType */
 HB_FUNC( UI_BANDGETTYPE )
 {
