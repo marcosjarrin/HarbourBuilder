@@ -1357,7 +1357,7 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
       if hCtrl != 0
          UI_SetProp( hCtrl, "cName", cName )
          if nBandCount == 0
-            UI_SetProp( hForm, "cText", "Report" )
+            UI_SetProp( hForm, "cText", "Report1" )
             UI_SetProp( hForm, "nWidth", 850 )
             UI_SetProp( hForm, "nHeight", 450 )
          endif

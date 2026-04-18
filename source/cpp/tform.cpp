@@ -868,6 +868,17 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
             FireEvent( FOnResize );
             ApplyDockAlign( this );
          }
+         /* Resize ruler overlays (band designer) */
+         {
+            HWND hRH = (HWND)(INT_PTR) GetPropA( FHandle, "RulerH" );
+            HWND hRV = (HWND)(INT_PTR) GetPropA( FHandle, "RulerV" );
+            if( hRH || hRV )
+            {
+               RECT rc; GetClientRect( FHandle, &rc );
+               if( hRH ) SetWindowPos( hRH, HWND_TOP, 20, 0, rc.right - 20, 20, SWP_NOACTIVATE );
+               if( hRV ) SetWindowPos( hRV, HWND_TOP,  0, 0, 20, rc.bottom,   SWP_NOACTIVATE );
+            }
+         }
          break;
       }
 
@@ -876,11 +887,20 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
          break;
 
       case WM_EXITSIZEMOVE:
+      {
          FInSizeMove = FALSE;
-         /* Fire a single OnResize to capture the final position/size */
          FireEvent( FOnResize );
          ApplyDockAlign( this );
+         HWND hRH = (HWND)(INT_PTR) GetPropA( FHandle, "RulerH" );
+         HWND hRV = (HWND)(INT_PTR) GetPropA( FHandle, "RulerV" );
+         if( hRH || hRV )
+         {
+            RECT rc; GetClientRect( FHandle, &rc );
+            if( hRH ) SetWindowPos( hRH, HWND_TOP, 20, 0, rc.right - 20, 20, SWP_NOACTIVATE );
+            if( hRV ) SetWindowPos( hRV, HWND_TOP,  0, 0, 20, rc.bottom,   SWP_NOACTIVATE );
+         }
          break;
+      }
 
       case WM_NOTIFY:
       {
