@@ -3097,7 +3097,7 @@ METHOD New( oParent, cType, nHeight ) CLASS TBand
    ::nHeight     := iif( ValType( nHeight ) == "N", nHeight, 20 )
    ::nLeft       := 0
    ::nTop        := 0
-   ::nWidth      := iif( oParent != nil, oParent:nWidth, 600 )
+   ::nWidth      := iif( oParent != nil, oParent:Width, 600 )
    nOrd := ::BandOrder()
    ::lPrintOnEveryPage := ( nOrd == 2 .or. nOrd == 4 )
    do case
