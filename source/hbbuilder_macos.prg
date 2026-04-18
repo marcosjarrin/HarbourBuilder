@@ -2667,8 +2667,9 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
          UI_BandSetLayout( hCtrl )
       endif
       SyncDesignerToCode()
-      InspectorRefresh( hCtrl )
-      InspectorPopulateCombo( hForm )
+      InspectorPopulateCombo( hForm )     // rebuild combo (selects form by default)
+      INS_ComboSelect( _InsGetData(), nCount )  // select the new band in combo
+      InspectorRefresh( hCtrl )           // show band properties last
       return nil
    endif
 
