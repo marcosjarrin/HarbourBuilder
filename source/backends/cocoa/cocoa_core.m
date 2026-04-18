@@ -9133,7 +9133,106 @@ static CGRect       s_pageRect;
 static float        s_pdfScale     = 0.75f;   /* 96 screen px -> 72 PDF pt */
 static char         s_pdfTempPath[1024] = "";
 
-/* RPT_EXPORTPDF( cDestFile ) — close PDF, move temp file to cDestFile */
+/* RPT_PDFOPEN( nPageW, nPageH, nMarginL, nMarginR, nMarginT, nMarginB )
+ * Opens a CGPDFContext to a temp file for PDF export. */
+HB_FUNC( RPT_PDFOPEN )
+{
+   if( s_pdfCtx ) { CGContextRelease(s_pdfCtx); s_pdfCtx = NULL; }
+   if( s_pdfURL ) { CFRelease(s_pdfURL); s_pdfURL = NULL; }
+
+   float nW = (float)hb_parnd(1);
+   float nH = (float)hb_parnd(2);
+   if( nW <= 0 ) nW = 794;
+   if( nH <= 0 ) nH = 1123;
+
+   s_pageRect = CGRectMake(0, 0, nW * s_pdfScale, nH * s_pdfScale);
+
+   NSString * tempDir = NSTemporaryDirectory();
+   NSString * path = [tempDir stringByAppendingPathComponent:@"hbexport.pdf"];
+   strncpy(s_pdfTempPath, [path UTF8String], sizeof(s_pdfTempPath) - 1);
+
+   s_pdfURL = CFURLCreateWithFileSystemPath(NULL,
+      (__bridge CFStringRef)path, kCFURLPOSIXPathStyle, false);
+
+   CFMutableDictionaryRef info = CFDictionaryCreateMutable(NULL, 0,
+      &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+   s_pdfCtx = CGPDFContextCreateWithURL(s_pdfURL, &s_pageRect, info);
+   CFRelease(info);
+}
+
+/* RPT_PDFADDPAGE() */
+HB_FUNC( RPT_PDFADDPAGE )
+{
+   if( !s_pdfCtx ) return;
+   CGPDFContextBeginPage(s_pdfCtx, NULL);
+}
+
+/* RPT_PDFDRAWTEXT( nX, nY, cText, cFont, nFontSize, lBold, lItalic, nForeColor ) */
+HB_FUNC( RPT_PDFDRAWTEXT )
+{
+   if( !s_pdfCtx ) return;
+
+   float   nX    = (float)hb_parnd(1) * s_pdfScale;
+   float   nY    = (float)hb_parnd(2) * s_pdfScale;
+   const char * szText = hb_parc(3) ? hb_parc(3) : "";
+   const char * szFont = hb_parc(4) ? hb_parc(4) : "Helvetica";
+   float   nSize = (float)(hb_parnd(5) > 0 ? hb_parnd(5) : 10) * s_pdfScale;
+   BOOL    lBold   = hb_parl(6);
+   BOOL    lItalic = hb_parl(7);
+   long    nColor  = hb_parnl(8);
+
+   NSString * fontName = [NSString stringWithUTF8String:szFont];
+   NSFontDescriptor * desc = [NSFontDescriptor fontDescriptorWithName:fontName size:nSize];
+   NSFontDescriptorSymbolicTraits traits = 0;
+   if( lBold )   traits |= NSFontDescriptorTraitBold;
+   if( lItalic ) traits |= NSFontDescriptorTraitItalic;
+   if( traits ) desc = [desc fontDescriptorWithSymbolicTraits:traits];
+   NSFont * nsFont = [NSFont fontWithDescriptor:desc size:nSize];
+   if( !nsFont ) nsFont = [NSFont systemFontOfSize:nSize];
+
+   float r = ((nColor)       & 0xFF) / 255.0f;
+   float g = ((nColor >> 8)  & 0xFF) / 255.0f;
+   float b = ((nColor >> 16) & 0xFF) / 255.0f;
+
+   NSDictionary * attrs = @{
+      NSFontAttributeName:            nsFont,
+      NSForegroundColorAttributeName: [NSColor colorWithRed:r green:g blue:b alpha:1.0]
+   };
+   NSAttributedString * as = [[NSAttributedString alloc]
+      initWithString:[NSString stringWithUTF8String:szText] attributes:attrs];
+   CTLineRef line = CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)as);
+
+   float pdf_y = s_pageRect.size.height - nY - nSize;
+   CGContextSetTextMatrix(s_pdfCtx, CGAffineTransformIdentity);
+   CGContextSetTextPosition(s_pdfCtx, nX, pdf_y);
+   CTLineDraw(line, s_pdfCtx);
+   CFRelease(line);
+}
+
+/* RPT_PDFDRAWRECT( nX, nY, nW, nH, nBorderColor, nFillColor ) */
+HB_FUNC( RPT_PDFDRAWRECT )
+{
+   if( !s_pdfCtx ) return;
+   float rX = (float)hb_parnd(1) * s_pdfScale;
+   float rW = (float)hb_parnd(3) * s_pdfScale;
+   float rH = (float)hb_parnd(4) * s_pdfScale;
+   float rY = s_pageRect.size.height - (float)hb_parnd(2) * s_pdfScale - rH;
+   CGRect r = CGRectMake(rX, rY, rW, rH);
+   long fillC   = hb_parnl(6);
+   long borderC = hb_parnl(5);
+   if( fillC >= 0 ) {
+      CGContextSetRGBFillColor(s_pdfCtx,
+         (fillC & 0xFF)/255.0, ((fillC>>8)&0xFF)/255.0, ((fillC>>16)&0xFF)/255.0, 1.0);
+      CGContextFillRect(s_pdfCtx, r);
+   }
+   if( borderC >= 0 ) {
+      CGContextSetRGBStrokeColor(s_pdfCtx,
+         (borderC & 0xFF)/255.0, ((borderC>>8)&0xFF)/255.0, ((borderC>>16)&0xFF)/255.0, 1.0);
+      CGContextStrokeRect(s_pdfCtx, r);
+   }
+}
+
+/* RPT_EXPORTPDF( cDestFile ) — close PDF page, move temp file to dest */
 HB_FUNC( RPT_EXPORTPDF )
 {
    const char * szFile = hb_parc(1);
