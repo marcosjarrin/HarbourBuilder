@@ -155,6 +155,9 @@ class TComponentPalette;
 /* Data components */
 #define CT_COMPARRAY  131
 
+/* Report designer band */
+#define CT_BAND       132
+
 /* Threading components */
 #define CT_THREAD     63
 #define CT_MUTEX      64
@@ -164,6 +167,14 @@ class TComponentPalette;
 #define CT_ATOMICINT  68
 #define CT_CONDVAR    69
 #define CT_CHANNEL    70
+
+/* ControlAlign constants (used by FDockAlign: 0=alNone..5=alClient) */
+#define ALIGN_NONE    0
+#define ALIGN_TOP     1
+#define ALIGN_BOTTOM  2
+#define ALIGN_LEFT    3
+#define ALIGN_RIGHT   4
+#define ALIGN_CLIENT  5
 
 /* Max children per control */
 #define MAX_CHILDREN  256
@@ -251,6 +262,12 @@ public:
    PHB_ITEM     FOnClose;
    PHB_ITEM     FOnTimer;
    UINT_PTR     FTimerID;      /* Win32 timer ID (0 = inactive) */
+
+   /* ControlAlign dock layout (0=alNone..5=alClient) */
+   int          FDockAlign;
+
+   /* Band field serialization: pipe/newline-separated records */
+   char         FData[4096];
 
    /* Parent/children */
    TControl *   FCtrlParent;

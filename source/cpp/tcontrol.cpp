@@ -74,6 +74,8 @@ TControl::TControl()
    FOnClose = NULL;
    FOnTimer = NULL;
    FTimerID = 0;
+   FDockAlign = ALIGN_NONE;
+   FData[0] = '\0';
 }
 
 TControl::~TControl()
