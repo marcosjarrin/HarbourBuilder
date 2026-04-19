@@ -1966,7 +1966,9 @@ TControl * TForm::HitTest( int x, int y )
    for( i = FChildCount - 1; i >= 0; i-- )
    {
       TControl * p = FChildren[i];
-      int l = p->FLeft, t = p->FTop, r = l + p->FWidth, b = t + p->FHeight;
+      int l = p->FBandParent ? p->FBandParent->FLeft + p->FLeft : p->FLeft;
+      int t = p->FBandParent ? p->FBandParent->FTop  + p->FTop  : p->FTop;
+      int r = l + p->FWidth, b = t + p->FHeight;
 
       if( x >= l && x <= r && y >= t && y <= b )
       {
@@ -1997,7 +1999,9 @@ int TForm::HitTestHandle( int x, int y )
    for( i = 0; i < FSelCount; i++ )
    {
       TControl * p = FSelected[i];
-      int px = p->FLeft, py = p->FTop, pw = p->FWidth, ph = p->FHeight;
+      int px = p->FBandParent ? p->FBandParent->FLeft + p->FLeft : p->FLeft;
+      int py = p->FBandParent ? p->FBandParent->FTop  + p->FTop  : p->FTop;
+      int pw = p->FWidth, ph = p->FHeight;
 
       if( p->FControlType == CT_BAND )
       {
@@ -2086,7 +2090,9 @@ void TForm::PaintSelectionHandles( HDC hDC )
    for( i = 0; i < FSelCount; i++ )
    {
       TControl * p = FSelected[i];
-      int x = p->FLeft, y = p->FTop + FClientTop, w = p->FWidth, h = p->FHeight;
+      int absL = p->FBandParent ? p->FBandParent->FLeft + p->FLeft : p->FLeft;
+      int absT = p->FBandParent ? p->FBandParent->FTop  + p->FTop  : p->FTop;
+      int x = absL, y = absT + FClientTop, w = p->FWidth, h = p->FHeight;
 
       /* Dashed border */
       HPEN hDash = CreatePen( PS_DASH, 1, RGB(0, 120, 215) );
