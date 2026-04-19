@@ -928,6 +928,9 @@ HB_FUNC( UI_REPORTCTRLNEW )
    p->FFont   = pForm->FFormFont;
    p->FVisible = TRUE;
    p->FEnabled = TRUE;
+   lstrcpyA( p->FClassName,
+      ct == CT_REPORTLABEL ? "TReportLabel" :
+      ct == CT_REPORTFIELD ? "TReportField" : "TReportImage" );
 
    pForm->AddChild( p );
 

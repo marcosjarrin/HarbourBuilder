@@ -1364,6 +1364,9 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
                         newCtrl->FWidth  = rw < 20 ? 20 : rw;
                         newCtrl->FHeight = rh < 10 ? 10 : rh;
                         newCtrl->FFont   = FFormFont;
+                        lstrcpyA( newCtrl->FClassName,
+                           ctrlType == CT_REPORTLABEL ? "TReportLabel" :
+                           ctrlType == CT_REPORTFIELD ? "TReportField" : "TReportImage" );
                         AddChild( newCtrl );
 
                         /* Parent the Win32 control to the band HWND */
