@@ -2514,16 +2514,15 @@ static function OpenProjectFile( cFile )
       nFormX := nEditorX + Int( ( nEditorW - 400 ) / 2 ) + ( Len(aForms) ) * 20
       nFormY := nEditorTop + Int( ( nEditorH - 300 ) * 0.35 ) + ( Len(aForms) ) * 20
 
-      // Create design form and restore properties/controls from code
+      // Create design form — Show() first so the Win32 HWND exists,
+      // then restore controls (UI_BandNew requires a real parent HWND).
       CreateDesignForm( nFormX, nFormY )
-      RestoreFormFromCode( oDesignForm:hCpp, cFormCode )
+      oDesignForm:Show()
       oDesignForm:SetDesign( .t. )
+      RestoreFormFromCode( oDesignForm:hCpp, cFormCode )
 
-      // Only show the first form; hide the rest
-      if Len( aForms ) == 1
-         oDesignForm:Show()
-      else
-         oDesignForm:Show()
+      // Hide all forms except the first
+      if Len( aForms ) > 1
          UI_FormHide( oDesignForm:hCpp )
       endif
 
