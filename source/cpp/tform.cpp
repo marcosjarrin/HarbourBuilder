@@ -1159,7 +1159,12 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
 
             p->FLeft = nl; p->FTop = nt; p->FWidth = nw; p->FHeight = nh;
             if( p->FHandle )
-               SetWindowPos( p->FHandle, NULL, nl, nt + FClientTop, nw, nh, SWP_NOZORDER );
+            {
+               if( p->FBandParent )
+                  SetWindowPos( p->FHandle, NULL, nl, nt, nw, nh, SWP_NOZORDER );
+               else
+                  SetWindowPos( p->FHandle, NULL, nl, nt + FClientTop, nw, nh, SWP_NOZORDER );
+            }
 
             FDragStartX += dx;
             FDragStartY += dy;
@@ -1206,8 +1211,18 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
                      InvalidateRect( FHandle, &rcOld, TRUE );
                   }
                   p->FLeft += dx;
-                  p->FTop += dy;
-                  if( p->FHandle )
+                  p->FTop  += dy;
+                  if( p->FBandParent )
+                  {
+                     /* Clamp to band bounds */
+                     if( p->FLeft < 0 ) p->FLeft = 0;
+                     if( p->FTop  < 0 ) p->FTop  = 0;
+                     if( p->FLeft + p->FWidth  > p->FBandParent->FWidth  ) p->FLeft = p->FBandParent->FWidth  - p->FWidth;
+                     if( p->FTop  + p->FHeight > p->FBandParent->FHeight ) p->FTop  = p->FBandParent->FHeight - p->FHeight;
+                     if( p->FHandle )
+                        MoveWindow( p->FHandle, p->FLeft, p->FTop, p->FWidth, p->FHeight, TRUE );
+                  }
+                  else if( p->FHandle )
                   {
                      MoveWindow( p->FHandle, p->FLeft, p->FTop + FClientTop,
                         p->FWidth, p->FHeight, TRUE );
