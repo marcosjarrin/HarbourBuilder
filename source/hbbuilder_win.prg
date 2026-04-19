@@ -401,6 +401,13 @@ static function CreatePalette()
 
    DEFINE PALETTE oPal OF oIDE
 
+   // Report tab (report designer components)
+   nTab := oPal:AddTab( "Report" )
+   oPal:AddComp( nTab, "Bnd",  "Band",          132 )
+   oPal:AddComp( nTab, "RLb",  "ReportLabel",   133 )
+   oPal:AddComp( nTab, "RFd",  "ReportField",   134 )
+   oPal:AddComp( nTab, "RIm",  "ReportImage",   135 )
+
    // Standard tab (C++Builder)
    nTab := oPal:AddTab( "Standard" )
    oPal:AddComp( nTab, "A",    "Label",       1 )
@@ -499,7 +506,6 @@ static function CreatePalette()
    oPal:AddComp( nTab, "PDl",  "PrintDialog",   107 )
    oPal:AddComp( nTab, "RVw",  "ReportViewer",  108 )
    oPal:AddComp( nTab, "BPr",  "BarcodePrinter", 109 )
-   oPal:AddComp( nTab, "Bnd",  "Band",          132 )
 
    // ERP tab (enterprise / business components)
    nTab := oPal:AddTab( "ERP" )
@@ -1339,7 +1345,7 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
 
    // Initialize counters on first call (indexed by control type)
    if aCnt == nil
-      aCnt := Array( 133 )
+      aCnt := Array( 136 )
       AFill( aCnt, 0 )
    endif
 
@@ -1361,8 +1367,10 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
          UI_SetProp( hCtrl, "cName", cName )
          if nBandCount == 0
             UI_SetProp( hForm, "cText", "Report1" )
-            UI_SetProp( hForm, "nWidth", 850 )
-            UI_SetProp( hForm, "nHeight", 450 )
+            UI_SetProp( hForm, "nWidth", 1061 )
+            UI_SetProp( hForm, "nHeight", 613 )
+            UI_SetProp( hForm, "nTop",  309 )
+            UI_SetProp( hForm, "nLeft", 979 )
          endif
          UI_BandSetLayout( hCtrl )
       endif
@@ -1371,6 +1379,30 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
       InspectorPopulateCombo( hForm )
       INS_ComboSelect( _InsGetData(), nCount )
       InspectorRefresh( hCtrl )
+      return nil
+   endif
+
+   // Report controls (133-135) — C++ drop logic already created the HWND in the band
+   if nType >= 133 .and. nType <= 135
+      local hLastCtrl := UI_GetChild( hForm, UI_GetChildCount( hForm ) )
+      local cBaseName
+      do case
+         case nType == 133; cBaseName := "RLabel"
+         case nType == 134; cBaseName := "RField"
+         case nType == 135; cBaseName := "RImage"
+      endcase
+      aCnt[ nType ]++
+      local cRptName := cBaseName + LTrim( Str( aCnt[ nType ] ) )
+      if hLastCtrl != 0
+         UI_SetProp( hLastCtrl, "cName", cRptName )
+         if nType == 133
+            UI_SetProp( hLastCtrl, "cText", "Label" )
+         endif
+      endif
+      SyncDesignerToCode()
+      InspectorPopulateCombo( hForm )
+      INS_ComboSelect( _InsGetData(), UI_GetChildCount( hForm ) )
+      InspectorRefresh( hLastCtrl )
       return nil
    endif
 
