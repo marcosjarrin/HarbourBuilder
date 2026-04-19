@@ -365,6 +365,7 @@ public:
    BOOL         FDragging;
    BOOL         FResizing;
    BOOL         FRubberBand;
+   BOOL         FRubberDrawn;
    int          FRubberX1, FRubberY1, FRubberX2, FRubberY2;
    int          FResizeHandle;  /* 0-7: which handle is being dragged */
    int          FDragStartX, FDragStartY;

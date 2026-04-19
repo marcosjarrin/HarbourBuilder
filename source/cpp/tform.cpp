@@ -82,6 +82,7 @@ TForm::TForm()
    FDragging = FALSE;
    FResizing = FALSE;
    FRubberBand = FALSE;
+   FRubberDrawn = FALSE;
    FRubberX1 = FRubberY1 = FRubberX2 = FRubberY2 = 0;
    FResizeHandle = -1;
    FOnDblClick = NULL;
@@ -1085,6 +1086,7 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
                if( FPendingControlType >= 0 )
                {
                   FRubberBand = TRUE;
+                  FRubberDrawn = FALSE;
                   FRubberX1 = FRubberX2 = mx;
                   FRubberY1 = FRubberY2 = my;
                   SetCapture( FHandle );
@@ -1093,6 +1095,7 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
                {
                   /* Start rubber band selection */
                   FRubberBand = TRUE;
+                  FRubberDrawn = FALSE;
                   FRubberX1 = FRubberX2 = mx;
                   FRubberY1 = FRubberY2 = my;
                   SetCapture( FHandle );
@@ -1105,31 +1108,34 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
 
       case WM_MOUSEMOVE:
       {
-         /* Rubber band */
+         /* Rubber band — XOR draw on screen DC: draw twice at same pos = erase */
          if( FDesignMode && FRubberBand )
          {
             int mx = (short)LOWORD(lParam), my = (short)HIWORD(lParam) - FClientTop;
+
+            auto xorRect = [&]( int x1, int y1, int x2, int y2 ) {
+               POINT p1 = {x1, y1 + FClientTop}, p2 = {x2, y2 + FClientTop};
+               ClientToScreen( FHandle, &p1 ); ClientToScreen( FHandle, &p2 );
+               HDC hDC = GetDC( NULL );
+               HPEN hPen = CreatePen( PS_SOLID, 2, RGB(255,255,255) );
+               HPEN hOld = (HPEN) SelectObject( hDC, hPen );
+               SelectObject( hDC, GetStockObject(NULL_BRUSH) );
+               SetROP2( hDC, R2_NOTXORPEN );
+               Rectangle( hDC, p1.x, p1.y, p2.x, p2.y );
+               SelectObject( hDC, hOld ); DeleteObject( hPen );
+               ReleaseDC( NULL, hDC );
+            };
+
+            /* Erase previous XOR rect if one is on screen */
+            if( FRubberDrawn )
+               xorRect( FRubberX1, FRubberY1, FRubberX2, FRubberY2 );
+
             FRubberX2 = mx;
             FRubberY2 = my;
 
-            /* Redraw form to show rubber band rectangle cleanly */
-            InvalidateRect( FHandle, NULL, TRUE );
-            UpdateWindow( FHandle );
-
-            /* Draw rubber band on top — use screen DC so it paints over child HWNDs (bands) */
-            { POINT pt1, pt2;
-              pt1.x = FRubberX1; pt1.y = FRubberY1 + FClientTop;
-              pt2.x = FRubberX2; pt2.y = FRubberY2 + FClientTop;
-              ClientToScreen( FHandle, &pt1 );
-              ClientToScreen( FHandle, &pt2 );
-              HDC hDC = GetDC( NULL );
-              HPEN hPen = CreatePen( PS_DASH, 2, RGB(0, 120, 215) );
-              HPEN hOld = (HPEN) SelectObject( hDC, hPen );
-              SelectObject( hDC, GetStockObject(NULL_BRUSH) );
-              Rectangle( hDC, pt1.x, pt1.y, pt2.x, pt2.y );
-              SelectObject( hDC, hOld );
-              DeleteObject( hPen );
-              ReleaseDC( NULL, hDC ); }
+            /* Draw new XOR rect */
+            xorRect( FRubberX1, FRubberY1, FRubberX2, FRubberY2 );
+            FRubberDrawn = TRUE;
             return 0;
          }
 
@@ -1302,7 +1308,21 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
             rx2 = FRubberX1 > FRubberX2 ? FRubberX1 : FRubberX2;
             ry2 = FRubberY1 > FRubberY2 ? FRubberY1 : FRubberY2;
 
-            /* Clear old rubber band from screen */
+            /* Erase XOR rubber band from screen */
+            if( FRubberDrawn )
+            {
+               POINT p1 = {FRubberX1, FRubberY1 + FClientTop}, p2 = {FRubberX2, FRubberY2 + FClientTop};
+               ClientToScreen( FHandle, &p1 ); ClientToScreen( FHandle, &p2 );
+               HDC hDC = GetDC( NULL );
+               HPEN hPen = CreatePen( PS_SOLID, 2, RGB(255,255,255) );
+               HPEN hOld = (HPEN) SelectObject( hDC, hPen );
+               SelectObject( hDC, GetStockObject(NULL_BRUSH) );
+               SetROP2( hDC, R2_NOTXORPEN );
+               Rectangle( hDC, p1.x, p1.y, p2.x, p2.y );
+               SelectObject( hDC, hOld ); DeleteObject( hPen );
+               ReleaseDC( NULL, hDC );
+               FRubberDrawn = FALSE;
+            }
             InvalidateRect( FHandle, NULL, TRUE );
 
             /* Component drop from palette */
