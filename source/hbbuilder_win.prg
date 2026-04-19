@@ -6916,16 +6916,14 @@ HB_FUNC( W32_GENERATEPALETTEICONS )
    GetModuleFileNameA(NULL,szPath,MAX_PATH);
    { char*p=strrchr(szPath,'\\'); if(p)*p=0; }
    { char*p=strrchr(szPath,'\\'); if(p)*p=0; } /* up to project root */
-   lstrcatA(szPath,"\\resources\\palette_new.bmp");
+   lstrcatA(szPath,"\\resources\\palette.bmp");
 
    fp=fopen(szPath,"wb");
    if(fp) {
       fwrite(&bf,sizeof(bf),1,fp); fwrite(&bi,sizeof(bi),1,fp);
       fwrite(pB,ds,1,fp); fclose(fp);
-      { FILE*fl=fopen("c:\\HarbourBuilder\\palette_gen_trace.log","a");
-        if(fl){fprintf(fl,"Generated: %s (%d icons)\n",szPath,IC);fclose(fl);} }
       if( !hb_parl(1) ) /* not silent */
-      { char msg[300]; sprintf(msg,"Generated: %s\n\n%d icons, %dx%d pixels\n\nRename to palette.bmp to use.",
+      { char msg[300]; sprintf(msg,"Generated: %s\n\n%d icons, %dx%d pixels.",
          szPath,IC,IS,IS);
         MessageBoxA(NULL,msg,"Palette Icons Generated",MB_OK|MB_ICONINFORMATION); }
    } else {
@@ -6991,13 +6989,11 @@ HB_FUNC( W32_GENERATETOOLBARICONS )
    memset(&bf,0,sizeof(bf)); bf.bfType=0x4D42;
    bf.bfSize=sizeof(bf)+sizeof(bi)+ds; bf.bfOffBits=sizeof(bf)+sizeof(bi);
 
-   sprintf(szPath,"%s\\resources\\toolbar_new.bmp",szBase);
+   sprintf(szPath,"%s\\resources\\toolbar.bmp",szBase);
    fp=fopen(szPath,"wb");
    if(fp) {
       fwrite(&bf,sizeof(bf),1,fp); fwrite(&bi,sizeof(bi),1,fp);
       fwrite(pB,ds,1,fp); fclose(fp);
-      { FILE*fl=fopen("c:\\HarbourBuilder\\toolbar_gen_trace.log","a");
-        if(fl){fprintf(fl,"Generated: %s (%d icons)\n",szPath,nBtns);fclose(fl);} }
       if( !hb_parl(1) )
       { char msg[300]; sprintf(msg,"Generated: %s\n9 toolbar icons",szPath);
         MessageBoxA(NULL,msg,"Toolbar Icons",MB_OK|MB_ICONINFORMATION); }
