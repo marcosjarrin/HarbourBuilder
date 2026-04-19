@@ -401,13 +401,6 @@ static function CreatePalette()
 
    DEFINE PALETTE oPal OF oIDE
 
-   // Report tab (report designer components)
-   nTab := oPal:AddTab( "Report" )
-   oPal:AddComp( nTab, "Bnd",  "Band",          132 )
-   oPal:AddComp( nTab, "RLb",  "ReportLabel",   133 )
-   oPal:AddComp( nTab, "RFd",  "ReportField",   134 )
-   oPal:AddComp( nTab, "RIm",  "ReportImage",   135 )
-
    // Standard tab (C++Builder)
    nTab := oPal:AddTab( "Standard" )
    oPal:AddComp( nTab, "A",    "Label",       1 )
@@ -506,6 +499,13 @@ static function CreatePalette()
    oPal:AddComp( nTab, "PDl",  "PrintDialog",   107 )
    oPal:AddComp( nTab, "RVw",  "ReportViewer",  108 )
    oPal:AddComp( nTab, "BPr",  "BarcodePrinter", 109 )
+
+   // Report tab (report designer components)
+   nTab := oPal:AddTab( "Report" )
+   oPal:AddComp( nTab, "Bnd",  "Band",          132 )
+   oPal:AddComp( nTab, "RLb",  "ReportLabel",   133 )
+   oPal:AddComp( nTab, "RFd",  "ReportField",   134 )
+   oPal:AddComp( nTab, "RIm",  "ReportImage",   135 )
 
    // ERP tab (enterprise / business components)
    nTab := oPal:AddTab( "ERP" )
