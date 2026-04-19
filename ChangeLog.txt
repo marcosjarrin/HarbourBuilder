@@ -1,6 +1,21 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-19e (Windows — report2 sample with TDBFTable)
+
+  SAMPLE PROJECT (report2):
+  - samples/projects/report2/: new customer report sample demonstrating
+    TDBFTable as a live DBF data source (customer.dbf, 527 records).
+  - Form1.prg: loads first 64 customers into listbox via function
+    Form1Create(oSelf) using TDBFTable with DBFCDX RDD; status bar shows
+    total RecCount().  Preview and Export PDF buttons delegate to
+    CustomerReport() in Report1.prg.
+  - Report1.prg: CustomerReport(cFile) opens customer.dbf, iterates all
+    527 records, builds a full A4 report: Header (company/title/date),
+    PageHeader (Name/City/State/Age/Salary/Hired columns, dark blue),
+    Detail (alternating row shading, salaries >= 50000 in green),
+    Footer (total count + average salary), PageFooter (page number).
+
 2026-04-19d (Windows — lTransparent, build fixes, report1 sample)
 
   INSPECTOR / CODE GENERATOR:
