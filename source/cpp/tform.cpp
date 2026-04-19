@@ -1116,16 +1116,20 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
             InvalidateRect( FHandle, NULL, TRUE );
             UpdateWindow( FHandle );
 
-            /* Draw rubber band on top */
-            { HDC hDC = GetDC( FHandle );
+            /* Draw rubber band on top — use screen DC so it paints over child HWNDs (bands) */
+            { POINT pt1, pt2;
+              pt1.x = FRubberX1; pt1.y = FRubberY1 + FClientTop;
+              pt2.x = FRubberX2; pt2.y = FRubberY2 + FClientTop;
+              ClientToScreen( FHandle, &pt1 );
+              ClientToScreen( FHandle, &pt2 );
+              HDC hDC = GetDC( NULL );
               HPEN hPen = CreatePen( PS_DASH, 2, RGB(0, 120, 215) );
               HPEN hOld = (HPEN) SelectObject( hDC, hPen );
               SelectObject( hDC, GetStockObject(NULL_BRUSH) );
-              Rectangle( hDC, FRubberX1, FRubberY1 + FClientTop,
-                              FRubberX2, FRubberY2 + FClientTop );
+              Rectangle( hDC, pt1.x, pt1.y, pt2.x, pt2.y );
               SelectObject( hDC, hOld );
               DeleteObject( hPen );
-              ReleaseDC( FHandle, hDC ); }
+              ReleaseDC( NULL, hDC ); }
             return 0;
          }
 
