@@ -6938,13 +6938,14 @@ HB_FUNC( W32_GENERATEPALETTEICONS )
 
 HB_FUNC( W32_GENERATETOOLBARICONS )
 {
-   /* 9 toolbar buttons: New, Open, Save, Cut, Copy, Paste, Undo, Redo, Run */
+   /* 10 toolbar buttons: New, Open, Save, Cut, Copy, Paste, Undo, Redo, Run, Form */
    static const char * tbPngs[] = {
       "menu_new", "menu_project_open", "menu_project_save",
       "laz_cut", "laz_copy", "laz_paste",
-      "menu_undo", "menu_redo", "menu_build_run_file"
+      "menu_undo", "menu_redo", "menu_build_run_file",
+      "tpaintbox"
    };
-   int nBtns = 9, tw = nBtns * 32, i, rb, ds;
+   int nBtns = 10, tw = nBtns * 32, i, rb, ds;
    HDC hS, hM; HBITMAP hB, hO; void * pB;
    BITMAPFILEHEADER bf; BITMAPINFOHEADER bi;
    FILE * fp; char szPath[MAX_PATH], szBase[MAX_PATH];
@@ -6994,7 +6995,7 @@ HB_FUNC( W32_GENERATETOOLBARICONS )
       fwrite(&bf,sizeof(bf),1,fp); fwrite(&bi,sizeof(bi),1,fp);
       fwrite(pB,ds,1,fp); fclose(fp);
       if( !hb_parl(1) )
-      { char msg[300]; sprintf(msg,"Generated: %s\n9 toolbar icons",szPath);
+      { char msg[300]; sprintf(msg,"Generated: %s\n10 toolbar icons",szPath);
         MessageBoxA(NULL,msg,"Toolbar Icons",MB_OK|MB_ICONINFORMATION); }
    }
    SelectObject(hM,hO); DeleteObject(hB); DeleteDC(hM); ReleaseDC(NULL,hS);
