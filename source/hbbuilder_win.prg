@@ -67,13 +67,9 @@ function Main()
 
    // Harbour check moved to TBRun() — auto-download + build on first Run
 
-   // Auto-generate icons if they don't exist yet
-   if ! File( HB_DirBase() + "..\resources\palette_new.bmp" )
-      W32_GeneratePaletteIcons( .T. )
-   endif
-   if ! File( HB_DirBase() + "..\resources\toolbar_new.bmp" )
-      W32_GenerateToolbarIcons( .T. )
-   endif
+   // Always regenerate icons on startup so palette reflects current build
+   W32_GeneratePaletteIcons( .T. )
+   W32_GenerateToolbarIcons( .T. )
 
    nScreenW := W32_GetScreenWidth()
    nScreenH := W32_GetScreenHeight()

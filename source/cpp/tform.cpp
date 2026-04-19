@@ -437,7 +437,8 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
                   if( ctrlType >= CT_WEBSERVER && ctrlType <= CT_UDPSOCKET ) isNonVisual = 1;
                   if( ctrlType >= CT_PREPROCESSOR && ctrlType <= CT_SCHEDULER ) isNonVisual = 1;
                   if( ctrlType >= CT_PRINTER && ctrlType <= CT_BARCODEPRINTER ) isNonVisual = 1;
-                  if( ctrlType >= CT_WHISPER && ctrlType != CT_BAND ) isNonVisual = 1; /* Whisper, Embeddings, Connectivity, Git */
+                  if( ctrlType >= CT_WHISPER && ctrlType != CT_BAND &&
+                      !(ctrlType >= CT_REPORTLABEL && ctrlType <= CT_REPORTIMAGE) ) isNonVisual = 1; /* Whisper, Embeddings, Connectivity, Git */
 
                   if( isNonVisual && g_designForm )
                   {
