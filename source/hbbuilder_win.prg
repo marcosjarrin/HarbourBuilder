@@ -1392,14 +1392,14 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
    // Report controls (133-135) — C++ drop logic already created the HWND in the band
    if nType >= 133 .and. nType <= 135
       hLastCtrl := UI_GetChild( hForm, UI_GetChildCount( hForm ) )
-      do case
-         case nType == 133; cBaseName := "RLabel"
-         case nType == 134; cBaseName := "RField"
-         case nType == 135; cBaseName := "RImage"
-      endcase
-      aCnt[ nType ]++
-      cRptName := cBaseName + LTrim( Str( aCnt[ nType ] ) )
       if hLastCtrl != 0 .and. UI_GetType( hLastCtrl ) == nType
+         do case
+            case nType == 133; cBaseName := "RLabel"
+            case nType == 134; cBaseName := "RField"
+            case nType == 135; cBaseName := "RImage"
+         endcase
+         aCnt[ nType ]++
+         cRptName := cBaseName + LTrim( Str( aCnt[ nType ] ) )
          UI_SetProp( hLastCtrl, "cName", cRptName )
          if nType == 133
             UI_SetProp( hLastCtrl, "cText", "Label" )

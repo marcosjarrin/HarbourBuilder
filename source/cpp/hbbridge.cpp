@@ -2534,6 +2534,7 @@ HB_FUNC( UI_GETALLPROPS )
          break;
       }
       case CT_REPORTIMAGE:
+         ADD_PROP_S( "cFileName", p->FFileName, "Image" );
          break;
    }
 
