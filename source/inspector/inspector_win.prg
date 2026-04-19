@@ -84,6 +84,10 @@ function InspectorPopulateCombo( hForm, hSelect )
    for i := 1 to nCount
       hChild := UI_GetChild( hForm, i )
       if hChild != 0
+         // Skip report controls — they live inside bands, not as standalone form components
+         if UI_GetType( hChild ) >= 133 .and. UI_GetType( hChild ) <= 135
+            loop
+         endif
          cName  := UI_GetProp( hChild, "cName" )
          cClass := UI_GetProp( hChild, "cClassName" )
          if Empty( cName ); cName := "ctrl" + LTrim( Str( i ) ); endif

@@ -6788,7 +6788,8 @@ HB_FUNC( W32_GENERATEPALETTEICONS )
       "tdbgrid","tdbgrid","tdbnavigator","tdbtext","tdbedit","tdbcombobox","tdbcheckbox","tdbimage",
       NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
       NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
-      NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+      /* index 72 = Band: use tstatusbar (horizontal bar) as closest match */
+      "tstatusbar",NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
       NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
       NULL,NULL,NULL,NULL,NULL,NULL,NULL,
       NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL
@@ -6801,11 +6802,11 @@ HB_FUNC( W32_GENERATEPALETTEICONS )
       "DB","My","Mr","Pg","SL","Fb","MS","Or","Mg",
       "Bw","DG","DN","DT","DE","DC","DK","DI",
       "Wb","WS","Wk","HT","FT","SM","TS","TC","UD",
-      "Pr","Rp","Lb","PP","PS","PD","RV","BP","Bd",
+      "Pr","Rp","Lb","PP","PS","PD","RV","BP","Bd","RLb","RFd","RIm",
       "PP","Sc","Rp","BC","PD","XL","Au","Pm","Cu","Tx","Ds","Sh",
       "Th","Mx","Se","CS","TP","At","CV","Ch",
       "OA","Gm","Cl","DS","Gk","Ol","Tf",
-      "x","x","x","x","x","x","x","x","x","x","x","x"
+      "x","x","x","x","x","x","x","x","x"
    };
    static COLORREF cl[] = {
       0xDB9834,0xDB9834,0xDB9834,0xDB9834,0xDB9834,0xDB9834,0xDB9834,0xDB9834,0xDB9834,0xDB9834,0xDB9834,
@@ -6815,11 +6816,11 @@ HB_FUNC( W32_GENERATEPALETTEICONS )
       0x3C4CE7,0x3C4CE7,0x3C4CE7,0x3C4CE7,0x3C4CE7,0x3C4CE7,0x3C4CE7,0x3C4CE7,0x3C4CE7,
       0x2B39C0,0x2B39C0,0x2B39C0,0x2B39C0,0x2B39C0,0x2B39C0,0x2B39C0,0x2B39C0,
       0x9CBC1A,0x9CBC1A,0x9CBC1A,0x9CBC1A,0x9CBC1A,0x9CBC1A,0x9CBC1A,0x9CBC1A,0x9CBC1A,
-      0x8D8C7F,0x8D8C7F,0x8D8C7F,0x8D8C7F,0x8D8C7F,0x8D8C7F,0x8D8C7F,0x8D8C7F,0x5E84A2,
+      0x8D8C7F,0x8D8C7F,0x8D8C7F,0x8D8C7F,0x8D8C7F,0x8D8C7F,0x8D8C7F,0x8D8C7F,0x5E84A2,0x227840,0x227840,0x227840,
       0xAD448E,0xAD448E,0xAD448E,0xAD448E,0xAD448E,0xAD448E,0xAD448E,0xAD448E,0xAD448E,0xAD448E,0xAD448E,0xAD448E,
       0x503E2C,0x503E2C,0x503E2C,0x503E2C,0x503E2C,0x503E2C,0x503E2C,0x503E2C,
       0x129CF3,0x129CF3,0x129CF3,0x129CF3,0x129CF3,0x129CF3,0x129CF3,
-      0,0,0,0,0,0,0,0,0,0,0,0
+      0,0,0,0,0,0,0,0,0
    };
 
    int tw = IC * IS, i, rb, ds;
