@@ -299,3 +299,4 @@ function CustomerReport( cFile )
    oReport:AddDesignBand( oBand )
 
 return oReport
+

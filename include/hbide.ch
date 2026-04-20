@@ -173,6 +173,9 @@
 
 // Report designer
 #define CT_BAND            132
+#define CT_REPORTLABEL     133
+#define CT_REPORTFIELD     134
+#define CT_REPORTIMAGE     135
 
 // Alignment
 #define ALIGN_LEFT         0

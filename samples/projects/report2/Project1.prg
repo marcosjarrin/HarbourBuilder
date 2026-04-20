@@ -2,13 +2,17 @@
 
 #include "hbbuilder.ch"
 
-REQUEST HB_GT_GUI_DEFAULT
-
 function Main()
 
-   Form1()
+   local oApp
+
+   oApp := TApplication():New()
+   oApp:Title := "Report"
+   oApp:CreateForm( TForm1():New() )
+   oApp:Run()
 
 return nil
 
 // Framework
 #include "classes.prg"
+

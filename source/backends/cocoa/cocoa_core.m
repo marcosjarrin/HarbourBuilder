@@ -130,6 +130,9 @@ static void SuppressCursorWarnings(void)
 #define CT_REPORTVIEWER 108
 #define CT_BARCODEPRINTER 109
 #define CT_BAND           132   // Report designer band
+#define CT_REPORTLABEL    133   // Report label (static text inside band)
+#define CT_REPORTFIELD    134   // Report field (data field inside band)
+#define CT_REPORTIMAGE    135   // Report image (picture inside band)
 #define CT_MAP            140
 #define CT_SCENE3D        141
 #define CT_EARTHVIEW      142
@@ -1428,6 +1431,67 @@ static NSString * HBMaskApply( const char * mask, NSString * input )
 }
 @end
 
+/* --- HBReportCtrlView --- */
+/* Backing NSView for TReportLabel/TReportField/TReportImage in report designer. */
+@interface HBReportCtrlView : NSView
+{
+@public
+   __weak HBControl * owner;
+}
+@end
+
+@implementation HBReportCtrlView
+- (BOOL)isFlipped { return YES; }
+- (void)drawRect:(NSRect)dirtyRect
+{
+   (void)dirtyRect;
+   HBControl * o = owner;
+   if( !o ) return;
+   int ct = o->FControlType;
+
+   NSColor * bg, * border;
+   if( ct == CT_REPORTLABEL ) {
+      bg     = [NSColor colorWithRed:0.88 green:0.94 blue:1.00 alpha:1.0];
+      border = [NSColor colorWithRed:0.35 green:0.55 blue:0.85 alpha:1.0];
+   } else if( ct == CT_REPORTFIELD ) {
+      bg     = [NSColor colorWithRed:1.00 green:0.97 blue:0.85 alpha:1.0];
+      border = [NSColor colorWithRed:0.75 green:0.60 blue:0.15 alpha:1.0];
+   } else {
+      bg     = [NSColor colorWithRed:0.91 green:0.91 blue:0.91 alpha:1.0];
+      border = [NSColor colorWithRed:0.45 green:0.45 blue:0.45 alpha:1.0];
+   }
+
+   [bg setFill];
+   NSRectFill( self.bounds );
+
+   [border setStroke];
+   NSBezierPath * path = [NSBezierPath bezierPathWithRect:NSInsetRect( self.bounds, 0.5, 0.5 )];
+   CGFloat pat[] = { 4, 2 };
+   [path setLineDash:pat count:2 phase:0];
+   [path setLineWidth:1.0];
+   [path stroke];
+
+   NSString * txt;
+   if( o->FText[0] )
+      txt = [NSString stringWithUTF8String:o->FText];
+   else if( ct == CT_REPORTFIELD )
+      txt = @"[field]";
+   else if( ct == CT_REPORTIMAGE )
+      txt = @"[image]";
+   else
+      txt = @"Label";
+
+   NSDictionary * attrs = @{
+      NSFontAttributeName:            [NSFont systemFontOfSize:10],
+      NSForegroundColorAttributeName: [NSColor colorWithWhite:0.25 alpha:1.0]
+   };
+   NSSize sz = [txt sizeWithAttributes:attrs];
+   CGFloat tx = fmax( 2.0, (self.bounds.size.width  - sz.width)  / 2.0 );
+   CGFloat ty = fmax( 1.0, (self.bounds.size.height - sz.height) / 2.0 );
+   [txt drawAtPoint:NSMakePoint( tx, ty ) withAttributes:attrs];
+}
+@end
+
 /* --- HBRulerView --- */
 /* Thin ruler strip drawn at top (horizontal) or left (vertical) of the report designer.
  * Appears when the first CT_BAND is placed; removed when no bands remain. */
@@ -2143,6 +2207,11 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
          HBBandView * bv = [[HBBandView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
          bv->owner = self;
          v = bv; break;
+      }
+      case CT_REPORTLABEL: case CT_REPORTFIELD: case CT_REPORTIMAGE: {
+         HBReportCtrlView * rv = [[HBReportCtrlView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
+         rv->owner = self;
+         v = rv; break;
       }
       default: {
          /* Non-visual (Timer, Dialogs, DB components) or unknown.
@@ -3442,6 +3511,9 @@ static HBPaletteTarget * s_palTarget = nil;
                   { CT_PRINTDIALOG,"TPrintDialog",    "",            32,  32 },
                   { CT_REPORTVIEWER,"TReportViewer",  "",           400, 300 },
                   { CT_BARCODEPRINTER,"TBarcodePrinter","",          32,  32 },
+                  { CT_REPORTLABEL,"TReportLabel",    "Label",     100,  18 },
+                  { CT_REPORTFIELD,"TReportField",    "",          100,  18 },
+                  { CT_REPORTIMAGE,"TReportImage",    "",           80,  60 },
                   { CT_MAP,        "TMap",            "",           400, 300 },
                   { CT_SCENE3D,    "TScene3D",        "",           400, 300 },
                   { CT_EARTHVIEW,  "TEarthView",      "",           400, 400 },
@@ -3947,6 +4019,20 @@ static HBPaletteTarget * s_palTarget = nil;
    switch( FWindowState ) {
       case WS_MINIMIZED: [FWindow miniaturize:nil]; break;
       case WS_MAXIMIZED: [FWindow zoom:nil]; break;
+   }
+
+   /* Fire OnCreate after the run loop starts (deferred so hb_vmRequestReenter succeeds) */
+   if( FOnCreate ) {
+      PHB_ITEM blk = FOnCreate; FOnCreate = NULL;
+      dispatch_async( dispatch_get_main_queue(), ^{
+         if( blk ) {
+            if( hb_vmRequestReenter() ) {
+               hb_vmPushEvalSym(); hb_vmPush( blk ); hb_vmSend( 0 );
+               hb_vmRequestRestore();
+            }
+            hb_itemRelease( (PHB_ITEM)blk );
+         }
+      });
    }
 
    /* Fire OnShow */
@@ -4724,6 +4810,7 @@ HB_FUNC( UI_LISTBOXNEW )
 {
    HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
    p->FControlType = CT_LISTBOX;
+   strncpy( p->FClassName, "TListBox", sizeof(p->FClassName) - 1 );
    if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
    if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
    if( pForm ) [pForm addChild:p]; RetCtrl( p );
@@ -4746,6 +4833,7 @@ HB_FUNC( UI_PROGRESSBARNEW )
 {
    HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
    p->FControlType = CT_PROGRESSBAR;
+   strncpy( p->FClassName, "TProgressBar", sizeof(p->FClassName) - 1 );
    if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
    if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
    if( pForm ) [pForm addChild:p]; RetCtrl( p );
@@ -4755,6 +4843,7 @@ HB_FUNC( UI_TREEVIEWNEW )
 {
    HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
    p->FControlType = CT_TREEVIEW;
+   strncpy( p->FClassName, "TTreeView", sizeof(p->FClassName) - 1 );
    if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
    if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
    if( pForm ) [pForm addChild:p]; RetCtrl( p );
@@ -4764,6 +4853,7 @@ HB_FUNC( UI_LISTVIEWNEW )
 {
    HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
    p->FControlType = CT_LISTVIEW;
+   strncpy( p->FClassName, "TListView", sizeof(p->FClassName) - 1 );
    if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
    if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
    if( pForm ) [pForm addChild:p]; RetCtrl( p );
@@ -4803,6 +4893,7 @@ HB_FUNC( UI_RICHEDITNEW )
 {
    HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
    p->FControlType = CT_RICHEDIT;
+   strncpy( p->FClassName, "TRichEdit", sizeof(p->FClassName) - 1 );
    if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
    if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
    if( pForm ) [pForm addChild:p]; RetCtrl( p );
@@ -4986,6 +5077,35 @@ HB_FUNC( UI_BANDNEW )
    if( HB_ISNUM(4) ) p->FTop  = hb_parni(4);
    if( HB_ISNUM(5) ) p->FWidth  = hb_parni(5);
    if( HB_ISNUM(6) ) p->FHeight = hb_parni(6);
+   if( pForm ) [pForm addChild:p];
+   RetCtrl( p );
+}
+
+/* UI_ReportCtrlNew( hForm, nType, nLeft, nTop, nWidth, nHeight, cText, cName ) --> hCtrl
+ * Creates a TReportLabel/TReportField/TReportImage child of hForm.
+ * Used by RestoreFormFromCode to recreate report controls as real NSViews. */
+HB_FUNC( UI_REPORTCTRLNEW )
+{
+   HBForm * pForm = GetForm(1);
+   int ctrlType = HB_ISNUM(2) ? hb_parni(2) : CT_REPORTLABEL;
+   const char * cText = HB_ISCHAR(7) ? hb_parc(7) : "";
+   const char * cName = HB_ISCHAR(8) ? hb_parc(8) : "";
+
+   if( ctrlType < CT_REPORTLABEL || ctrlType > CT_REPORTIMAGE ) {
+      hb_retnint(0); return;
+   }
+
+   HBControl * p = [[HBControl alloc] init];
+   p->FControlType = ctrlType;
+   const char * cls = (ctrlType == CT_REPORTLABEL) ? "TReportLabel" :
+                      (ctrlType == CT_REPORTFIELD)  ? "TReportField" : "TReportImage";
+   strncpy( p->FClassName, cls, sizeof(p->FClassName) - 1 );
+   if( cText[0] ) strncpy( p->FText, cText, sizeof(p->FText) - 1 );
+   if( cName[0] ) strncpy( p->FName, cName, sizeof(p->FName) - 1 );
+   p->FLeft   = HB_ISNUM(3) ? hb_parni(3) : 0;
+   p->FTop    = HB_ISNUM(4) ? hb_parni(4) : 0;
+   p->FWidth  = HB_ISNUM(5) ? hb_parni(5) : 100;
+   p->FHeight = HB_ISNUM(6) ? hb_parni(6) : 18;
    if( pForm ) [pForm addChild:p];
    RetCtrl( p );
 }

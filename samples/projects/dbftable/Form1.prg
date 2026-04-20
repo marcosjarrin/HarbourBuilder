@@ -1,6 +1,5 @@
 // Form1.prg
 //--------------------------------------------------------------------
-
 CLASS TForm1 FROM TForm
 
    // IDE-managed Components
@@ -37,7 +36,7 @@ METHOD CreateForm() CLASS TForm1
    @ 92, 112 BUTTON ::oButton1 PROMPT "Open table" OF Self SIZE 160, 32
    ::oButton1:oFont := "Segoe UI,12"
    COMPONENT ::oDbfTable1 TYPE CT_DBFTABLE OF Self  // TDBFTable
-   ::oDbfTable1:cFileName := "C:\HarbourBuilder\data\customer.dbf"
+   ::oDbfTable1:cFileName := CustomerDbfPath()
 
    // Event wiring
    ::oButton1:OnClick := { || ::Button1Click() }

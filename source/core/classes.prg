@@ -2588,17 +2588,30 @@ METHOD AddColumn( cTitle, cField, nWidth ) CLASS TReport
 return nil
 
 METHOD Preview() CLASS TReport
-   local i, j, oBand, oFld, nY
+   local i, j, oBand, oFld, nY, nPageBottom
 
    RPT_PreviewOpen( ::nPageWidth, ::nPageHeight, ;
       ::nMarginLeft, ::nMarginRight, ::nMarginTop, ::nMarginBottom )
    RPT_PreviewAddPage()
 
-   nY := ::nMarginTop
+   nY          := ::nMarginTop
+   nPageBottom := ::nPageHeight - ::nMarginBottom
 
    for i := 1 to Len( ::aDesignBands )
       oBand := ::aDesignBands[i]
       if ! oBand:lVisible; loop; endif
+
+      // Page break: only for Detail bands that overflow
+      if Upper( oBand:cName ) == "DETAIL" .and. nY + oBand:nHeight > nPageBottom
+         RPT_PreviewAddPage()
+         nY := ::nMarginTop
+      endif
+
+      if oBand:nBackColor >= 0
+         RPT_PreviewDrawRect( ::nMarginLeft, nY, ;
+            ::nPageWidth - ::nMarginLeft - ::nMarginRight, oBand:nHeight, ;
+            oBand:nBackColor, .T. )
+      endif
 
       for j := 1 to Len( oBand:aFields )
          oFld := oBand:aFields[j]
@@ -2614,7 +2627,7 @@ METHOD Preview() CLASS TReport
 return nil
 
 METHOD ExportPDF( cFile ) CLASS TReport
-   local i, j, oBand, oFld, nY
+   local i, j, oBand, oFld, nY, nPageBottom
    if cFile == nil .or. Empty( cFile ); return nil; endif
    if Empty( ::aDesignBands ); return nil; endif
 
@@ -2622,11 +2635,23 @@ METHOD ExportPDF( cFile ) CLASS TReport
       ::nMarginLeft, ::nMarginRight, ::nMarginTop, ::nMarginBottom )
    RPT_PdfAddPage()
 
-   nY := ::nMarginTop
+   nY          := ::nMarginTop
+   nPageBottom := ::nPageHeight - ::nMarginBottom
 
    for i := 1 to Len( ::aDesignBands )
       oBand := ::aDesignBands[i]
       if ! oBand:lVisible; loop; endif
+
+      if Upper( oBand:cName ) == "DETAIL" .and. nY + oBand:nHeight > nPageBottom
+         RPT_PdfAddPage()
+         nY := ::nMarginTop
+      endif
+
+      if oBand:nBackColor >= 0
+         RPT_PdfDrawRect( ::nMarginLeft, nY, ;
+            ::nPageWidth - ::nMarginLeft - ::nMarginRight, oBand:nHeight, ;
+            oBand:nBackColor, .T. )
+      endif
 
       for j := 1 to Len( oBand:aFields )
          oFld := oBand:aFields[j]
@@ -3633,6 +3658,13 @@ function HB_CreateComponent( nType, oParent )
    endcase
 return nil
 
+//----------------------------------------------------------------------------//
+function CustomerDbfPath()
+#ifdef __PLATFORM__UNIX
+return "/Users/usuario/HarbourBuilder/data/customer.dbf"
+#else
+return "C:\HarbourBuilder\data\customer.dbf"
+#endif
 
 //----------------------------------------------------------------------------//
 // Python backend (runtime dlopen of libpython) — used by TPython

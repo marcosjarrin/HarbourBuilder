@@ -1,6 +1,58 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-20a (macOS — Report tab, report controls, OnCreate, preview fixes)
+
+  PALETTE — NEW "Report" TAB (macOS):
+  - Replaced Band entry in Printing tab with a dedicated "Report" tab.
+  - Report tab contains: Bnd (Band/132), RLb (ReportLabel/133),
+    RFd (ReportField/134), RIm (ReportImage/135).
+  - CT_REPORTLABEL(133), CT_REPORTFIELD(134), CT_REPORTIMAGE(135) added
+    to hbide.ch, cocoa_core.m, and hbbuilder_macos.prg.
+  - HBReportCtrlView: colored NSView subclass for designer (blue=label,
+    yellow=field, gray=image), dashed border, text overlay.
+  - Rubber-band drop placement wired via defs[] table in cocoa_core.m.
+  - OnComponentDrop: assigns names, finds parent band by Y overlap,
+    serializes fields to band aData.
+  - RegenerateFormCode: skips CT_REPORTLABEL/FIELD/IMAGE (serialized via
+    band aData instead).
+  - RestoreFormFromCode: calls UI_ReportCtrlNew() to recreate NSViews
+    when loading saved projects.
+  - ComponentTypeName / ResolveComponentType updated for types 133–135.
+
+  INSPECTOR FIX — FClassName for visual controls:
+  - UI_ListBoxNew, UI_ProgressBarNew, UI_TreeViewNew, UI_ListViewNew,
+    UI_RichEditNew: now set FClassName so inspector shows correct class
+    name instead of "TControl".
+
+  BUILD SYSTEM FIX — duplicate symbols:
+  - Strip #include "classes.prg" from Project1.prg (in addition to form
+    and module files) before assembling main.prg, eliminating 94
+    duplicate symbol linker errors when building user projects.
+
+  OnCreate EVENT (macOS):
+  - FOnCreate fires once at first Activate via dispatch_async so
+    hb_vmRequestReenter() succeeds after [NSApp run] has started.
+  - report2/Form1.prg wired: ::OnCreate := { || Form1Create(Self) }.
+
+  CROSS-PLATFORM DBF PATH:
+  - CustomerDbfPath() added to classes.prg using #ifdef __PLATFORM__UNIX
+    to return the correct path on macOS vs Windows.
+  - All sample projects (report2, dbftable, database/DbfTable, dbgrid)
+    updated to call CustomerDbfPath() instead of hardcoded paths.
+
+  REPORT PREVIEW FIX — pagination and Y coordinates:
+  - Preview() and ExportPDF(): auto page-break when Detail band overflows
+    page bottom (nY + band.nHeight > pageHeight - marginBottom).
+  - Band nBackColor rendered as filled rect behind text fields.
+  - RPT_PreviewDrawText parameter order corrected (was text,x,y; now
+    x,y,text matching Harbour call convention).
+  - Y coordinate no longer inverted — HBReportPreviewView isFlipped=YES
+    so pageY + y*ppm is correct without additional flip.
+  - RPT_PreviewRender resets s_rptPrvCurPage to 0 so preview always
+    opens on page 1 (was showing last page after multi-page pagination).
+  - scrollToPoint:(0,0) after render to show top of page 1.
+
 2026-04-19f (Documentation updates for recent changes)
 
   DOCUMENTATION UPDATES:

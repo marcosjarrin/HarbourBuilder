@@ -4,53 +4,49 @@
 CLASS TForm1 FROM TForm
 
    // IDE-managed Components
-   DATA oLblTitle     // TLabel
-   DATA oLblCols      // TLabel
-   DATA oList         // TListBox
-   DATA oLblStatus    // TLabel
-   DATA oBtnPrev      // TButton
-   DATA oBtnPDF       // TButton
+   DATA oLblTitle   // TLabel
+   DATA oLblCols   // TLabel
+   DATA oList   // TListBox
+   DATA oLblStatus   // TLabel
+   DATA oBtnPrev   // TButton
+   DATA oBtnPDF   // TButton
 
    // Event handlers
-   METHOD BtnPrevClick()
-   METHOD BtnPDFClick()
 
    METHOD CreateForm()
+   METHOD BtnPrevClick()
+   METHOD BtnPDFClick()
 
 ENDCLASS
 //--------------------------------------------------------------------
 
 METHOD CreateForm() CLASS TForm1
 
-   ::Title   := "Customer Report - HarbourBuilder Sample"
-   ::Left    := 1222
-   ::Top     := 422
-   ::Width   := 660
-   ::Height  := 509
-   ::FontName := "Segoe UI"
-   ::FontSize := 9
-   ::Color   := 14605931
+   ::Title  := "Customer Report - HarbourBuilder Sample"
+   ::Left   := 1222
+   ::Top    := 422
+   ::Width  := 660
+   ::Height := 509
+   ::Color  := 14605931
 
-   @ 12, 12 SAY ::oLblTitle PROMPT "Customer Database Report" OF Self SIZE 630, 24
+   @ 12, 12 SAY ::oLblTitle PROMPT "Customer Database Report" OF Self SIZE 630
    ::oLblTitle:nClrPane := 14062743
-   ::oLblTitle:oFont := "Segoe UI,12"
-   ::oLblTitle:lTransparent := .T.
-   @ 42, 12 SAY ::oLblCols PROMPT "Name                            City                ST" OF Self SIZE 630, 24
-   ::oLblCols:oFont := "Segoe UI,12"
-   ::oLblCols:lTransparent := .T.
+   ::oLblTitle:oFont := ".AppleSystemUIFont,12"
+   @ 42, 12 SAY ::oLblCols PROMPT "Name                            City                ST" OF Self SIZE 630
+   ::oLblCols:oFont := ".AppleSystemUIFont,12"
    @ 64, 12 LISTBOX ::oList OF Self SIZE 630, 340
-   ::oList:oFont := "Courier New,10"
-   @ 412, 12 SAY ::oLblStatus PROMPT "Records: 0" OF Self SIZE 364, 24
-   ::oLblStatus:oFont := "Segoe UI,12"
-   ::oLblStatus:lTransparent := .T.
+   ::oList:oFont := "CourierNewPSMT,10"
+   @ 412, 12 SAY ::oLblStatus PROMPT "Records: 0" OF Self SIZE 364
+   ::oLblStatus:oFont := ".AppleSystemUIFont,12"
    @ 404, 392 BUTTON ::oBtnPrev PROMPT "Preview..." OF Self SIZE 100, 30
-   ::oBtnPrev:oFont := "Segoe UI,12"
+   ::oBtnPrev:oFont := ".AppleSystemUIFont,12"
    @ 402, 508 BUTTON ::oBtnPDF PROMPT "Export PDF..." OF Self SIZE 100, 30
-   ::oBtnPDF:oFont := "Segoe UI,12"
+   ::oBtnPDF:oFont := ".AppleSystemUIFont,12"
 
    // Event wiring
    ::oBtnPrev:OnClick := { || ::BtnPrevClick() }
    ::oBtnPDF:OnClick  := { || ::BtnPDFClick() }
+   ::OnCreate := { || Form1Create( Self ) }
 
 return nil
 //--------------------------------------------------------------------
@@ -60,7 +56,7 @@ function Form1Create( oSelf )
    local oDb, aItems, cLine, nCount
 
    oDb := TDBFTable():New()
-   oDb:cFileName := "C:\HarbourBuilder\data\customer.dbf"
+   oDb:cFileName := CustomerDbfPath()
    oDb:cRDD      := "DBFCDX"
    oDb:lReadOnly := .T.
    oDb:Open()
@@ -88,18 +84,22 @@ return nil
 //--------------------------------------------------------------------
 
 METHOD BtnPrevClick() CLASS TForm1
-   local oReport := CustomerReport( "C:\HarbourBuilder\data\customer.dbf" )
+   local oReport := CustomerReport( CustomerDbfPath() )
    oReport:Preview()
 return nil
 //--------------------------------------------------------------------
 
 METHOD BtnPDFClick() CLASS TForm1
    local cDir, cFile, oReport
-   cDir := hb_GetEnv( "TEMP" )
-   if Empty( cDir ); cDir := hb_GetEnv( "TMP" ); endif
-   if Empty( cDir ); cDir := "C:\Temp"; endif
-   cFile := cDir + "\CustomerReport.pdf"
-   oReport := CustomerReport( "C:\HarbourBuilder\data\customer.dbf" )
+   #ifdef __PLATFORM__UNIX
+      cDir := "/tmp"
+   #else
+      cDir := hb_GetEnv( "TEMP" )
+      if Empty( cDir ); cDir := hb_GetEnv( "TMP" ); endif
+      if Empty( cDir ); cDir := "C:\Temp"; endif
+   #endif
+   cFile := cDir + hb_ps() + "CustomerReport.pdf"
+   oReport := CustomerReport( CustomerDbfPath() )
    oReport:ExportPDF( cFile )
    MsgInfo( "PDF exported to:" + Chr(13) + cFile )
 return nil
@@ -111,3 +111,4 @@ FUNCTION Form1()
    oForm:Activate()
 RETURN oForm
 //--------------------------------------------------------------------
+

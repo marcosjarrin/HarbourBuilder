@@ -4500,9 +4500,12 @@ static int          s_rptPrvMgT = 15, s_rptPrvMgB = 15;
    }
 
    /* Draw commands for current page */
+   NSLog(@"[Preview] drawRect pageCount=%d curPage=%d", s_rptPrvPageCount, s_rptPrvCurPage);
+   fprintf(stderr, "[Preview] drawRect pageCount=%d curPage=%d\n", s_rptPrvPageCount, s_rptPrvCurPage); fflush(stderr);
    if( s_rptPrvCurPage >= 0 && s_rptPrvCurPage < s_rptPrvPageCount )
    {
       RptPrvPage * pg = &s_rptPrvPages[s_rptPrvCurPage];
+      fprintf(stderr, "[Preview] nCmds=%d\n", pg->nCmds); fflush(stderr);
       for( int i = 0; i < pg->nCmds; i++ )
       {
          RptDrawCmd * cmd = &pg->cmds[i];
@@ -4545,7 +4548,8 @@ static int          s_rptPrvMgT = 15, s_rptPrvMgB = 15;
             case 2:  /* Rect */
             {
                [clr set];
-               NSRect rect = NSMakeRect( pageX + cmd->x * ppm, pageY + cmd->y * ppm,
+               NSRect rect = NSMakeRect( pageX + cmd->x * ppm,
+                                         pageY + cmd->y * ppm,
                                          cmd->w * ppm, cmd->h * ppm );
                if( cmd->filled )
                   NSRectFill( rect );
@@ -4558,7 +4562,7 @@ static int          s_rptPrvMgT = 15, s_rptPrvMgB = 15;
                [clr set];
                NSBezierPath * lp = [NSBezierPath bezierPath];
                [lp setLineWidth: cmd->lineWidth > 0 ? cmd->lineWidth : 1];
-               [lp moveToPoint:NSMakePoint( pageX + cmd->x * ppm, pageY + cmd->y * ppm )];
+               [lp moveToPoint:NSMakePoint( pageX + cmd->x  * ppm, pageY + cmd->y  * ppm )];
                [lp lineToPoint:NSMakePoint( pageX + cmd->x2 * ppm, pageY + cmd->y2 * ppm )];
                [lp stroke];
                break;
@@ -4702,10 +4706,11 @@ HB_FUNC( RPT_PREVIEWDRAWTEXT )
 
    RptDrawCmd * cmd = &page->cmds[page->nCmds++];
    memset( cmd, 0, sizeof(*cmd) );
+   /* RPT_PreviewDrawText( nX, nY, cText, cFont, nSize, lBold, lItalic, nColor ) */
    cmd->type = 1;
-   if( HB_ISCHAR(1) ) strncpy( cmd->text, hb_parc(1), 255 );
-   cmd->x = HB_ISNUM(2) ? hb_parni(2) : 0;
-   cmd->y = HB_ISNUM(3) ? hb_parni(3) : 0;
+   cmd->x = HB_ISNUM(1) ? hb_parni(1) : 0;
+   cmd->y = HB_ISNUM(2) ? hb_parni(2) : 0;
+   if( HB_ISCHAR(3) ) strncpy( cmd->text, hb_parc(3), 255 );
    if( HB_ISCHAR(4) ) strncpy( cmd->fontName, hb_parc(4), 63 );
    cmd->fontSize = HB_ISNUM(5) ? hb_parni(5) : 12;
    cmd->bold   = HB_ISLOG(6) ? hb_parl(6) : 0;
@@ -4751,8 +4756,12 @@ HB_FUNC( RPT_PREVIEWDRAWLINE )
 
 HB_FUNC( RPT_PREVIEWRENDER )
 {
-   if( s_rptDrawView )
+   s_rptPrvCurPage = 0;  /* always start on page 1 */
+   if( s_rptDrawView ) {
       [s_rptDrawView setNeedsDisplay:YES];
+      NSScrollView * sv = [s_rptDrawView enclosingScrollView];
+      if( sv ) [[sv contentView] scrollToPoint:NSMakePoint(0, 0)];
+   }
    rpt_prv_update_label();
 }
 

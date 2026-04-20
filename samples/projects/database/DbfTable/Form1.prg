@@ -1,6 +1,5 @@
 // Form1.prg
 //--------------------------------------------------------------------
-
 CLASS TForm1 FROM TForm
 
    // IDE-managed Components
@@ -23,7 +22,7 @@ METHOD CreateForm() CLASS TForm1
    ::Height := 300
 
    COMPONENT ::oDBFTable1 TYPE CT_DBFTABLE OF Self  // TControl
-   ::oDBFTable1:cFileName := "/Users/anto/HarbourBuilder/data/customer.dbf"
+   ::oDBFTable1:cFileName := CustomerDbfPath()
    ::oDBFTable1:Open()
    @ 176, 152 BUTTON ::oButton1 PROMPT "Button" OF Self SIZE 112, 37
 

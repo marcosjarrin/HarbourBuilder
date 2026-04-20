@@ -403,7 +403,6 @@ static function CreatePalette()
    oPal:AddComp( nTab, "DBK",  "DBCheckBox",  85 )
    oPal:AddComp( nTab, "DBI",  "DBImage",     86 )
 
-   // Internet tab (full networking stack)
    // Printing tab
    nTab := oPal:AddTab( "Printing" )
    oPal:AddComp( nTab, "Prt",  "Printer",       102 )
@@ -414,7 +413,13 @@ static function CreatePalette()
    oPal:AddComp( nTab, "PDl",  "PrintDialog",   107 )
    oPal:AddComp( nTab, "RVw",  "ReportViewer",  108 )
    oPal:AddComp( nTab, "BPr",  "BarcodePrinter", 109 )
+
+   // Report tab (report designer components)
+   nTab := oPal:AddTab( "Report" )
    oPal:AddComp( nTab, "Bnd",  "Band",          132 )
+   oPal:AddComp( nTab, "RLb",  "ReportLabel",   133 )
+   oPal:AddComp( nTab, "RFd",  "ReportField",   134 )
+   oPal:AddComp( nTab, "RIm",  "ReportImage",   135 )
 
    nTab := oPal:AddTab( "Internet" )
    oPal:AddComp( nTab, "Web",  "WebView",     62 )
@@ -689,6 +694,9 @@ static function RegenerateFormCode( cName, hForm )
          cCtrlClass := UI_GetProp( hCtrl, "cClassName" )
          nType      := UI_GetType( hCtrl )
          if Empty( cCtrlName ); cCtrlName := "ctrl" + LTrim(Str(i)); endif
+
+         // Report controls (133-135) are serialized in their band's aData — skip here
+         if nType >= 133 .and. nType <= 135; loop; endif
 
          // DATA declaration
          cDatas += "   DATA o" + cCtrlName + "   // " + cCtrlClass + e
@@ -1403,6 +1411,7 @@ static function RestoreFormFromCode( hForm, cCode )
    local cFldFont, nFldFontSize, lFldBold, lFldItalic, nFldAlign
    local cBandName, hBandCtrl, cFldSerial, cExistFields
    local cTail, nLastQ, nQpos
+   local nBandAbsTop, nAbsTop, nCtrlType2, cPromptText
 
    if Empty( cCode ) .or. hForm == 0
       return nil
@@ -1847,6 +1856,13 @@ static function RestoreFormFromCode( hForm, cCode )
                   endif
                // else: silently skip — field data would truncate the 4096-byte FData buffer
                endif
+
+               // Also create a real NSView child so the control is visible in design mode
+               nBandAbsTop := UI_GetProp( hBandCtrl, "nTop" )
+               nAbsTop     := nBandAbsTop + nT
+               nCtrlType2  := if( cFldType == "image", 135, if( cFldType == "field", 134, 133 ) )
+               cPromptText := if( nCtrlType2 == 133, cFldPrompt, "" )
+               UI_ReportCtrlNew( hForm, nCtrlType2, nL, nAbsTop, nW, nH, cPromptText, cFldName )
             endif
          endif
          loop
@@ -2621,6 +2637,9 @@ return nil
 static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
 
    local cName, nCount, hCtrl, hDbg, nBands, iBand
+   local cBaseName, cRptName, hLastCtrl, hBandCtrl, hBandCheck, iBandChild
+   local nBandT, nBandB, nBandAbsT, cFldSerial, cExistFields2, nRelT
+   local nAbsT, nAbsL, nAbsW, nAbsH, cFldType2
    static aCnt := nil
    static nBandCnt := 0
    static aNames := { ;
@@ -2653,7 +2672,7 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
       "GitRepo", "GitCommit", "GitBranch", "GitLog", "GitDiff", ;
       "GitRemote", "GitStash", "GitTag", "GitBlame", "GitMerge" }
 
-   if aCnt == nil; aCnt := Array( Len( aNames ) ); AFill(aCnt,0); endif
+   if aCnt == nil; aCnt := Array( 135 ); AFill(aCnt,0); endif
    UI_FormUndoPush( hForm )
 
    // CT_BAND (132) is not in aNames — handle it before the bounds check
@@ -2684,6 +2703,65 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
       InspectorPopulateCombo( hForm )     // rebuild combo (selects form by default)
       INS_ComboSelect( _InsGetData(), nCount )  // select the new band in combo
       InspectorRefresh( hCtrl )           // show band properties last
+      return nil
+   endif
+
+   // Report controls (133-135) — C++ rubber-band created the view in the form
+   if nType >= 133 .and. nType <= 135
+      hLastCtrl := UI_GetChild( hForm, UI_GetChildCount( hForm ) )
+      if hLastCtrl != 0 .and. UI_GetType( hLastCtrl ) == nType
+         do case
+            case nType == 133; cBaseName := "RLabel"
+            case nType == 134; cBaseName := "RField"
+            case nType == 135; cBaseName := "RImage"
+         endcase
+         aCnt[ nType ]++
+         cRptName := cBaseName + LTrim( Str( aCnt[ nType ] ) )
+         UI_SetProp( hLastCtrl, "cName", cRptName )
+         if nType == 133
+            UI_SetProp( hLastCtrl, "cText", "Label" )
+         endif
+
+         // Find the band that contains this control (by vertical overlap)
+         nAbsT := UI_GetProp( hLastCtrl, "nTop" )
+         nAbsL := UI_GetProp( hLastCtrl, "nLeft" )
+         nAbsW := UI_GetProp( hLastCtrl, "nWidth" )
+         nAbsH := UI_GetProp( hLastCtrl, "nHeight" )
+         hBandCtrl := 0
+         for iBandChild := 1 to UI_GetChildCount( hForm )
+            hBandCheck := UI_GetChild( hForm, iBandChild )
+            if UI_GetType( hBandCheck ) == CT_BAND
+               nBandT := UI_GetProp( hBandCheck, "nTop" )
+               nBandB := nBandT + UI_GetProp( hBandCheck, "nHeight" )
+               if nAbsT >= nBandT .and. nAbsT < nBandB
+                  hBandCtrl := hBandCheck
+                  exit
+               endif
+            endif
+         next
+
+         // Append serialized record to parent band's aData
+         if hBandCtrl != 0
+            nBandAbsT := UI_GetProp( hBandCtrl, "nTop" )
+            nRelT := nAbsT - nBandAbsT
+            cFldType2 := if( nType == 135, "image", if( nType == 134, "field", "text" ) )
+            cFldSerial := cRptName + "|" + cFldType2 + "|" + ;
+               if( nType == 133, UI_GetProp( hLastCtrl, "cText" ), "" ) + "|||" + ;
+               LTrim(Str(nRelT)) + "|" + LTrim(Str(nAbsL)) + "|" + ;
+               LTrim(Str(nAbsW)) + "|" + LTrim(Str(nAbsH)) + "|" + ;
+               "Sans|10|0|0|0"
+            cExistFields2 := UI_GetProp( hBandCtrl, "aData" )
+            if Empty( cExistFields2 )
+               UI_SetProp( hBandCtrl, "aData", cFldSerial )
+            else
+               UI_SetProp( hBandCtrl, "aData", cExistFields2 + Chr(10) + cFldSerial )
+            endif
+         endif
+      endif
+      SyncDesignerToCode()
+      InspectorPopulateCombo( hForm )
+      INS_ComboSelect( _InsGetData(), UI_GetChildCount( hForm ) )
+      InspectorRefresh( hLastCtrl )
       return nil
    endif
 
@@ -3458,13 +3536,19 @@ static function TBRun()
    cAllPrg := '#include "hbbuilder.ch"' + Chr(10)
    cAllPrg += "REQUEST HB_GT_NUL_DEFAULT" + Chr(10)
    cAllPrg += "REQUEST DBFCDX, DBFNTX, DBFFPT" + Chr(10) + Chr(10)
-   cAllPrg += StrTran( MemoRead( cBuildDir + "/Project1.prg" ), ;
-                       '#include "hbbuilder.ch"', "" ) + Chr(10)
+   cAllPrg += StrTran( StrTran( StrTran( MemoRead( cBuildDir + "/Project1.prg" ), ;
+                       '#include "hbbuilder.ch"', "" ), ;
+                       '#include "classes.prg"', "" ), ;
+                       "REQUEST HB_GT_GUI_DEFAULT", "" ) + Chr(10)
    for i := 1 to Len( aForms )
-      cAllPrg += MemoRead( cBuildDir + "/" + aForms[i][1] + ".prg" ) + Chr(10)
+      cAllPrg += StrTran( StrTran( MemoRead( cBuildDir + "/" + aForms[i][1] + ".prg" ), ;
+                          '#include "classes.prg"', "" ), ;
+                          '#include "hbbuilder.ch"', "" ) + Chr(10)
    next
    for i := 1 to Len( aModules )
-      cAllPrg += MemoRead( cBuildDir + "/" + aModules[i][1] + ".prg" ) + Chr(10)
+      cAllPrg += StrTran( StrTran( MemoRead( cBuildDir + "/" + aModules[i][1] + ".prg" ), ;
+                          '#include "classes.prg"', "" ), ;
+                          '#include "hbbuilder.ch"', "" ) + Chr(10)
    next
    MemoWrit( cBuildDir + "/main.prg", cAllPrg )
 
@@ -4389,7 +4473,7 @@ static function IsNonVisual( nType )
    // CT_DBEDIT=83, CT_DBCOMBOBOX=84, CT_DBCHECKBOX=85, CT_DBIMAGE=86,
    // CT_WEBVIEW=62
    if nType == 62 .or. ( nType >= 79 .and. nType <= 86 ) .or. ;
-      nType == 132 .or. ;
+      ( nType >= 132 .and. nType <= 135 ) .or. ;
       nType == 140 .or. nType == 141 .or. nType == 142
       return .F.
    endif
@@ -4489,6 +4573,9 @@ static function ComponentTypeName( nType )
       case nType == 130; return "CT_GITMERGE"
       case nType == 131; return "CT_COMPARRAY"
       case nType == 132; return "CT_BAND"
+      case nType == 133; return "CT_REPORTLABEL"
+      case nType == 134; return "CT_REPORTFIELD"
+      case nType == 135; return "CT_REPORTIMAGE"
    endcase
 return LTrim(Str(nType))
 
@@ -4536,7 +4623,8 @@ static function ResolveComponentType( cName )
       { "CT_GITSTASH", 127 }, { "CT_GITTAG", 128 }, ;
       { "CT_GITBLAME", 129 }, { "CT_GITMERGE", 130 }, ;
       { "CT_COMPARRAY", 131 }, ;
-      { "CT_BAND", 132 } }
+      { "CT_BAND", 132 }, ;
+      { "CT_REPORTLABEL", 133 }, { "CT_REPORTFIELD", 134 }, { "CT_REPORTIMAGE", 135 } }
    for i := 1 to Len( aMap )
       if Upper( cName ) == aMap[i][1]
          return aMap[i][2]
