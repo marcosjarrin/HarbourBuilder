@@ -57,6 +57,7 @@ typedef struct {
    PHB_ITEM     pOnEventDblClick;
    /* Callback after property edit (two-way sync) */
    PHB_ITEM     pOnPropChanged;
+   char         szClassName[64]; /* class name of currently inspected control */
    /* Debug mode */
    BOOL         bDebugMode;
    IROW         dbgLocalsRows[MAX_ROWS];
@@ -539,8 +540,14 @@ static HBFontPickerTarget * s_fontTarget = nil;
    /* Set allowed file types based on property name */
    if( strcmp( d->rows[nReal].szName, "cFileName" ) == 0 )
    {
-      [panel setAllowedFileTypes:@[@"dbf"]];
-      [panel setTitle:@"Select DBF File"];
+      if( strcasecmp( d->szClassName, "TDBFTable" ) == 0 ||
+          strcasecmp( d->szClassName, "TDbfTable" ) == 0 ) {
+         [panel setAllowedFileTypes:@[@"dbf"]];
+         [panel setTitle:@"Select DBF File"];
+      } else {
+         [panel setAllowedFileTypes:nil];
+         [panel setTitle:@"Select File"];
+      }
    }
    else if( strcmp( d->rows[nReal].szName, "cPicture" ) == 0 )
    {
@@ -1977,6 +1984,7 @@ HB_FUNC( INS_REFRESHWITHDATA )
       PHB_ITEM pRow = hb_arrayGetItemPtr( pArray, 1 );
       const char * cls = hb_arrayGetCPtr( pRow, 2 );
       [d->window setTitle:[NSString stringWithFormat:@"Inspector: %s", cls ? cls : ""]];
+      strncpy( d->szClassName, cls ? cls : "", sizeof(d->szClassName) - 1 );
    }
 
    /* Always build property rows from the passed array */

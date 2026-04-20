@@ -1106,6 +1106,22 @@ static function RegenerateFormCode( cName, hForm )
                      if UI_GetProp( hCtrl, "lActive" )
                         cCreate += '   ::o' + cCtrlName + ':Open()' + e
                      endif
+                  elseif nType == 57  // SQLite
+                     cVal := UI_GetProp( hCtrl, "cFileName" )
+                     if ! Empty( cVal )
+                        cCreate += '   ::o' + cCtrlName + ':cFileName := "' + cVal + '"' + e
+                     endif
+                     cVal := UI_GetProp( hCtrl, "cTable" )
+                     if ! Empty( cVal )
+                        cCreate += '   ::o' + cCtrlName + ':cTable := "' + cVal + '"' + e
+                     endif
+                     cVal := UI_GetProp( hCtrl, "cSQL" )
+                     if ! Empty( cVal )
+                        cCreate += '   ::o' + cCtrlName + ':cSQL := "' + cVal + '"' + e
+                     endif
+                     if UI_GetProp( hCtrl, "lActive" )
+                        cCreate += '   ::o' + cCtrlName + ':Open()' + e
+                     endif
                   elseif nType == 131  // CompArray
                      cVal := UI_GetProp( hCtrl, "aHeaders" )
                      if ! Empty( cVal )

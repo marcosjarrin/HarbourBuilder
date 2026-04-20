@@ -1253,7 +1253,17 @@ METHOD LoadFromDataSource( oForm ) CLASS TDBGrid
    else
       // DB datasource
       if ! oComp:lConnected
-         return Self
+         if __objHasMethod( oComp, "OPEN" )
+            oComp:Open()
+         endif
+         if ! oComp:lConnected
+            return Self
+         endif
+      endif
+      // If connected but cursor not loaded (e.g. cTable set after Open()), reload cursor
+      if __objHasMethod( oComp, "FIELDCOUNT" ) .and. oComp:FieldCount() == 0 .and. ;
+         __objHasMethod( oComp, "LOADCURSOR" )
+         oComp:LoadCursor()
       endif
       nFields := oComp:FieldCount()
       if Len( ::aColumns ) == 0
@@ -2182,7 +2192,13 @@ return aStruct
 
 CLASS TSQLite INHERIT TDatabase
 
-   DATA lAutoCommit  INIT .T.       // Auto-commit mode
+   DATA lAutoCommit   INIT .T.       // Auto-commit mode
+   DATA cFileName     INIT ""        // SQLite file path (alias for cDatabase)
+   DATA cTable        INIT ""        // Table for cursor navigation
+   DATA cSQL          INIT ""        // Custom SQL for cursor navigation
+   DATA aRows         INIT {}        // Cached rows for cursor
+   DATA aFieldNames   INIT {}        // Cached field names for cursor
+   DATA nRecord       INIT 0         // Current record (1-based, 0=empty)
 
    METHOD New() CONSTRUCTOR
    METHOD Open()
@@ -2192,12 +2208,21 @@ CLASS TSQLite INHERIT TDatabase
    METHOD TableExists( cTable )
    METHOD Tables()
 
+   // Cursor navigation (for DBGrid compatibility)
+   METHOD FieldCount()
+   METHOD FieldName( n )
+   METHOD GoTop()
+   METHOD Eof()
+   METHOD FieldGet( n )
+   METHOD Skip( n )
+
    // SQLite-specific
    METHOD CreateTable( cName, aFields )
    METHOD BeginTransaction()
    METHOD Commit()
    METHOD Rollback()
    METHOD LastInsertId()
+   METHOD LoadCursor()   // reload rows from cTable/cSQL without reopening file
 
 ENDCLASS
 
@@ -2207,20 +2232,80 @@ METHOD New() CLASS TSQLite
 return Self
 
 METHOD Open() CLASS TSQLite
+   if ! Empty( ::cFileName )
+      ::cDatabase := ::cFileName
+   endif
    if Empty( ::cDatabase )
       ::cLastError := "Database file path not specified"
       return .F.
    endif
-   ::pHandle := sqlite3_open( ::cDatabase, .T. )  // .T. = create if not exists
-   if ::pHandle != nil
-      ::lConnected := .T.
-      if ! Empty( ::cCharSet )
-         sqlite3_exec( ::pHandle, "PRAGMA encoding = '" + ::cCharSet + "'" )
-      endif
-      return .T.
+   ::pHandle := sqlite3_open( ::cDatabase, .T. )
+   if ::pHandle == nil
+      ::cLastError := "Failed to open SQLite database: " + ::cDatabase
+      return .F.
    endif
-   ::cLastError := "Failed to open SQLite database: " + ::cDatabase
-return .F.
+   ::lConnected := .T.
+   if ! Empty( ::cCharSet )
+      sqlite3_exec( ::pHandle, "PRAGMA encoding = '" + ::cCharSet + "'" )
+   endif
+   ::LoadCursor()
+return .T.
+
+METHOD LoadCursor() CLASS TSQLite
+   local cQuery, pStmt, nCols, i, nRet, aRow, xCol
+   if ! ::lConnected; return Self; endif
+   cQuery := iif( ! Empty( ::cSQL ), ::cSQL, ;
+             iif( ! Empty( ::cTable ), "SELECT * FROM " + ::cTable, "" ) )
+   if Empty( cQuery ); return Self; endif
+   ::aRows       := {}
+   ::aFieldNames := {}
+   pStmt := sqlite3_prepare( ::pHandle, cQuery )
+   if pStmt != nil
+      nCols := sqlite3_column_count( pStmt )
+      for i := 1 to nCols
+         AAdd( ::aFieldNames, sqlite3_column_name( pStmt, i ) )
+      next
+      nRet := sqlite3_step( pStmt )
+      while nRet == 100  // SQLITE_ROW
+         aRow := Array( nCols )
+         for i := 1 to nCols
+            xCol := sqlite3_column_text( pStmt, i )
+            aRow[i] := iif( xCol == nil, "", hb_ValToStr( xCol ) )
+         next
+         AAdd( ::aRows, aRow )
+         nRet := sqlite3_step( pStmt )
+      enddo
+      sqlite3_finalize( pStmt )
+      ::nRecord := iif( Len( ::aRows ) > 0, 1, 0 )
+   endif
+return Self
+
+METHOD FieldCount() CLASS TSQLite
+return Len( ::aFieldNames )
+
+METHOD FieldName( n ) CLASS TSQLite
+   if n >= 1 .and. n <= Len( ::aFieldNames )
+      return ::aFieldNames[n]
+   endif
+return ""
+
+METHOD GoTop() CLASS TSQLite
+   ::nRecord := iif( Len( ::aRows ) > 0, 1, 0 )
+return Self
+
+METHOD Eof() CLASS TSQLite
+return ::nRecord == 0 .or. ::nRecord > Len( ::aRows )
+
+METHOD FieldGet( n ) CLASS TSQLite
+   if ! ::Eof() .and. n >= 1 .and. n <= Len( ::aRows[::nRecord] )
+      return ::aRows[::nRecord][n]
+   endif
+return nil
+
+METHOD Skip( n ) CLASS TSQLite
+   ::nRecord += n
+   if ::nRecord < 1; ::nRecord := 1; endif
+return Self
 
 METHOD Close() CLASS TSQLite
    // Harbour's hbsqlit3 uses GC-managed handles - no explicit close needed

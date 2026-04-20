@@ -1,6 +1,51 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-20c (macOS — TSQLite cursor navigation, DBGrid nAlign, inspector fixes)
+
+  TSQLite — CURSOR NAVIGATION FOR DBGRID:
+  - Added cTable, cSQL, aRows, aFieldNames, nRecord fields to TSQLite.
+  - New methods: FieldCount(), FieldName(n), GoTop(), Eof(), FieldGet(n),
+    Skip(n), LoadCursor() — enables DBGrid to use TSQLite as datasource.
+  - Open() now calls LoadCursor() automatically when cTable or cSQL is set.
+  - LoadCursor() runs SELECT * FROM cTable (or custom cSQL) and caches all
+    rows in aRows using sqlite3_prepare/sqlite3_step/sqlite3_finalize.
+  - LoadFromDataSource() auto-calls LoadCursor() if connected but cursor
+    not yet loaded (handles case where cTable is set after Open()).
+  - LoadFromDataSource() auto-calls Open() if component not yet connected.
+  - NULL SQLite values converted to "" (sqlite3_column_text returns nil
+    for SQL NULL; now guarded with iif(xCol==nil,"",hb_ValToStr(xCol))).
+
+  CRASH FIX — UI_DBGridSetCache nil string:
+  - [NSString stringWithUTF8String:sz] returns nil for invalid UTF-8 data
+    (e.g. binary SQLite columns), causing [NSMutableArray addObject:nil]
+    crash. Added Latin-1 fallback; if both fail, uses @"".
+
+  TSQLite INSPECTOR PROPERTIES:
+  - Added cTable (table name), cSQL (custom query), lActive (auto-open)
+    to CT_SQLITE inspector panel under "Data" / "Behavior" categories.
+  - FTable[64] and FSQL[512] fields added to HBControl struct.
+  - UI_GetProp / UI_SetProp handlers added for cTable and cSQL.
+  - IDE code generation emits cTable, cSQL, and Open() (when lActive)
+    in the correct order before DBGrid LoadFromDataSource.
+
+  INSPECTOR — SQLite cFileName file picker:
+  - cFileName picker no longer forces *.dbf filter for all controls.
+  - For TDBFTable: keeps *.dbf filter and "Select DBF File" title.
+  - For TSQLite and others: allows all files, no extension restriction.
+  - szClassName[64] added to INSDATA; set in INS_RefreshWithData so
+    openFilePickerForRow can check control type without C struct access.
+
+  DBGRID nAlign / alClient LAYOUT (macOS designer):
+  - Setting nAlign on a DBGrid now correctly updates FDockAlign (layout
+    engine field) in addition to FGridAlign (display field).
+  - ApplyDockAlign() called immediately when nAlign changes, updating
+    the NSView frame in real time in both design and runtime modes.
+  - Fix was in the generic nAlign handler (line 5705) which was
+    intercepting DBGrid nAlign before the type-specific handler.
+  - UI_FormRebuildChildren now calls ApplyDockAlign() after
+    createAllChildren so alignment is applied when reopening a project.
+
 2026-04-20b (macOS — Git menu with 14 actions)
 
   GIT MENU (macOS):

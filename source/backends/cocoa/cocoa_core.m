@@ -311,6 +311,8 @@ void EnsureNSApp( void )
    char FName[64];
    char FText[256];
    char FFileName[512];       /* Design-time file path (e.g. DBF file for TDBFTable) */
+   char FTable[64];           /* Table name for SQLite/DB cursor navigation */
+   char FSQL[512];            /* Custom SQL for SQLite/DB cursor navigation */
    char FRdd[16];             /* RDD driver: DBFCDX, DBFNTX, DBFFPT */
    char FHeaders[512];        /* Column headers: "Name|Age|City" */
    int  FColWidths[MAX_BROWSE_COLS]; /* Deferred column widths */
@@ -1658,7 +1660,7 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
       FLeft = 0; FTop = 0; FWidth = 80; FHeight = 24;
       FVisible = YES; FEnabled = YES; FTabStop = YES;
       FControlType = 0; FView = nil; FFont = nil; FBgColor = nil;
-      FClrPane = 0xFFFFFFFF; FClrText = 0xFFFFFFFF; FFileName[0] = '\0'; strcpy(FRdd, "DBFCDX");
+      FClrPane = 0xFFFFFFFF; FClrText = 0xFFFFFFFF; FFileName[0] = '\0'; FTable[0] = '\0'; FSQL[0] = '\0'; strcpy(FRdd, "DBFCDX");
       FHeaders[0] = '\0'; FData[0] = '\0'; FDataSource[0] = '\0'; FActive = NO;
       FOnClick = NULL; FOnChange = NULL; FOnInit = NULL; FOnClose = NULL;
       FOnTimer = NULL; FInterval = 1000; FTimer = nil;
@@ -5418,7 +5420,10 @@ HB_FUNC( UI_DBGRIDSETCACHE )
       NSMutableArray * rowArr = [[NSMutableArray alloc] initWithCapacity:(NSUInteger)nCols];
       for( HB_SIZE c = 0; c < nCols; c++ ) {
          const char * sz = hb_arrayGetCPtr( aRow, c + 1 );
-         [rowArr addObject: sz ? [NSString stringWithUTF8String:sz] : @""];
+         NSString * s = nil;
+         if( sz ) s = [NSString stringWithUTF8String:sz];
+         if( !s && sz ) s = [NSString stringWithCString:sz encoding:NSISOLatin1StringEncoding];
+         [rowArr addObject: s ? s : @""];
       }
       [cache addObject:rowArr];
    }
@@ -5698,12 +5703,24 @@ HB_FUNC( UI_SETPROP )
       }
    }
    else if( strcasecmp(szProp,"nAlign")==0 && HB_ISNUM(3) ) {
-      p->nAlign = hb_parni(3);
-      if( p->FView && [p->FView respondsToSelector:@selector(setAlignment:)] ) {
-         NSTextAlignment a = NSTextAlignmentLeft;
-         if( p->nAlign == 1 ) a = NSTextAlignmentCenter;
-         else if( p->nAlign == 2 ) a = NSTextAlignmentRight;
-         [(id)p->FView setAlignment:a];
+      if( p->FControlType == CT_DBGRID ) {
+         p->FGridAlign = hb_parni(3);
+         p->FDockAlign = p->FGridAlign;
+         HBForm * pf = nil;
+         if( p->FCtrlParent && [p->FCtrlParent isKindOfClass:[HBForm class]] )
+            pf = (HBForm *)p->FCtrlParent;
+         if( pf ) {
+            ApplyDockAlign( pf );
+            if( pf->FOverlayView ) [(NSView *)pf->FOverlayView setNeedsDisplay:YES];
+         }
+      } else {
+         p->nAlign = hb_parni(3);
+         if( p->FView && [p->FView respondsToSelector:@selector(setAlignment:)] ) {
+            NSTextAlignment a = NSTextAlignmentLeft;
+            if( p->nAlign == 1 ) a = NSTextAlignmentCenter;
+            else if( p->nAlign == 2 ) a = NSTextAlignmentRight;
+            [(id)p->FView setAlignment:a];
+         }
       }
    }
    else if( strcasecmp(szProp,"lDefault")==0 && p->FControlType == CT_BUTTON )
@@ -5983,6 +6000,10 @@ HB_FUNC( UI_SETPROP )
       strncpy( p->FName, hb_parc(3), sizeof(p->FName)-1 );
    else if( strcasecmp(szProp,"cFileName")==0 && HB_ISCHAR(3) )
       strncpy( p->FFileName, hb_parc(3), sizeof(p->FFileName)-1 );
+   else if( strcasecmp(szProp,"cTable")==0 && HB_ISCHAR(3) )
+      strncpy( p->FTable, hb_parc(3), sizeof(p->FTable)-1 );
+   else if( strcasecmp(szProp,"cSQL")==0 && HB_ISCHAR(3) )
+      strncpy( p->FSQL, hb_parc(3), sizeof(p->FSQL)-1 );
    else if( strcasecmp(szProp,"cRDD")==0 ) {
       if( HB_ISCHAR(3) )
          strncpy( p->FRdd, hb_parc(3), sizeof(p->FRdd)-1 );
@@ -6266,8 +6287,6 @@ HB_FUNC( UI_SETPROP )
    }
    else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"nDrawingStyle")==0 )
       p->FDrawingStyle = hb_parni(3);
-   else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"nAlign")==0 )
-      p->FGridAlign = hb_parni(3);
    else if( p->FControlType == CT_DBGRID && strcasecmp(szProp,"nDefaultRowHeight")==0 ) {
       p->FDefaultRowHeight = hb_parni(3);
       BrowseData * bd = FindBrowse(p);
@@ -6660,6 +6679,8 @@ HB_FUNC( UI_GETPROP )
    else if( strcasecmp(szProp,"cName")==0 )      hb_retc( p->FName );
    else if( strcasecmp(szProp,"cClassName")==0 ) hb_retc( p->FClassName );
    else if( strcasecmp(szProp,"cFileName")==0 )  hb_retc( p->FFileName );
+   else if( strcasecmp(szProp,"cTable")==0 )    hb_retc( p->FTable );
+   else if( strcasecmp(szProp,"cSQL")==0 )      hb_retc( p->FSQL );
    else if( strcasecmp(szProp,"cRDD")==0 )      hb_retc( p->FRdd );
    else if( strcasecmp(szProp,"aHeaders")==0 || strcasecmp(szProp,"aColumns")==0 ||
             strcasecmp(szProp,"aTabs")==0 || strcasecmp(szProp,"aItems")==0 )
@@ -7087,6 +7108,11 @@ HB_FUNC( UI_GETALLPROPS )
          ADD_L("lTitleHotTrack",    p->FGridTitleHotTrack, "Behavior");
          ADD_L("lReadOnly",         p->FGridReadOnly,      "Behavior"); break;
       }
+      case CT_SQLITE:
+         ADD_P("cFileName",p->FFileName,"Data");
+         ADD_S("cTable",   p->FTable,   "Data");
+         ADD_S("cSQL",     p->FSQL,     "Data");
+         ADD_L("lActive",  p->FActive,  "Behavior"); break;
       case CT_TIMER:
          ADD_N("nInterval",p->FInterval,"Behavior"); break;
       case CT_WEBSERVER:
@@ -8316,6 +8342,7 @@ HB_FUNC( UI_FORMREBUILDCHILDREN )
          pForm->FChildren[i]->FView = nil;
 
    [pForm createAllChildren];
+   ApplyDockAlign( pForm );
 
    /* Keep overlay on top */
    if( pForm->FOverlayView ) {
