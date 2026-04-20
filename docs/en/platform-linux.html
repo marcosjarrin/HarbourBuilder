@@ -97,8 +97,8 @@ with GNOME, XFCE, KDE, and other GTK-compatible desktop environments.</p>
   <strong>Backend Statistics</strong>
   <table>
     <tr><th>Language</th><th>C</th></tr>
-    <tr><th>Lines of code</th><th>~7,300</th></tr>
-    <tr><th>HB_FUNC functions</th><th>~132</th></tr>
+    <tr><th>Lines of code</th><th>~11,800</th></tr>
+    <tr><th>HB_FUNC functions</th><th>~172</th></tr>
     <tr><th>Native API</th><th>GTK3 (GtkWidget, GtkFixed)</th></tr>
     <tr><th>Drawing</th><th>Cairo / Pango</th></tr>
     <tr><th>Scintilla</th><th>5.6.1 (shared library)</td></tr>
@@ -307,6 +307,11 @@ ScintillaObject * sci = <span class="fn">scintilla_new</span>();
   <li><strong>GTK3 development libraries:</strong>
     <pre>sudo apt install libgtk-3-dev</pre>
   </li>
+  <li><strong>WebKit2GTK (optional, for TWebView):</strong>
+    <pre>sudo apt install libwebkit2gtk-4.1-dev</pre>
+    <p>Without this package, TWebView controls display a placeholder. The build script
+    auto-detects WebKit2GTK and enables it when available.</p>
+  </li>
   <li><strong>Harbour 3.2+</strong> &mdash; Install from your distro's package manager or build from source:
     <pre>sudo apt install harbour</pre>
     Or clone from <a href="https://github.com/harbour/core">github.com/harbour/core</a>.
@@ -338,9 +343,9 @@ ScintillaObject * sci = <span class="fn">scintilla_new</span>();
 
 <div class="info-box info">
   <strong>Distro packages</strong>
-  <p>On Fedora: <code>sudo dnf install gtk3-devel gcc harbour</code><br>
-  On Arch: <code>sudo pacman -S gtk3 harbour harbour-contrib</code><br>
-  On openSUSE: <code>sudo zypper install gtk3-devel harbour</code></p>
+  <p>On Fedora: <code>sudo dnf install gtk3-devel webkit2gtk4.1-devel gcc harbour</code><br>
+  On Arch: <code>sudo pacman -S gtk3 webkit2gtk-4.1 harbour harbour-contrib</code><br>
+  On openSUSE: <code>sudo zypper install gtk3-devel webkit2gtk3-devel harbour</code></p>
 </div>
 
 <!-- ──────────────────────────────────────────── -->
@@ -386,6 +391,71 @@ gcc -o hbbuilder_linux hbbuilder.o gtk3_backend.o \
 </table>
 
 <!-- ──────────────────────────────────────────── -->
+<h2 id="webview-support">WebView Support (WebKit2GTK)</h2>
+
+<p>The TWebView control provides an embedded web browser using <strong>WebKit2GTK</strong>. The build
+script automatically detects the library and enables it at compile time.</p>
+
+<h3>Installation</h3>
+<pre><span class="cm"># Ubuntu / Debian</span>
+sudo apt install libwebkit2gtk-4.1-dev
+
+<span class="cm"># Fedora</span>
+sudo dnf install webkit2gtk4.1-devel
+
+<span class="cm"># Arch Linux</span>
+sudo pacman -S webkit2gtk-4.1</pre>
+
+<h3>Build Detection</h3>
+<p>The <code>build_linux.sh</code> script automatically detects WebKit2GTK:</p>
+<ul>
+  <li>If <code>pkg-config --exists webkit2gtk-4.1</code> succeeds: compiles with
+      <code>-DHAVE_WEBKIT2GTK</code> and links against WebKit2GTK 4.1.</li>
+  <li>Falls back to <code>webkit2gtk-4.0</code> if 4.1 is not available.</li>
+  <li>Without either package: TWebView shows a placeholder label instead of web content.</li>
+</ul>
+
+<p>After installing the dev package, force a rebuild of the GTK3 backend:</p>
+<pre>rm -f source/gtk3_core.o
+./build_linux.sh</pre>
+
+<p>You should see:</p>
+<pre>  WebKit2GTK 4.1 detected — WebView enabled</pre>
+
+<h3>Supported Functions</h3>
+<table>
+  <tr><th>Method / Property</th><th>Description</th></tr>
+  <tr><td><code>cUrl</code></td><td>Get/set the current URL (navigates on set)</td></tr>
+  <tr><td><code>Navigate(cUrl)</code></td><td>Load a URL</td></tr>
+  <tr><td><code>LoadHTML(cHtml)</code></td><td>Load raw HTML content</td></tr>
+  <tr><td><code>GoBack()</code></td><td>Navigate back in history</td></tr>
+  <tr><td><code>GoForward()</code></td><td>Navigate forward in history</td></tr>
+  <tr><td><code>Reload()</code></td><td>Reload the current page</td></tr>
+  <tr><td><code>Stop()</code></td><td>Stop loading</td></tr>
+  <tr><td><code>GetUrl()</code></td><td>Get the current URL</td></tr>
+  <tr><td><code>EvaluateJS(cScript)</code></td><td>Execute JavaScript</td></tr>
+  <tr><td><code>CanGoBack()</code></td><td>Returns .T. if back navigation is available</td></tr>
+  <tr><td><code>CanGoForward()</code></td><td>Returns .T. if forward navigation is available</td></tr>
+</table>
+
+<h3>Example</h3>
+<pre><span class="cm">// WebView in a form</span>
+@ 44, 0 WEBVIEW ::oWebView1 OF Self SIZE 800, 500 URL <span class="st">"https://harbour.github.io"</span>
+
+<span class="cm">// Navigate programmatically</span>
+::oWebView1:Navigate( <span class="st">"https://github.com"</span> )
+
+<span class="cm">// Execute JavaScript</span>
+::oWebView1:EvaluateJS( <span class="st">"document.title"</span> )</pre>
+
+<div class="info-box warning">
+  <strong>Without WebKit2GTK</strong>
+  <p>If the dev package is not installed, TWebView displays a static label reading
+  "WebView (install libwebkit2gtk-4.1-dev)". All navigation methods become no-ops.
+  The <code>cUrl</code> property still stores the URL for serialization.</p>
+</div>
+
+<!-- ──────────────────────────────────────────── -->
 <h2 id="known-limitations">Known Limitations</h2>
 
 <ul>
@@ -404,6 +474,7 @@ gcc -o hbbuilder_linux hbbuilder.o gtk3_backend.o \
   <tr><td><code>libpango1.0-dev</code></td><td>Pango text layout and rendering</td></tr>
   <tr><td><code>libglib2.0-dev</code></td><td>GLib utility functions (timers, signals, memory)</td></tr>
   <tr><td><code>libgdk-pixbuf2.0-dev</code></td><td>Image loading and manipulation</td></tr>
+  <tr><td><code>libwebkit2gtk-4.1-dev</code></td><td>WebKit2GTK for TWebView (optional, auto-detected)</td></tr>
   <tr><td><code>libscintilla.so</code></td><td>Code editing component (shared library)</td></tr>
   <tr><td><code>liblexilla.so</code></td><td>Lexer component (shared library)</td></tr>
   <tr><td><code>libharbour</code></td><td>Harbour runtime</td></tr>
@@ -431,6 +502,7 @@ gcc -o hbbuilder_linux hbbuilder.o gtk3_backend.o \
   <a href="#build-script-build_linuxsh" class="toc-h3">Build Script (build_linux.sh)</a>
   <a href="#compilation-details" class="toc-h2">Compilation Details</a>
   <a href="#platform-specific-features" class="toc-h2">Platform-Specific Features</a>
+  <a href="#webview-support" class="toc-h2">WebView Support</a>
   <a href="#known-limitations" class="toc-h2">Known Limitations</a>
   <a href="#dependencies" class="toc-h2">Dependencies</a>
 </div>

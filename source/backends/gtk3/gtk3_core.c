@@ -7,6 +7,15 @@
 
 #include <gtk/gtk.h>
 
+#ifdef HAVE_WEBKIT2GTK
+/* webkit2gtk-4.1 uses webkit/webkit.h, 4.0 uses webkit2/webkit2.h */
+#if __has_include(<webkit/webkit.h>)
+#include <webkit/webkit.h>
+#else
+#include <webkit2/webkit2.h>
+#endif
+#endif
+
 /* Avoid HB_DEPRECATED macro clash between harfbuzz and Harbour */
 #undef HB_DEPRECATED
 
@@ -11598,15 +11607,16 @@ HB_FUNC( UI_DBGRIDSETCACHE )
  * Build with: pkg-config --cflags --libs webkit2gtk-4.1
  * ====================================================================== */
 
-#ifdef HAVE_WEBKIT2GTK
-#include <webkit2/webkit2.h>
-#endif
-
 static void HBWebView_CreateWidget( HBControl * p, GtkWidget * container )
 {
 #ifdef HAVE_WEBKIT2GTK
+   HBWebView * wvCtrl = (HBWebView *)p;
    GtkWidget * wv = webkit_web_view_new();
-   webkit_web_view_load_uri( WEBKIT_WEB_VIEW(wv), "about:blank" );
+   /* Load stored URL if set, otherwise about:blank */
+   if( wvCtrl->FUrl[0] )
+      webkit_web_view_load_uri( WEBKIT_WEB_VIEW(wv), wvCtrl->FUrl );
+   else
+      webkit_web_view_load_uri( WEBKIT_WEB_VIEW(wv), "about:blank" );
    HBGeneric_CreateWidget( p, container, wv );
 #else
    GtkWidget * frame = gtk_frame_new( NULL );
@@ -11712,7 +11722,8 @@ HB_FUNC( UI_WEBVIEWEVALUATEJS )
    HBControl * p = GetCtrl(1);
    const char * script = hb_parc(2);
    if( p && script && p->FWidget && WEBKIT_IS_WEB_VIEW(p->FWidget) )
-      webkit_web_view_run_javascript( WEBKIT_WEB_VIEW(p->FWidget), script, NULL, NULL, NULL );
+      webkit_web_view_evaluate_javascript( WEBKIT_WEB_VIEW(p->FWidget),
+         script, -1, NULL, NULL, NULL, NULL, NULL );
 #endif
 }
 

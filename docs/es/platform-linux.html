@@ -223,10 +223,22 @@ HB_FUNC( UI_ONEVENT )
   <li><strong>Bibliotecas de desarrollo GTK3:</strong>
     <pre>sudo apt install libgtk-3-dev</pre>
   </li>
+  <li><strong>WebKit2GTK (opcional, para TWebView):</strong>
+    <pre>sudo apt install libwebkit2gtk-4.1-dev</pre>
+    <p>Sin este paquete, los controles TWebView muestran un placeholder. El script de
+    construccion detecta automaticamente WebKit2GTK y lo habilita cuando esta disponible.</p>
+  </li>
   <li><strong>Harbour 3.2+</strong> — Instala desde el gestor de paquetes de tu distribucion o construye desde el codigo fuente:
     <pre>sudo apt install harbour</pre>
   </li>
 </ol>
+
+<div class="info-box info">
+  <strong>Paquetes por distribucion</strong>
+  <p>En Fedora: <code>sudo dnf install gtk3-devel webkit2gtk4.1-devel gcc harbour</code><br>
+  En Arch: <code>sudo pacman -S gtk3 webkit2gtk-4.1 harbour harbour-contrib</code><br>
+  En openSUSE: <code>sudo zypper install gtk3-devel webkit2gtk3-devel harbour</code></p>
+</div>
 
 <h3 id="script-de-construccion-build_linuxsh">Script de Construccion (<code>build_linux.sh</code>)</h3>
 <p>El script realiza estos pasos:</p>
@@ -273,6 +285,70 @@ HB_FUNC( UI_ONEVENT )
   <tr><td>Integracion de escritorio</td><td>Archivo .desktop, tipos MIME, temas de iconos</td></tr>
   <tr><td>Impresion</td><td><code>GtkPrintOperation</code></td></tr>
 </table>
+
+<h2 id="soporte-webview">Soporte WebView (WebKit2GTK)</h2>
+
+<p>El control TWebView proporciona un navegador web integrado usando <strong>WebKit2GTK</strong>.
+El script de construccion detecta automaticamente la biblioteca y la habilita en tiempo de compilacion.</p>
+
+<h3>Instalacion</h3>
+<pre><span class="cm"># Ubuntu / Debian</span>
+sudo apt install libwebkit2gtk-4.1-dev
+
+<span class="cm"># Fedora</span>
+sudo dnf install webkit2gtk4.1-devel
+
+<span class="cm"># Arch Linux</span>
+sudo pacman -S webkit2gtk-4.1</pre>
+
+<h3>Deteccion en la Compilacion</h3>
+<p>El script <code>build_linux.sh</code> detecta automaticamente WebKit2GTK:</p>
+<ul>
+  <li>Si <code>pkg-config --exists webkit2gtk-4.1</code> tiene exito: compila con
+      <code>-DHAVE_WEBKIT2GTK</code> y enlaza con WebKit2GTK 4.1.</li>
+  <li>Si no, intenta con <code>webkit2gtk-4.0</code>.</li>
+  <li>Sin ninguno de los dos: TWebView muestra un label placeholder en lugar de contenido web.</li>
+</ul>
+
+<p>Despues de instalar el paquete dev, fuerza la reconstruccion del backend GTK3:</p>
+<pre>rm -f source/gtk3_core.o
+./build_linux.sh</pre>
+
+<p>Deberas ver:</p>
+<pre>  WebKit2GTK 4.1 detected — WebView enabled</pre>
+
+<h3>Funciones Soportadas</h3>
+<table>
+  <tr><th>Metodo / Propiedad</th><th>Descripcion</th></tr>
+  <tr><td><code>cUrl</code></td><td>Obtener/establecer la URL actual (navega al asignar)</td></tr>
+  <tr><td><code>Navigate(cUrl)</code></td><td>Cargar una URL</td></tr>
+  <tr><td><code>LoadHTML(cHtml)</code></td><td>Cargar contenido HTML directamente</td></tr>
+  <tr><td><code>GoBack()</code></td><td>Navegar atras en el historial</td></tr>
+  <tr><td><code>GoForward()</code></td><td>Navegar adelante en el historial</td></tr>
+  <tr><td><code>Reload()</code></td><td>Recargar la pagina actual</td></tr>
+  <tr><td><code>Stop()</code></td><td>Detener la carga</td></tr>
+  <tr><td><code>GetUrl()</code></td><td>Obtener la URL actual</td></tr>
+  <tr><td><code>EvaluateJS(cScript)</code></td><td>Ejecutar JavaScript</td></tr>
+  <tr><td><code>CanGoBack()</code></td><td>Retorna .T. si hay navegacion atras disponible</td></tr>
+  <tr><td><code>CanGoForward()</code></td><td>Retorna .T. si hay navegacion adelante disponible</td></tr>
+</table>
+
+<h3>Ejemplo</h3>
+<pre><span class="cm">// WebView en un formulario</span>
+@ 44, 0 WEBVIEW ::oWebView1 OF Self SIZE 800, 500 URL <span class="st">"https://harbour.github.io"</span>
+
+<span class="cm">// Navegar programaticamente</span>
+::oWebView1:Navigate( <span class="st">"https://github.com"</span> )
+
+<span class="cm">// Ejecutar JavaScript</span>
+::oWebView1:EvaluateJS( <span class="st">"document.title"</span> )</pre>
+
+<div class="info-box warning">
+  <strong>Sin WebKit2GTK</strong>
+  <p>Si el paquete dev no esta instalado, TWebView muestra un label estatico que dice
+  "WebView (install libwebkit2gtk-4.1-dev)". Todos los metodos de navegacion se convierten
+  en no-ops. La propiedad <code>cUrl</code> sigue almacenando la URL para serializacion.</p>
+</div>
 
 <h2 id="limitaciones-conocidas">Limitaciones Conocidas</h2>
 

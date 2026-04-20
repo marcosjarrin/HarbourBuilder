@@ -95,12 +95,32 @@ else
    echo "[2/6] ${PROG}.o — up to date"
 fi
 
+# Detect WebKit2GTK (try 4.1 first, then 4.0)
+WEBKIT_CFLAGS=""
+WEBKIT_LIBS=""
+WEBKIT_DEFINE=""
+if pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
+   WEBKIT_CFLAGS="$(pkg-config --cflags webkit2gtk-4.1)"
+   WEBKIT_LIBS="$(pkg-config --libs webkit2gtk-4.1)"
+   WEBKIT_DEFINE="-DHAVE_WEBKIT2GTK"
+   echo "  WebKit2GTK 4.1 detected — WebView enabled"
+elif pkg-config --exists webkit2gtk-4.0 2>/dev/null; then
+   WEBKIT_CFLAGS="$(pkg-config --cflags webkit2gtk-4.0)"
+   WEBKIT_LIBS="$(pkg-config --libs webkit2gtk-4.0)"
+   WEBKIT_DEFINE="-DHAVE_WEBKIT2GTK"
+   echo "  WebKit2GTK 4.0 detected — WebView enabled"
+else
+   echo "  WebKit2GTK not found — WebView will show placeholder"
+   echo "  Install with: sudo apt install libwebkit2gtk-4.1-dev"
+fi
+
 # [3/6] GTK3 core (only if .c changed)
 if needs_rebuild "$PROJDIR/source/backends/gtk3/gtk3_core.c" gtk3_core.o; then
    echo "[3/6] Compiling GTK3 core..."
    gcc -c -g \
       -I"$HBINC" \
       $(pkg-config --cflags gtk+-3.0) \
+      $WEBKIT_CFLAGS $WEBKIT_DEFINE \
       "$PROJDIR/source/backends/gtk3/gtk3_core.c" -o gtk3_core.o
    NEED_LINK=1
 else
@@ -138,6 +158,7 @@ gcc ${PROG}.o gtk3_core.o gtk3_inspector.o -g -o ${PROG} \
    -lhbsqlit3 -lsddsqlt3 -lrddsql \
    -lgttrm -lhbdebug -lhbpcre \
    $(pkg-config --libs gtk+-3.0) \
+   $WEBKIT_LIBS \
    -lm -lpthread -ldl -lrt -lsqlite3 \
    -L/usr/lib/x86_64-linux-gnu -l:libncurses.so.6 \
    -Wl,--end-group
