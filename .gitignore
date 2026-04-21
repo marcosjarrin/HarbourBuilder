@@ -73,3 +73,6 @@ samples/projects/database/portable_example
 samples/projects/database/*.c
 samples/projects/database/gtk3_core.o
 samples/projects/database/classes.o
+
+# Worktrees
+.worktrees/
