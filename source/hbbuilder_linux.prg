@@ -259,9 +259,7 @@ function Main()
    SEPARATOR OF oTB2
    BUTTON "Step"  OF oTB2 TOOLTIP "Step Into (F7)"         ACTION DebugStepInto()
    BUTTON "Over"  OF oTB2 TOOLTIP "Step Over (F8)"         ACTION DebugStepOver()
-   BUTTON "Go"    OF oTB2 TOOLTIP "Continue (F5)"          ACTION IDE_DebugGo()
    BUTTON "Stop"  OF oTB2 TOOLTIP "Stop Debugging"         ACTION IDE_DebugStop()
-   SEPARATOR OF oTB2
    BUTTON "Exit"  OF oTB2 TOOLTIP "Exit IDE"               ACTION oIDE:Close()
 
    UI_ToolBarLoadImages( oTB2:hCpp, "../resources/toolbar_debug.bmp" )
@@ -2582,8 +2580,8 @@ static function TBDebugRun( lRunToBreak )
       GTK_ShellExec( cCmd )
 
       // Reuse prebuilt gtk3_core.o and gtk3_inspector.o from IDE build
-      GTK_ShellExec( "cp " + cProjDir + "/samples/gtk3_core.o " + cBuildDir + "/" )
-      GTK_ShellExec( "cp " + cProjDir + "/samples/gtk3_inspector.o " + cBuildDir + "/" )
+      GTK_ShellExec( "cp " + cProjDir + "/source/gtk3_core.o " + cBuildDir + "/" )
+      GTK_ShellExec( "cp " + cProjDir + "/source/gtk3_inspector.o " + cBuildDir + "/" )
       cLog += "    OK" + Chr(10)
    endif
 
