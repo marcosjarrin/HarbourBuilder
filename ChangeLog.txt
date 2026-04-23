@@ -1,6 +1,107 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-23 (Windows — Debugger ported from macOS/Linux, clickable breakpoints, form-close fix)
+
+  DEBUGGER STATE MACHINE (ported from macOS/Linux to Windows backend):
+  - Added s_dbgWasStepping flag decoupled from s_dbgState so step/breakpoint
+    semantics are orthogonal; flag is set by IDE_DEBUGSTEP/STEPOVER and cleared
+    by IDE_DEBUGGO (never recomputed inside the PAUSE handler)
+  - Breakpoints preserved across debug sessions (removed s_nBreakpoints = 0
+    reset in IDE_DEBUGSTART and IDE_DEBUGSTART2)
+  - IDE_DEBUGSTART2 command loop: in RUNNING state always sends STEP (never GO)
+    so subprocess pauses on every line; breakpoint/step filtering is done in
+    the Harbour callback
+  - IDE_DEBUGSTART2 handles "DONE" message from subprocess for clean exit when
+    the executed form is closed during a pause
+  - OnDebugPause (Harbour callback) skips framework lines (nTab == 0), then
+    requires IDE_IsBreakpoint(cFile, nTabLine) OR IDE_DbgIsStepping() — matches
+    macOS/Linux behaviour exactly, so Debug runs to first breakpoint by default
+
+  NEW HB_FUNCs in hbbridge.cpp:
+  - IDE_ISBREAKPOINT(cFile, nLine) — case-insensitive filename + line match
+  - IDE_DBGISSTEPPING() — true while s_dbgWasStepping is set
+  - IDE_DBGRUNLOOPENDED() — true after main form WM_CLOSE, used by dbgclient
+  - IDE_DBGPUMPEVENTS() — pumps Win32 messages for ~20ms so the executed form
+    stays responsive while dbgclient waits for STEP/GO from IDE
+  - IDE_DEBUGPAUSEATSTEP() — no-op stub for macOS API parity
+  - Extern "C" accessors IdeBpGetCount/GetModule/GetLine/Find/Add/RemoveAt so
+    the CodeEditor C code can manipulate s_breakpoints[] directly
+
+  CLICKABLE BREAKPOINTS IN CODE EDITOR:
+  - Margin 1 (18px wide, to the right of line numbers) configured as a symbol
+    strip showing marker 12 (red circle, SC_MARK_CIRCLE)
+  - Line-number margin (margin 0) also set clickable — clicking on the line
+    number itself toggles the breakpoint (VS Code style), in addition to the
+    dedicated 18px breakpoint strip
+  - Added missing SCI_MARKERADD/DELETE/DELETEALL/GET constants — SCI_MARKERGET
+    corrected from 2047 (which is actually SCI_MARKERNEXT) to 2046, the latter
+    returning -1 had caused "has marker" to always be true
+  - aTabNames[MAX_TABS] added to CODEEDITOR struct so the margin-click handler
+    can identify the active source file for the breakpoint entry
+  - SwitchTab re-applies marker 12 to lines that have stored breakpoints after
+    SCI_SETTEXT (which otherwise clears all markers)
+  - CODEEDITORTOGGLEBREAKPOINT(hEd) and CODEEDITORRESTOREBREAKPOINTS(hEd,cFile)
+    HB_FUNCs for the Run → "Toggle Breakpoint" / "Clear Breakpoints" menus
+  - ToggleBreakpoint() Harbour stub replaced with a CodeEditorToggleBreakpoint
+    call on the active tab line (the previous stub used a hard-coded line)
+  - ClearBreakpoints() now also clears visible markers on the active tab
+
+  DEBUG TOOLBAR / MENU (matches macOS/Linux):
+  - Second toolbar now has: Debug, DebBP, [sep], Step, Over, Stop, Exit
+    (removed the "Go" button and extra separator; Continue is accessible via
+    Run → Continue menu)
+  - Added Run → "Debug to BP" menu item
+  - TBDebugRunToBreak() wrapper calls TBDebugRun(.T.) (same unified flow as
+    Linux — both buttons share identical run-to-breakpoint behaviour)
+
+  FORM CLOSE DURING DEBUG SESSION (main fix):
+  - Clicking X on the executed form now closes it reliably; previously it
+    stayed visible because DefWindowProc was not translating WM_NCLBUTTONUP
+    (HTCLOSE) into WM_SYSCOMMAND(SC_CLOSE) → WM_CLOSE while the subprocess was
+    in a debug pause (messages pumped via IDE_DbgPumpEvents in 20 ms slices)
+  - TForm::HandleMessage now handles WM_NCLBUTTONUP with wParam == HTCLOSE
+    explicitly by sending WM_CLOSE directly — bypasses DefWindowProc's
+    conditional SC_CLOSE posting entirely
+  - WM_CLOSE sets CE_NotifyRunLoopEnded() (hbbridge.cpp s_dbgRunLoopEnded
+    flag) at the earliest point so dbgclient can exit its pause loop even if
+    DestroyWindow can't run during a nested message pump
+  - dbgclient.prg DbgRecv poll loop also checks IDE_DbgRunLoopEnded() every
+    cycle — if the main form was closed while waiting for STEP/GO, the client
+    sends "DONE" and disconnects without waiting for a hook that would never
+    fire again
+  - IDE-side DbgServerRecv watchdog: uses OpenProcess + WaitForSingleObject(0)
+    to detect if the DebugApp subprocess died (user closed form, crash, etc.)
+    and aborts polling instead of hanging on select()
+
+  DebugApp.exe BUILD:
+  - Silent link-failure detection: TBDebugRun now deletes DebugApp.exe before
+    invoking ilink32/link.exe so that a stale-but-present exe can no longer
+    fool the existence check (previously the IDE reported "OK" even when the
+    linker silently failed, so users debugged against an out-of-date binary)
+  - Added W32_ExecOpenDialog/SaveDialog/FontDialog/ColorDialog stubs in the
+    generated debug_main.prg — the real implementations live in
+    hbbuilder_win.obj which DebugApp does not link; without the stubs the
+    link failed with unresolved externals whenever classes.prg referenced
+    common dialog classes
+
+  DebugApp.exe NO LONGER TOUCHES DPI:
+  - Removed SetDPIAware() call from the _InitDPI INIT PROCEDURE that
+    TBDebugRun injects into debug_main.prg
+  - SETDPIAWARE HB_FUNC detects DebugApp.exe by exe filename and returns
+    without calling SetProcessDPIAware, so the SetDPIAware() invocation in
+    TApplication:New() (classes.prg) is also a no-op inside the subprocess
+  - IDE itself is unaffected — hbbuilder_win.exe continues to call
+    SetProcessDPIAware at startup as before
+
+  KNOWN ISSUE (WINDOWS, UNRESOLVED):
+  - On systems with display scaling > 100%, clicking Debug still produces a
+    brief IDE visual disturbance (reported as vertical stretching at 125 %).
+    All DPI calls have been removed from DebugApp.exe and none of the
+    recent debugger work changes the IDE's own DPI path, so the cause is
+    likely pre-existing (external console process launches, desktop
+    compositor transitions) rather than introduced by these changes.
+
 2026-04-22d (Linux — Step Into fix, breakpoints, debugger toolbar, WebKit build)
 
   STEP INTO FIX:

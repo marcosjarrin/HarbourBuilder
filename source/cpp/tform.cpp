@@ -7,6 +7,7 @@
 
 /* Forward declaration: defined in hbbridge.cpp */
 void BandStackAll( HWND hParent );
+extern "C" void CE_NotifyRunLoopEnded( void );
 
 /* Global dark mode flag for forms — set from Harbour via W32_SetIDEDarkMode */
 /* Defined here, declared extern in tcontrols.cpp / inspector / hbbuilder_win */
@@ -353,6 +354,19 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
          /* Block double-click on title bar to prevent restore */
          if( FAppBar )
             return 0;
+         break;
+      }
+
+      case WM_NCLBUTTONUP:
+      {
+         /* Click on close button — HTCLOSE = 20. Handle directly because
+          * DefWindowProc isn't reliably posting WM_SYSCOMMAND in our
+          * debug-pump context. */
+         if( wParam == HTCLOSE )
+         {
+            SendMessage( FHandle, WM_CLOSE, 0, 0 );
+            return 0;
+         }
          break;
       }
 
@@ -1608,25 +1622,23 @@ LRESULT TForm::HandleMessage( UINT msg, WPARAM wParam, LPARAM lParam )
          break;
 
       case WM_CLOSE:
-         /* Fire OnCloseQuery - could be used to cancel closing */
+         /* Signal dbgclient at the earliest point so it can exit its pause
+          * loop when the user closes the main form during a debug session. */
+         if( FMainWindow )
+            CE_NotifyRunLoopEnded();
+
          FireEvent( FOnCloseQuery );
-         /* Fire OnClose event before closing */
          FireEvent( FOnClose );
 
          if( FModal )
          {
-            /* Modal form: just clear the flag — ShowModal() loop will exit
-             * and handle EnableWindow + DestroyWindow in the correct order */
             FModal = FALSE;
             FRunning = FALSE;
          }
          else if( FMainWindow )
-            Close();   /* Main window: destroy -> PostQuitMessage */
+            Close();
          else
-         {
-            /* Secondary window (Show): just hide, don't destroy */
             ShowWindow( FHandle, SW_HIDE );
-         }
          return 0;
 
       case WM_DESTROY:

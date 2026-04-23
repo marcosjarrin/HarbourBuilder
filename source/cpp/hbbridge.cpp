@@ -362,6 +362,15 @@ static struct _DpiInit {
 
 HB_FUNC( SETDPIAWARE )
 {
+   /* Skip DPI awareness in DebugApp.exe — detected by exe filename. The
+    * executed user form should run without any DPI call so it doesn't
+    * disturb the IDE's rendering. */
+   char szExe[MAX_PATH];
+   const char * p;
+   GetModuleFileNameA( NULL, szExe, MAX_PATH );
+   p = strrchr( szExe, '\\' );
+   if( p && _stricmp( p + 1, "DebugApp.exe" ) == 0 )
+      return;
    SetProcessDPIAware();
 }
 
@@ -4158,6 +4167,7 @@ HB_FUNC( UI_FORMALIGNSELECTED )
 static int           s_dbgState = DBG_IDLE;
 static int           s_dbgLine = 0;
 static int           s_dbgStepDepth = 0;
+static int           s_dbgWasStepping = 0;  /* .T. if last PAUSE arrived while in STEPPING mode */
 static char          s_dbgModule[256] = "";
 static PHB_ITEM      s_dbgOnPause = NULL;
 
@@ -4314,6 +4324,21 @@ static int DbgServerRecv( char * buf, int bufSize )
          if( s_dbgWaitCursor ) SetCursor( LoadCursor(NULL, IDC_WAIT) );
       }
       if( s_dbgState == DBG_STOPPED ) return -1;
+
+      /* Watchdog: if the DebugApp subprocess died (user closed form, crash,
+       * etc.) while we were waiting, stop polling and signal disconnect. */
+      if( s_dbgChildPID )
+      {
+         HANDLE hProc = OpenProcess( SYNCHRONIZE, FALSE, s_dbgChildPID );
+         if( hProc )
+         {
+            DWORD w = WaitForSingleObject( hProc, 0 );
+            CloseHandle( hProc );
+            if( w == WAIT_OBJECT_0 ) return -1;  /* process exited */
+         }
+         else if( GetLastError() == ERROR_INVALID_PARAMETER )
+            return -1;  /* PID no longer exists */
+      }
    }
 }
 
@@ -4416,7 +4441,8 @@ HB_FUNC( IDE_DEBUGSTART )
    /* Install debug hook */
    hb_dbg_SetEntry( IDE_DebugHook );
    s_dbgState = DBG_STEPPING;
-   s_nBreakpoints = 0;
+   s_dbgWasStepping = 0;
+   /* Preserve breakpoints across debug sessions (matches macOS/Linux) */
 
    DbgOutput( "=== Debug session started ===\r\n" );
    { char msg[512]; snprintf( msg, sizeof(msg), "Loading: %s\r\n", cHrbFile ); DbgOutput( msg ); }
@@ -4446,19 +4472,20 @@ HB_FUNC( IDE_DEBUGSTART )
 /* IDE_DebugGo() - continue execution */
 HB_FUNC( IDE_DEBUGGO )
 {
-   if( s_dbgState == DBG_PAUSED ) s_dbgState = DBG_RUNNING;
+   if( s_dbgState == DBG_PAUSED ) { s_dbgWasStepping = 0; s_dbgState = DBG_RUNNING; }
 }
 
 /* IDE_DebugStep() - step into */
 HB_FUNC( IDE_DEBUGSTEP )
 {
-   if( s_dbgState == DBG_PAUSED ) s_dbgState = DBG_STEPPING;
+   if( s_dbgState == DBG_PAUSED ) { s_dbgWasStepping = 1; s_dbgState = DBG_STEPPING; }
 }
 
 /* IDE_DebugStepOver() */
 HB_FUNC( IDE_DEBUGSTEPOVER )
 {
    if( s_dbgState == DBG_PAUSED ) {
+      s_dbgWasStepping = 1;
       s_dbgStepDepth = (int) hb_dbg_ProcLevel();
       s_dbgState = DBG_STEPOVER;
    }
@@ -4506,6 +4533,105 @@ HB_FUNC( IDE_DEBUGREMOVEBREAKPOINT )
 HB_FUNC( IDE_DEBUGCLEARBREAKPOINTS )
 {
    s_nBreakpoints = 0;
+}
+
+/* C-level accessors — let CodeEditor code (hbbuilder_win.prg BEGINDUMP block)
+ * manipulate breakpoints directly without going through the Harbour VM. */
+extern "C" int  IdeBpGetCount( void ) { return s_nBreakpoints; }
+extern "C" const char * IdeBpGetModule( int i )
+   { return ( i >= 0 && i < s_nBreakpoints ) ? s_breakpoints[i].module : ""; }
+extern "C" int  IdeBpGetLine( int i )
+   { return ( i >= 0 && i < s_nBreakpoints ) ? s_breakpoints[i].line : 0; }
+extern "C" int  IdeBpFind( const char * file, int line )
+{
+   int i;
+   if( !file ) return -1;
+   for( i = 0; i < s_nBreakpoints; i++ )
+      if( s_breakpoints[i].line == line && _stricmp( s_breakpoints[i].module, file ) == 0 )
+         return i;
+   return -1;
+}
+extern "C" int  IdeBpAdd( const char * file, int line )
+{
+   if( !file || s_nBreakpoints >= DBG_MAX_BP ) return 0;
+   strncpy( s_breakpoints[s_nBreakpoints].module, file, 255 );
+   s_breakpoints[s_nBreakpoints].module[255] = 0;
+   s_breakpoints[s_nBreakpoints].line = line;
+   s_nBreakpoints++;
+   return 1;
+}
+extern "C" void IdeBpRemoveAt( int i )
+{
+   int j;
+   if( i < 0 || i >= s_nBreakpoints ) return;
+   for( j = i; j < s_nBreakpoints - 1; j++ )
+   {
+      strcpy( s_breakpoints[j].module, s_breakpoints[j+1].module );
+      s_breakpoints[j].line = s_breakpoints[j+1].line;
+   }
+   s_nBreakpoints--;
+}
+
+/* IDE_IsBreakpoint( cFile, nLine ) --> lIsBP
+ * Match by source filename+line — ported from macOS/Linux */
+HB_FUNC( IDE_ISBREAKPOINT )
+{
+   const char * cFile = HB_ISCHAR(1) ? hb_parc(1) : "";
+   int nLine = hb_parni(2);
+   int i;
+   for( i = 0; i < s_nBreakpoints; i++ )
+   {
+      if( s_breakpoints[i].line == nLine &&
+          ( s_breakpoints[i].module[0] == 0 ||
+            _stricmp( s_breakpoints[i].module, cFile ) == 0 ) )
+      {
+         hb_retl( HB_TRUE );
+         return;
+      }
+   }
+   hb_retl( HB_FALSE );
+}
+
+/* IDE_DbgIsStepping() --> .T. when last PAUSE arrived while user was stepping */
+HB_FUNC( IDE_DBGISSTEPPING )
+{
+   hb_retl( s_dbgWasStepping );
+}
+
+/* Set by tform.cpp WM_DESTROY of the main form so dbgclient can exit cleanly
+ * without sending PAUSE for every VM-shutdown line. */
+static int s_dbgRunLoopEnded = 0;
+extern "C" void CE_NotifyRunLoopEnded( void )  { s_dbgRunLoopEnded = 1; }
+
+/* IDE_DbgRunLoopEnded() — .T. after the subprocess main form was destroyed */
+HB_FUNC( IDE_DBGRUNLOOPENDED )
+{
+   hb_retl( s_dbgRunLoopEnded != 0 );
+}
+
+/* IDE_DbgPumpEvents() — pump Win32 events for ~20ms.
+ * Called from dbgclient subprocess so the executed form stays responsive. */
+HB_FUNC( IDE_DBGPUMPEVENTS )
+{
+   DWORD deadline = GetTickCount() + 20;
+   MSG m;
+   while( GetTickCount() < deadline )
+   {
+      if( PeekMessage( &m, NULL, 0, 0, PM_REMOVE ) )
+      {
+         TranslateMessage( &m );
+         DispatchMessage( &m );
+      }
+      else
+      {
+         Sleep( 1 );
+      }
+   }
+}
+
+/* IDE_DebugPauseAtStep() — stub (macOS uses a C-level flag; Windows uses s_dbgWasStepping) */
+HB_FUNC( IDE_DEBUGPAUSEATSTEP )
+{
 }
 
 /* IDE_DebugGetState() -> nState */
@@ -4657,7 +4783,8 @@ HB_FUNC( IDE_DEBUGSTART2 )
    DbgTrace("TCP server started OK");
 
    s_dbgState = DBG_STEPPING;
-   s_nBreakpoints = 0;
+   s_dbgWasStepping = 0;
+   /* Preserve breakpoints across debug sessions (matches macOS/Linux) */
    DbgOutput( "=== Debug session started (socket) ===\r\n" );
    DbgOutput( "Listening on port 19800...\r\n" );
 
@@ -4735,6 +4862,13 @@ HB_FUNC( IDE_DEBUGSTART2 )
          continue;
       }
 
+      if( strncmp( recvBuf, "DONE", 4 ) == 0 )
+      {
+         DbgTrace("Subprocess sent DONE (run loop ended, exiting cleanly)");
+         DbgOutput( "Debug client finished (form closed).\r\n" );
+         break;
+      }
+
       if( strncmp( recvBuf, "PAUSE ", 6 ) == 0 )
       {
          /* Format: PAUSE filepath:FUNCNAME:line|VARS ...|STACK ... */
@@ -4768,14 +4902,21 @@ HB_FUNC( IDE_DEBUGSTART2 )
 
          s_dbgLine = line;
 
-         /* In RUNNING mode, skip pause */
+         /* In RUNNING mode: always send STEP so subprocess keeps sending PAUSE.
+          * The callback (OnDebugPause) decides whether to actually stop, based on
+          * IDE_IsBreakpoint() and IDE_DbgIsStepping(). Matches macOS/Linux. */
          if( s_dbgState == DBG_RUNNING )
          {
-            DbgServerSend( "GO" );
+            s_dbgWasStepping = 0;
+            DbgServerSend( "STEP" );
+            s_dbgState = DBG_PAUSED;
             continue;
          }
 
-         /* === STEPPING/PAUSED: show state and wait for user === */
+         /* === STEPPING/PAUSED: show state and wait for user ===
+          * s_dbgWasStepping is managed by IDE_DEBUGSTEP/STEPOVER/GO — do NOT
+          * recompute here (by now s_dbgState is already DBG_PAUSED which would
+          * wrongly clear the flag). */
          s_dbgState = DBG_PAUSED;
 
          { char t[256]; snprintf(t,sizeof(t),"PAUSE: func='%s' line=%d -> calling callback", funcName, line); DbgTrace(t); }

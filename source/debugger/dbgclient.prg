@@ -343,6 +343,14 @@ static function DbgRecv()
          return nil
       endif
       IDE_DbgPumpEvents()
+      // If the main form was destroyed (user clicked X during pause),
+      // signal IDE and bail out of the wait loop.
+      if IDE_DbgRunLoopEnded()
+         DbgSend( "DONE" )
+         aS[ DBG_CONNECTED ] := .f.
+         hb_socketClose( aS[ DBG_SOCKET ] )
+         return nil
+      endif
    enddo
 
    if ! aS[ DBG_CONNECTED ]

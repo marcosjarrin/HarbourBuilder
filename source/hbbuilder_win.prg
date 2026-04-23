@@ -160,6 +160,7 @@ function Main()
    DEFINE POPUP oRun PROMPT "&Run" OF oIDE
    MENUITEM "&Run"              OF oRun ACTION TBRun()
    MENUITEM "&Debug"            OF oRun ACTION TBDebugRun()
+   MENUITEM "Debug to &BP"      OF oRun ACTION TBDebugRunToBreak()
    MENUSEPARATOR OF oRun
    MENUITEM "Run on &Android..." OF oRun ACTION TBRunAndroid()
    MENUITEM "Android Setup &Wizard..." OF oRun ACTION AndroidSetupWizard()
@@ -319,12 +320,11 @@ function Main()
    // Row 2: Debug speedbar (Run is already in row 1)
    DEFINE TOOLBAR oTB2 OF oIDE
    BUTTON "Debug" OF oTB2 TOOLTIP "Debug (F8)"              ACTION TBDebugRun()
+   BUTTON "DebBP" OF oTB2 TOOLTIP "Debug to Breakpoint"     ACTION TBDebugRunToBreak()
    SEPARATOR OF oTB2
    BUTTON "Step"  OF oTB2 TOOLTIP "Step Into (F7)"          ACTION DebugStepInto()
    BUTTON "Over"  OF oTB2 TOOLTIP "Step Over (F8)"          ACTION DebugStepOver()
-   BUTTON "Go"    OF oTB2 TOOLTIP "Continue (F5)"           ACTION IDE_DebugGo()
    BUTTON "Stop"  OF oTB2 TOOLTIP "Stop Debugging"          ACTION IDE_DebugStop()
-   SEPARATOR OF oTB2
    BUTTON "Exit"  OF oTB2 TOOLTIP "Exit IDE"                ACTION oIDE:Close()
 
    // Load debug toolbar icons
@@ -4181,30 +4181,12 @@ return nil
 // === Debugger ===
 
 static function ToggleBreakpoint()
-
-   static aBreakpoints := {}
-   local nLine := 1  // TODO: get current line from code editor
-   local cFile := "Form1.prg"
-   local i, lFound := .F.
-
-   for i := 1 to Len( aBreakpoints )
-      if aBreakpoints[i][1] == cFile .and. aBreakpoints[i][2] == nLine
-         ADel( aBreakpoints, i )
-         ASize( aBreakpoints, Len(aBreakpoints) - 1 )
-         lFound := .T.
-         exit
-      endif
-   next
-
-   if ! lFound
-      AAdd( aBreakpoints, { cFile, nLine } )
-      IDE_DebugAddBreakpoint( cFile, nLine )
-   endif
-
+   CodeEditorToggleBreakpoint( hCodeEditor )
 return nil
 
 static function ClearBreakpoints()
    IDE_DebugClearBreakpoints()
+   CodeEditorRestoreBreakpoints( hCodeEditor, "" )  // clear marker 12 in the visible tab
 return nil
 
 static function DebugStepOver()
@@ -4225,7 +4207,11 @@ return nil
 
 // === Debug Run (socket-based, native exe — matches macOS/Linux) ===
 
-static function TBDebugRun()
+static function TBDebugRunToBreak()
+   TBDebugRun( .T. )
+return nil
+
+static function TBDebugRun( lRunToBreak )
 
    local cBuildDir, cOutput, cLog, i, lError
    local cHbDir, cHbBin, cHbInc, cHbLib
@@ -4236,6 +4222,8 @@ static function TBDebugRun()
    local cRsp, cRspContent, aCI, cObjs
    local cMainPrg, nCurLine, cCppBase, k
    local aCppFiles
+
+   if lRunToBreak == nil; lRunToBreak := .F.; endif
 
    SaveActiveFormCode()
    SyncDesignerToCode()  // Ensure event bindings are up to date
@@ -4321,9 +4309,9 @@ static function TBDebugRun()
    cAllPrg += "INIT PROCEDURE __DbgInit" + Chr(10)
    cAllPrg += "   DbgClientStart( 19800 )" + Chr(10)
    cAllPrg += "return" + Chr(10) + Chr(10)
-   // DPI awareness
+   // DPI disabled for DebugApp — no call to SetDPIAware
    cAllPrg += "INIT PROCEDURE _InitDPI()" + Chr(10)
-   cAllPrg += "   SetDPIAware()" + Chr(10)
+   cAllPrg += "   // DPI call intentionally removed" + Chr(10)
    cAllPrg += "return" + Chr(10) + Chr(10)
    nCurLine := 11
 
@@ -4379,6 +4367,70 @@ static function TBDebugRun()
    cAllPrg += 'HB_FUNC( UI_STRINGGRIDNEW ) { hb_retnint( 0 ); }' + Chr(10)
    cAllPrg += 'HB_FUNC( UI_GRIDSETCELL )   { }' + Chr(10)
    cAllPrg += 'HB_FUNC( UI_GRIDGETCELL )   { hb_retc( "" ); }' + Chr(10)
+   // W32_Exec*Dialog stubs — real impls live in hbbuilder_win.obj which DebugApp does NOT link
+   cAllPrg += 'HB_FUNC( W32_EXECOPENDIALOG )  {' + Chr(10)
+   cAllPrg += '  OPENFILENAMEA ofn; char szFile[260] = ""; char szFilter[1024];' + Chr(10)
+   cAllPrg += '  const char * src = hb_parc(2); int si = 0, di = 0;' + Chr(10)
+   cAllPrg += '  while( src && src[si] && di < (int)sizeof(szFilter)-2 ) {' + Chr(10)
+   cAllPrg += '    szFilter[di++] = ( src[si] == 124 ) ? 0 : src[si]; si++; }' + Chr(10)
+   cAllPrg += '  szFilter[di++] = 0; szFilter[di] = 0;' + Chr(10)
+   cAllPrg += '  memset(&ofn,0,sizeof(ofn)); ofn.lStructSize=sizeof(ofn);' + Chr(10)
+   cAllPrg += '  ofn.hwndOwner=GetActiveWindow(); ofn.lpstrFilter=szFilter;' + Chr(10)
+   cAllPrg += '  ofn.lpstrFile=szFile; ofn.nMaxFile=260;' + Chr(10)
+   cAllPrg += '  ofn.lpstrTitle=hb_parclen(1)?hb_parc(1):NULL;' + Chr(10)
+   cAllPrg += '  ofn.lpstrInitialDir=(hb_parc(3)&&hb_parc(3)[0])?hb_parc(3):NULL;' + Chr(10)
+   cAllPrg += '  ofn.lpstrDefExt=(hb_parc(4)&&hb_parc(4)[0])?hb_parc(4):NULL;' + Chr(10)
+   cAllPrg += '  ofn.Flags=0x00001000 | 0x00000800 | 0x00000004;' + Chr(10)
+   cAllPrg += '  if(GetOpenFileNameA(&ofn)) hb_retc(szFile); else hb_retc("");' + Chr(10)
+   cAllPrg += '}' + Chr(10)
+   cAllPrg += 'HB_FUNC( W32_EXECSAVEDIALOG )  {' + Chr(10)
+   cAllPrg += '  OPENFILENAMEA ofn; char szFile[260] = ""; char szFilter[1024];' + Chr(10)
+   cAllPrg += '  const char * src = hb_parc(2); const char * nm = hb_parc(5);' + Chr(10)
+   cAllPrg += '  int si = 0, di = 0;' + Chr(10)
+   cAllPrg += '  while( src && src[si] && di < (int)sizeof(szFilter)-2 ) {' + Chr(10)
+   cAllPrg += '    szFilter[di++] = ( src[si] == 124 ) ? 0 : src[si]; si++; }' + Chr(10)
+   cAllPrg += '  szFilter[di++] = 0; szFilter[di] = 0;' + Chr(10)
+   cAllPrg += '  if(nm && nm[0]) lstrcpynA(szFile, nm, 260);' + Chr(10)
+   cAllPrg += '  memset(&ofn,0,sizeof(ofn)); ofn.lStructSize=sizeof(ofn);' + Chr(10)
+   cAllPrg += '  ofn.hwndOwner=GetActiveWindow(); ofn.lpstrFilter=szFilter;' + Chr(10)
+   cAllPrg += '  ofn.lpstrFile=szFile; ofn.nMaxFile=260;' + Chr(10)
+   cAllPrg += '  ofn.lpstrTitle=hb_parclen(1)?hb_parc(1):NULL;' + Chr(10)
+   cAllPrg += '  ofn.lpstrInitialDir=(hb_parc(3)&&hb_parc(3)[0])?hb_parc(3):NULL;' + Chr(10)
+   cAllPrg += '  ofn.lpstrDefExt=(hb_parc(4)&&hb_parc(4)[0])?hb_parc(4):NULL;' + Chr(10)
+   cAllPrg += '  ofn.Flags=0x00000002 | 0x00000004;' + Chr(10)
+   cAllPrg += '  if(GetSaveFileNameA(&ofn)) hb_retc(szFile); else hb_retc("");' + Chr(10)
+   cAllPrg += '}' + Chr(10)
+   cAllPrg += 'HB_FUNC( W32_EXECFONTDIALOG )  {' + Chr(10)
+   cAllPrg += '  CHOOSEFONTA cf; LOGFONTA lf; HDC hdc;' + Chr(10)
+   cAllPrg += '  const char * nm = hb_parc(1);' + Chr(10)
+   cAllPrg += '  memset(&lf,0,sizeof(lf));' + Chr(10)
+   cAllPrg += '  if(nm && nm[0]) lstrcpynA(lf.lfFaceName, nm, 32);' + Chr(10)
+   cAllPrg += '  else lstrcpyA(lf.lfFaceName, "Segoe UI");' + Chr(10)
+   cAllPrg += '  hdc=GetDC(NULL); lf.lfHeight=-MulDiv(hb_parni(2)>0?hb_parni(2):10,GetDeviceCaps(hdc,90),72);' + Chr(10)
+   cAllPrg += '  ReleaseDC(NULL,hdc);' + Chr(10)
+   cAllPrg += '  lf.lfWeight=(hb_parni(4)&1)?700:400;' + Chr(10)
+   cAllPrg += '  lf.lfItalic=(hb_parni(4)&2)?1:0; lf.lfUnderline=(hb_parni(4)&4)?1:0;' + Chr(10)
+   cAllPrg += '  lf.lfCharSet=1;' + Chr(10)
+   cAllPrg += '  memset(&cf,0,sizeof(cf)); cf.lStructSize=sizeof(cf);' + Chr(10)
+   cAllPrg += '  cf.hwndOwner=GetActiveWindow(); cf.lpLogFont=&lf;' + Chr(10)
+   cAllPrg += '  cf.rgbColors=hb_parni(3);' + Chr(10)
+   cAllPrg += '  cf.Flags=0x00000001 | 0x00000040 | 0x00000100;' + Chr(10)
+   cAllPrg += '  if(ChooseFontA(&cf)) {' + Chr(10)
+   cAllPrg += '    PHB_ITEM a; int sty=0,pts; hdc=GetDC(NULL);' + Chr(10)
+   cAllPrg += '    pts=MulDiv(-lf.lfHeight,72,GetDeviceCaps(hdc,90)); ReleaseDC(NULL,hdc);' + Chr(10)
+   cAllPrg += '    if(lf.lfWeight>=700) sty|=1; if(lf.lfItalic) sty|=2; if(lf.lfUnderline) sty|=4;' + Chr(10)
+   cAllPrg += '    a=hb_itemArrayNew(4); hb_arraySetC(a,1,lf.lfFaceName);' + Chr(10)
+   cAllPrg += '    hb_arraySetNI(a,2,pts); hb_arraySetNI(a,3,(int)cf.rgbColors);' + Chr(10)
+   cAllPrg += '    hb_arraySetNI(a,4,sty); hb_itemReturnRelease(a);' + Chr(10)
+   cAllPrg += '  } else hb_ret();' + Chr(10)
+   cAllPrg += '}' + Chr(10)
+   cAllPrg += 'HB_FUNC( W32_EXECCOLORDIALOG ) {' + Chr(10)
+   cAllPrg += '  CHOOSECOLORA cc; static COLORREF custColors[16] = {0};' + Chr(10)
+   cAllPrg += '  memset(&cc,0,sizeof(cc)); cc.lStructSize=sizeof(cc);' + Chr(10)
+   cAllPrg += '  cc.hwndOwner=GetActiveWindow(); cc.rgbResult=(COLORREF)hb_parni(1);' + Chr(10)
+   cAllPrg += '  cc.lpCustColors=custColors; cc.Flags=0x00000001 | 0x00000002;' + Chr(10)
+   cAllPrg += '  if(ChooseColorA(&cc)) hb_retni((int)cc.rgbResult); else hb_retni(-1);' + Chr(10)
+   cAllPrg += '}' + Chr(10)
    cAllPrg += 'HB_FUNC( W32_ERRORDIALOG ) {' + Chr(10)
    cAllPrg += '  const char * msg = hb_parc(1);' + Chr(10)
    cAllPrg += '  HWND hDlg, hEdit, hBtn;' + Chr(10)
@@ -4533,6 +4585,7 @@ static function TBDebugRun()
    // Step 7: Link native executable (DebugApp.exe)
    if ! lError
       cLog += "[7] Linking DebugApp.exe..." + Chr(10)
+
       if cCompiler == "mingw"
          cObjs := cBuildDir + "\debug_main.o " + ;
                   cBuildDir + "\dbghook.o " + ;
@@ -4606,6 +4659,8 @@ static function TBDebugRun()
                  " ole32.lib oleaut32.lib uuid.lib advapi32.lib" + ;
                  " msimg32.lib gdiplus.lib winspool.lib,,"
       endif
+      // Delete old exe so a silent link failure is detected (File existence check below)
+      FErase( cBuildDir + "\DebugApp.exe" )
       cOutput := W32_ShellExec( cCmd )
       if ! File( cBuildDir + "\DebugApp.exe" )
          cLog += "    FAILED:" + Chr(10) + cOutput + Chr(10)
@@ -4672,46 +4727,43 @@ return nil
 
 static function OnDebugPause( cFunc, nLine, cLocals, cStack )
 
-   local i, nTab, nTabLine, hIns
+   local i, nTab, nTabLine, hIns, cFile
 
    // Map debug_main.prg line number to the correct editor tab and line
    nTab := 0
    nTabLine := 0
+   cFile := ""
    if aDbgOffsets != nil
       for i := Len( aDbgOffsets ) to 1 step -1
          if nLine >= aDbgOffsets[i][1]
-            nTab := aDbgOffsets[i][3]
+            nTab     := aDbgOffsets[i][3]
             nTabLine := nLine - aDbgOffsets[i][1] + aDbgOffsets[i][4]
+            cFile    := aDbgOffsets[i][2]
             exit
          endif
       next
    endif
-
-   // Append trace
-   DbgLog2( "OnDebugPause: func=" + cFunc + " line=" + LTrim(Str(nLine)) + ;
-      " -> tab=" + LTrim(Str(nTab)) + " tabLine=" + LTrim(Str(nTabLine)) )
 
    // Framework code (nTab == 0) — skip, don't pause, don't update
    if nTab == 0
       return .f.
    endif
 
-
-   DbgLog2( "  step A: SelectTab" )
-   if nTabLine > 0
-      CodeEditorSelectTab( hCodeEditor, nTab )
-      DbgLog2( "  step B: ShowDebugLine(" + LTrim(Str(nTabLine)) + ")" )
-      CodeEditorShowDebugLine( hCodeEditor, nTabLine )
-      DbgLog2( "  step C: ShowDebugLine done" )
+   // Only pause at breakpoints or when user is stepping line-by-line (matches macOS/Linux)
+   if ! IDE_IsBreakpoint( cFile, nTabLine ) .and. ! IDE_DbgIsStepping()
+      return .f.
    endif
 
-   DbgLog2( "  step D: MapLocalNames" )
+   if nTabLine > 0
+      CodeEditorSelectTab( hCodeEditor, nTab )
+      CodeEditorShowDebugLine( hCodeEditor, nTabLine )
+   endif
+
    if cLocals != nil .and. nTab > 0
       cLocals := DbgMapLocalNames( cLocals, cFunc, nTab )
    endif
 
    // Update inspector with locals and call stack
-   DbgLog2( "  step E: UpdateInspector" )
    hIns := _InsGetData()
    if hIns != 0
       if cLocals != nil
@@ -7568,6 +7620,10 @@ HB_FUNC( W32_ABOUTDIALOG )
 #define SCI_SETFOLDFLAGS       2233
 #define SCI_SETMARGINMASKN     2244
 #define SCI_MARKERDEFINE       2040
+#define SCI_MARKERADD          2043
+#define SCI_MARKERDELETE       2044
+#define SCI_MARKERDELETEALL    2045
+#define SCI_MARKERGET          2046
 #define SCI_SETAUTOMATICFOLD   2663
 #define SC_AUTOMATICFOLD_SHOW  0x01
 #define SC_AUTOMATICFOLD_CLICK 0x02
@@ -7655,6 +7711,7 @@ typedef struct {
    int nTabs;
    int nActiveTab;  /* 0-based */
    char * aTexts[MAX_TABS];
+   char aTabNames[MAX_TABS][64];  /* tab labels — used to restore breakpoint markers */
    /* Harbour callback for tab change */
    PHB_ITEM pOnTabChange;
    /* Debounced text-change callback */
@@ -7673,6 +7730,33 @@ typedef struct {
 } CODEEDITOR;
 
 static void SwitchTab( CODEEDITOR * ed, int nNewTab );
+
+/* Breakpoint store accessors implemented in hbbridge.cpp (declared with C linkage) */
+extern int  IdeBpGetCount( void );
+extern const char * IdeBpGetModule( int i );
+extern int  IdeBpGetLine( int i );
+extern int  IdeBpFind( const char * file, int line );
+extern int  IdeBpAdd( const char * file, int line );
+extern void IdeBpRemoveAt( int i );
+
+/* Re-apply marker 12 on every line that has a breakpoint in the given file.
+ * Called after SCI_SETTEXT (tab switch) since Scintilla clears markers on text reset. */
+static void CE_RestoreBreakpointMarkers( CODEEDITOR * ed, const char * filename )
+{
+   int i, n;
+   if( !ed || !ed->hEdit || !filename ) return;
+   SciMsg( ed->hEdit, SCI_MARKERDELETEALL, 12, 0 );
+   n = IdeBpGetCount();
+   for( i = 0; i < n; i++ )
+   {
+      const char * mod = IdeBpGetModule( i );
+      if( mod[0] == 0 || _stricmp( mod, filename ) == 0 )
+      {
+         int l = IdeBpGetLine( i ) - 1;
+         if( l >= 0 ) SciMsg( ed->hEdit, SCI_MARKERADD, l, 12 );
+      }
+   }
+}
 
 /* Initialize Scintilla DLLs */
 static BOOL InitScintilla( void )
@@ -7752,11 +7836,18 @@ static void ConfigureScintilla( HWND hSci )
    SciMsg( hSci, SCI_STYLESETBACK, STYLE_DEFAULT, RGB(30,30,30) );
    SciMsg( hSci, SCI_STYLECLEARALL, 0, 0 );  /* Apply default to all styles */
 
-   /* Line number margin */
+   /* Line number margin — also click-sensitive for breakpoint toggle (VS Code style) */
    SciMsg( hSci, SCI_SETMARGINTYPEN, 0, SC_MARGIN_NUMBER );
    SciMsg( hSci, SCI_SETMARGINWIDTHN, 0, 48 );
+   SciMsg( hSci, SCI_SETMARGINSENSITIVEN, 0, 1 );
    SciMsg( hSci, SCI_STYLESETFORE, STYLE_LINENUMBER, RGB(133,133,133) );
    SciMsg( hSci, SCI_STYLESETBACK, STYLE_LINENUMBER, RGB(37,37,38) );
+
+   /* Breakpoint margin (margin 1) — clickable symbol strip */
+   SciMsg( hSci, SCI_SETMARGINTYPEN, 1, SC_MARGIN_SYMBOL );
+   SciMsg( hSci, SCI_SETMARGINMASKN, 1, 1 << 12 );   /* only marker 12 */
+   SciMsg( hSci, SCI_SETMARGINWIDTHN, 1, 18 );
+   SciMsg( hSci, SCI_SETMARGINSENSITIVEN, 1, 1 );
 
    /* Folding margin */
    SciMsg( hSci, SCI_SETMARGINTYPEN, 2, SC_MARGIN_SYMBOL );
@@ -7785,6 +7876,11 @@ static void ConfigureScintilla( HWND hSci )
    SciMsg( hSci, SCI_MARKERDEFINE, 11, 22 );    /* SC_MARK_BACKGROUND = 22 */
    SciMsg( hSci, 2042, 11, RGB(80,80,0) );       /* SCI_MARKERSETBACK - yellow-ish */
    SciMsg( hSci, 2041, 11, RGB(0,0,0) );          /* SCI_MARKERSETFORE */
+
+   /* Breakpoint marker (marker 12) - red circle */
+   SciMsg( hSci, SCI_MARKERDEFINE, 12, 0 );       /* SC_MARK_CIRCLE = 0 */
+   SciMsg( hSci, 2041, 12, RGB(180,0,0) );        /* SCI_MARKERSETFORE */
+   SciMsg( hSci, 2042, 12, RGB(220,30,30) );      /* SCI_MARKERSETBACK */
 
    /* Enable folding property */
    SciMsg( hSci, SCI_SETPROPERTY, (WPARAM) "fold", (LPARAM) "1" );
@@ -8057,6 +8153,11 @@ static void SwitchTab( CODEEDITOR * ed, int nNewTab )
 
    /* Update Harbour folding for the new tab */
    UpdateHarbourFolding( ed->hEdit );
+
+   /* Restore breakpoint markers for this file (SCI_SETTEXT clears all markers) */
+   if( ed->aTabNames[nNewTab][0] )
+      CE_RestoreBreakpointMarkers( ed, ed->aTabNames[nNewTab] );
+
    ed->bSettingText = 0;
 
    /* Update tab selection */
@@ -9067,9 +9168,26 @@ static LRESULT CALLBACK CodeEdWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARA
             SCNotification * scn = (SCNotification *) lParam;
 
             if( scn->code == SCN_MARGINCLICK ) {
-               /* Fold/unfold on margin click */
                int line = (int) SciMsg( ed->hEdit, SCI_LINEFROMPOSITION, scn->position, 0 );
-               SciMsg( ed->hEdit, SCI_TOGGLEFOLD, line, 0 );
+               if( scn->margin == 0 || scn->margin == 1 ) {
+                  /* Line-number or breakpoint margin — toggle marker 12 + stored breakpoint list */
+                  int lineNum = line + 1;   /* 1-based like Harbour */
+                  const char * fileName = ( ed->nActiveTab >= 0 && ed->nActiveTab < ed->nTabs )
+                                          ? ed->aTabNames[ed->nActiveTab] : "";
+                  int hasMarker = (int) SciMsg( ed->hEdit, SCI_MARKERGET, line, 0 ) & ( 1 << 12 );
+                  if( hasMarker ) {
+                     int idx;
+                     SciMsg( ed->hEdit, SCI_MARKERDELETE, line, 12 );
+                     idx = IdeBpFind( fileName, lineNum );
+                     if( idx >= 0 ) IdeBpRemoveAt( idx );
+                  } else {
+                     SciMsg( ed->hEdit, SCI_MARKERADD, line, 12 );
+                     IdeBpAdd( fileName, lineNum );
+                  }
+               } else {
+                  /* Folding margin — toggle fold */
+                  SciMsg( ed->hEdit, SCI_TOGGLEFOLD, line, 0 );
+               }
             }
 
             if( scn->code == SCN_CHARADDED ) {
@@ -9354,6 +9472,8 @@ HB_FUNC( CODEEDITORCREATE )
    ed->nTabs = 1;
    ed->nActiveTab = 0;
    ed->aTexts[0] = NULL;
+   strncpy( ed->aTabNames[0], "Project1.prg", 63 );
+   ed->aTabNames[0][63] = 0;
 
    /* Create Scintilla editor (full width, no separate gutter needed) */
    ed->hEdit = CreateWindowExA( 0, "Scintilla", "",
@@ -9506,6 +9626,8 @@ HB_FUNC( CODEEDITORADDTAB )
    SendMessageA( ed->hTab, TCM_INSERTITEMA, ed->nTabs, (LPARAM) &tci );
 
    ed->aTexts[ed->nTabs] = NULL;
+   strncpy( ed->aTabNames[ed->nTabs], hb_parc(2), 63 );
+   ed->aTabNames[ed->nTabs][63] = 0;
    ed->nTabs++;
 }
 
@@ -9548,6 +9670,8 @@ HB_FUNC( CODEEDITORCLEARTABS )
    SendMessageA( ed->hTab, TCM_INSERTITEMA, 0, (LPARAM) &tci );
    ed->nTabs = 1;
    ed->nActiveTab = 0;
+   strncpy( ed->aTabNames[0], "Project1.prg", 63 );
+   ed->aTabNames[0][63] = 0;
 
    ed->bSettingText = 1;
    SciMsg( ed->hEdit, SCI_SETTEXT, 0, (LPARAM) "" );
@@ -9776,6 +9900,45 @@ HB_FUNC( CODEEDITORSHOWDEBUGLINE )
    else
    {
       s_dbgPrevLine = -1;
+   }
+}
+
+/* CodeEditorRestoreBreakpoints( hEditor, cFilename ) — re-apply marker 12 markers
+ * for the given file. Called after loading new text into the active tab. */
+HB_FUNC( CODEEDITORRESTOREBREAKPOINTS )
+{
+   CODEEDITOR * ed = (CODEEDITOR *) (HB_PTRUINT) hb_parnint(1);
+   const char * filename = HB_ISCHAR(2) ? hb_parc(2) : "";
+   CE_RestoreBreakpointMarkers( ed, filename );
+}
+
+/* CodeEditorToggleBreakpoint( hEditor ) — toggle a breakpoint at the current line
+ * in the active tab. Mirrors what the margin-click handler does. */
+HB_FUNC( CODEEDITORTOGGLEBREAKPOINT )
+{
+   CODEEDITOR * ed = (CODEEDITOR *) (HB_PTRUINT) hb_parnint(1);
+   int pos, line, lineNum, hasMarker, idx;
+   const char * fileName;
+
+   if( !ed || !ed->hEdit ) return;
+
+   pos  = (int) SciMsg( ed->hEdit, SCI_GETCURRENTPOS, 0, 0 );
+   line = (int) SciMsg( ed->hEdit, SCI_LINEFROMPOSITION, pos, 0 );
+   lineNum = line + 1;
+   fileName = ( ed->nActiveTab >= 0 && ed->nActiveTab < ed->nTabs )
+              ? ed->aTabNames[ed->nActiveTab] : "";
+
+   hasMarker = (int) SciMsg( ed->hEdit, SCI_MARKERGET, line, 0 ) & ( 1 << 12 );
+   if( hasMarker )
+   {
+      SciMsg( ed->hEdit, SCI_MARKERDELETE, line, 12 );
+      idx = IdeBpFind( fileName, lineNum );
+      if( idx >= 0 ) IdeBpRemoveAt( idx );
+   }
+   else
+   {
+      SciMsg( ed->hEdit, SCI_MARKERADD, line, 12 );
+      IdeBpAdd( fileName, lineNum );
    }
 }
 
