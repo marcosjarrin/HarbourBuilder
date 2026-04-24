@@ -1,6 +1,13 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-24l
+
+  - fix: TMainMenu action handler signature is now (oForm, oMenuItem)
+    - MENUITEM generates ACTION HandlerName( Self, oMenuItem )
+    - aOnClick codeblock calls HandlerName( Self, nil )
+    - Auto-generated stubs: static function HandlerName( oForm, oMenuItem )
+
 2026-04-24k
 
   - feat: TMainMenu action handlers now execute correctly with Self
