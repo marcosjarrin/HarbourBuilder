@@ -1,6 +1,14 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-24j
+
+  - feat: menu item action handlers auto-generated as static functions
+    - RegenerateFormCode now collects all non-empty ACTION handler names from
+      TMainMenu items and appends static function HandlerName(oForm) stubs for
+      any that do not already exist in the form code
+    - Stubs follow the same format as button OnClick handlers
+
 2026-04-24i
 
   - fix: TMainMenu menu items not reloading when loading form from disk

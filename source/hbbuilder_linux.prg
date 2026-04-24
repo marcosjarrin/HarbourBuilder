@@ -628,6 +628,7 @@ static function RegenerateFormCode( cName, hForm )
    local aExLines, lInClass, cExLine
    local aMenuNodes, nMI, cMNode, aMFields, nLv, cCap, cScut, cHndl
    local nPendingLevels, nPL, cInd, bIsPopup, aNextF
+   local aMenuHandlers := {}
 
    // Read existing code to find declared event handlers
    cExistingCode := ""
@@ -870,6 +871,9 @@ static function RegenerateFormCode( cName, hForm )
                            cCreate += cInd + 'MENUITEM "' + cCap + '"'
                            if ! Empty( cHndl )
                               cCreate += ' ACTION ' + cHndl + '()'
+                              if AScan( aMenuHandlers, cHndl ) == 0
+                                 AAdd( aMenuHandlers, cHndl )
+                              endif
                            endif
                            if ! Empty( cScut )
                               cCreate += ' ACCEL "' + cScut + '"'
@@ -1047,6 +1051,17 @@ static function RegenerateFormCode( cName, hForm )
    cCode += e
    cCode += "return nil" + e
    cCode += cSep
+
+   // Add stubs for new menu item action handlers
+   for nMI := 1 to Len( aMenuHandlers )
+      cHndl := aMenuHandlers[nMI]
+      if ! ( "function " + Lower(cHndl) ) $ Lower( cExistingCode )
+         cCode += cSep
+         cCode += "static function " + cHndl + "( oForm )" + e
+         cCode += e
+         cCode += "return nil" + e
+      endif
+   next
 
 return cCode
 
