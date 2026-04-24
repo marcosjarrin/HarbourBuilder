@@ -1,6 +1,16 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-24m
+
+  - feat(mac): TMainMenu runtime menu attach with NSLog diagnostics and app menu fix
+    - HBMainMenu_Attach: when no NSApp mainMenu exists, creates menu bar with
+      required app menu item (Quit) before appending user popup menus
+      (macOS requires first menu bar item to be the application menu)
+    - Added NSLog tracing: UI_MAINMENUNEW, UI_SETPROP aMenuItems, HBMainMenu_Attach
+      entry/nodes/existing-menu so runtime failures can be diagnosed from Console
+    - UI_SETPROP aMenuItems now logs serial length and first 50 chars on assignment
+
 2026-04-24l
 
   - fix: TMainMenu action handler signature is now (oForm, oMenuItem)
