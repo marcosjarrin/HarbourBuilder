@@ -685,7 +685,7 @@ static void mei_add_node( MEIDATA * d, int nLevel, int bSeparator )
    memset( &d->nodes[insPos], 0, sizeof(MEINode) );
    if( !bSeparator ) strcpy( d->nodes[insPos].szCaption, "NewItem" );
    d->nodes[insPos].bSeparator = bSeparator;
-   d->nodes[insPos].bEnabled   = 1;
+   d->nodes[insPos].bEnabled   = bSeparator ? 0 : 1;
    d->nodes[insPos].nLevel     = nLevel;
    d->nodes[insPos].nParent    = nParent;
    d->nCount++;

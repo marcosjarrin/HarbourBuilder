@@ -1246,12 +1246,13 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
       "Whisper", "Embeddings", ;
       "Python", "Swift", "Go", "Node", "Rust", "Java", "DotNet", "Lua", "Ruby", ;
       "GitRepo", "GitCommit", "GitBranch", "GitLog", "GitDiff", ;
-      "GitRemote", "GitStash", "GitTag", "GitBlame", "GitMerge" }
+      "GitRemote", "GitStash", "GitTag", "GitBlame", "GitMerge", ;
+      "CompArray", "MainMenu" }
 
    // Push undo before adding control
    UI_FormUndoPush( hForm )
 
-   if aCnt == nil; aCnt := Array(120); AFill(aCnt,0); endif
+   if aCnt == nil; aCnt := Array(132); AFill(aCnt,0); endif
    if nType < 1 .or. nType > Len(aNames) .or. Empty(aNames[nType]); return nil; endif
    aCnt[nType]++
    cName := aNames[nType] + LTrim(Str(aCnt[nType]))
