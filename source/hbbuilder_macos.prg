@@ -384,6 +384,7 @@ static function CreatePalette()
    oPal:AddComp( nTab, "Grp",  "GroupBox",    6 )
    oPal:AddComp( nTab, "Pnl",  "Panel",      25 )
    oPal:AddComp( nTab, "SB",   "ScrollBar",  26 )
+   oPal:AddComp( nTab, "MM",   "MainMenu",  200 )
 
    // Additional tab (C++Builder)
    nTab := oPal:AddTab( "Additional" )
@@ -699,6 +700,8 @@ static function RegenerateFormCode( cName, hForm )
    local nL, nT, nCW, nCH, cText
    local cDatas := "", cCreate := "", cEvents := "", cVal, cDeferredDS := ""
    local cExistingCode, aEvents, j, cEvName, cEvSuffix, cHandlerName
+   local aMenuHandlers := {}, lHasHandlers, aMenuNodes, aMFields, cHndl, nMI
+   local nPendingLevels, cMNode, cCap, cScut, nLv, nPL, cInd, bIsPopup, aNextF
    local aHdrs, kk, nColCount, aColProps, nColW, nCtrlClr, nInterval
    local cParent, nOwnerH, nPos, nPos2, cLine
    local aMethodNames, cMethodName
@@ -1166,6 +1169,84 @@ static function RegenerateFormCode( cName, hForm )
                      if ValType( nInterval ) == "N" .and. nInterval != 1000
                         cCreate += '   ::o' + cCtrlName + ':nInterval := ' + LTrim( Str( nInterval ) ) + e
                      endif
+                  elseif nType == 200  // CT_MAINMENU
+                     cVal := UI_GetProp( hCtrl, "aMenuItems" )
+                     if ValType( cVal ) == "C" .and. ! Empty( cVal )
+                        cCreate += '   ::o' + cCtrlName + ':aMenuItems := "' + ;
+                                   StrTran( cVal, Chr(1), '"+Chr(1)+"' ) + '"' + e
+                        aMenuNodes := HB_ATokens( cVal, "|" )
+                        lHasHandlers := .F.
+                        for nMI := 1 to Len( aMenuNodes )
+                           aMFields := HB_ATokens( aMenuNodes[nMI], Chr(1) )
+                           cHndl := iif( Len(aMFields) >= 3, aMFields[3], "" )
+                           if ! Empty( cHndl ); lHasHandlers := .T.; exit; endif
+                        next
+                        if lHasHandlers
+                           cCreate += '   ::o' + cCtrlName + ':aOnClick := { '
+                           for nMI := 1 to Len( aMenuNodes )
+                              aMFields := HB_ATokens( aMenuNodes[nMI], Chr(1) )
+                              cHndl := iif( Len(aMFields) >= 3, aMFields[3], "" )
+                              if nMI > 1; cCreate += ", "; endif
+                              if ! Empty( cHndl )
+                                 cCreate += '{|| ' + cHndl + '( Self, nil )}'
+                              else
+                                 cCreate += 'nil'
+                              endif
+                           next
+                           cCreate += ' }' + e
+                        endif
+                        nPendingLevels := {}
+                        cCreate += '   DEFINE MENUBAR' + e
+                        for nMI := 1 to Len( aMenuNodes )
+                           cMNode := aMenuNodes[nMI]
+                           aMFields := HB_ATokens( cMNode, Chr(1) )
+                           if Len( aMFields ) < 5; loop; endif
+                           cCap  := aMFields[1]
+                           cScut := iif( Len(aMFields) >= 2, aMFields[2], "" )
+                           cHndl := iif( Len(aMFields) >= 3, aMFields[3], "" )
+                           nLv   := iif( Len(aMFields) >= 5, Val( aMFields[5] ), 0 )
+                           do while Len( nPendingLevels ) > 0 .and. ;
+                                     ATail( nPendingLevels ) >= nLv
+                              nPL := ATail( nPendingLevels )
+                              cCreate += Replicate( "   ", nPL + 2 ) + 'END POPUP' + e
+                              ASize( nPendingLevels, Len( nPendingLevels ) - 1 )
+                           enddo
+                           cInd := Replicate( "   ", nLv + 2 )
+                           if cCap == "---"
+                              cCreate += cInd + 'MENUSEPARATOR' + e
+                           else
+                              bIsPopup := .F.
+                              if nMI < Len( aMenuNodes )
+                                 aNextF := HB_ATokens( aMenuNodes[nMI+1], Chr(1) )
+                                 if Len(aNextF) >= 5 .and. Val(aNextF[5]) > nLv
+                                    bIsPopup := .T.
+                                 endif
+                              endif
+                              if nLv == 0 .or. bIsPopup
+                                 cCreate += cInd + 'DEFINE POPUP "' + cCap + '"' + e
+                                 AAdd( nPendingLevels, nLv )
+                              else
+                                 cCreate += cInd + 'MENUITEM "' + cCap + '"'
+                                 if ! Empty( cHndl )
+                                    cCreate += ' ACTION ' + cHndl + '( Self, oMenuItem )'
+                                    if AScan( aMenuHandlers, cHndl ) == 0
+                                       AAdd( aMenuHandlers, cHndl )
+                                    endif
+                                 endif
+                                 if ! Empty( cScut )
+                                    cCreate += ' ACCEL "' + cScut + '"'
+                                 endif
+                                 cCreate += e
+                              endif
+                           endif
+                        next
+                        do while Len( nPendingLevels ) > 0
+                           nPL := ATail( nPendingLevels )
+                           cCreate += Replicate( "   ", nPL + 2 ) + 'END POPUP' + e
+                           ASize( nPendingLevels, Len( nPendingLevels ) - 1 )
+                        enddo
+                        cCreate += '   END MENUBAR' + e
+                     endif
                   elseif nType == 71  // CT_WEBSERVER
                      nWSPort     := UI_GetProp( hCtrl, "nPort" )
                      cWSRoot     := UI_GetProp( hCtrl, "cRoot" )
@@ -1465,6 +1546,18 @@ static function RegenerateFormCode( cName, hForm )
    cCode += "return nil" + e
    cCode += cSep
 
+   // Add stubs for new menu item action handlers
+   for nMI := 1 to Len( aMenuHandlers )
+      cHndl := aMenuHandlers[nMI]
+      if ! ( "function " + Lower(cHndl) ) $ Lower( cExistingCode ) .and. ;
+         ! ( "method " + Lower(cHndl) ) $ Lower( cExistingCode )
+         cCode += cSep
+         cCode += "static function " + cHndl + "( oForm, oMenuItem )" + e
+         cCode += e
+         cCode += "return nil" + e
+      endif
+   next
+
 return cCode
 
 // Restore visual controls on a design form by parsing the form .prg code
@@ -1478,6 +1571,9 @@ static function RestoreFormFromCode( hForm, cCode )
    local cBandName, hBandCtrl, cFldSerial, cExistFields
    local cTail, nLastQ, nQpos
    local nBandAbsTop, nAbsTop, nCtrlType2, cPromptText
+   local cMenuSerial, nMenuLevel, aParentStack, nFirstNode, jj, cML, cMLU
+   local nQ1, nQ2, nQ3, nQ4, nQ5, cPopCap, cItCap, cItHndl, cItAccl, nAct, nAccl
+   local nPar, nPar2, nPar3, nCC, jjC, hC
 
    if Empty( cCode ) .or. hForm == 0
       return nil
@@ -1584,6 +1680,81 @@ static function RestoreFormFromCode( hForm, cCode )
                   endif
                endif
             endif
+         endif
+         loop
+      endif
+
+      // Parse DEFINE MENUBAR block for TMainMenu
+      if Upper( AllTrim( cTrim ) ) == "DEFINE MENUBAR"
+         cMenuSerial := ""
+         nMenuLevel  := 0
+         aParentStack := {}
+         nFirstNode  := .T.
+         jj := i + 1
+         do while jj <= Len( aLines )
+            cML  := AllTrim( aLines[jj] )
+            cMLU := Upper( cML )
+            if cMLU == "END MENUBAR"
+               exit
+            elseif Left( cMLU, 12 ) == "DEFINE POPUP"
+               nQ1 := At( '"', cML )
+               nQ2 := iif( nQ1 > 0, At( '"', SubStr( cML, nQ1+1 ) ), 0 )
+               cPopCap := iif( nQ1>0 .and. nQ2>0, SubStr( cML, nQ1+1, nQ2-1 ), "" )
+               nPar := iif( Len( aParentStack ) > 0, ATail(aParentStack), -1 )
+               if ! nFirstNode; cMenuSerial += "|"; endif
+               cMenuSerial += cPopCap + Chr(1) + Chr(1) + Chr(1) + "1" + Chr(1) + ;
+                              LTrim(Str(nMenuLevel)) + Chr(1) + LTrim(Str(nPar))
+               AAdd( aParentStack, Len( HB_ATokens( cMenuSerial, "|" ) ) - 1 )
+               nMenuLevel++
+               nFirstNode := .F.
+            elseif cMLU == "END POPUP"
+               nMenuLevel--
+               if Len( aParentStack ) > 0
+                  ASize( aParentStack, Len(aParentStack)-1 )
+               endif
+            elseif Left( cMLU, 11 ) == "MENUSEPARAT"
+               nPar2 := iif( Len(aParentStack)>0, ATail(aParentStack), -1 )
+               if ! nFirstNode; cMenuSerial += "|"; endif
+               cMenuSerial += "---" + Chr(1) + Chr(1) + Chr(1) + "0" + Chr(1) + ;
+                              LTrim(Str(nMenuLevel)) + Chr(1) + LTrim(Str(nPar2))
+               nFirstNode := .F.
+            elseif Left( cMLU, 8 ) == "MENUITEM"
+               nQ3  := At( '"', cML )
+               nQ4  := iif( nQ3>0, At( '"', SubStr(cML,nQ3+1) ), 0 )
+               cItCap := iif( nQ3>0 .and. nQ4>0, SubStr(cML,nQ3+1,nQ4-1), "" )
+               cItHndl := ""
+               cItAccl := ""
+               nAct := At( "ACTION ", cMLU )
+               if nAct > 0
+                  cItHndl := SubStr( cML, nAct + 7 )
+                  nPos := At( " ", cItHndl )
+                  if nPos > 0; cItHndl := Left(cItHndl,nPos-1); endif
+                  if Right(cItHndl,2) == "()"; cItHndl := Left(cItHndl,Len(cItHndl)-2); endif
+               endif
+               nAccl := At( 'ACCEL "', cML )
+               if nAccl > 0
+                  cItAccl := SubStr( cML, nAccl+7 )
+                  nQ5 := At( '"', cItAccl )
+                  if nQ5>0; cItAccl := Left(cItAccl,nQ5-1); endif
+               endif
+               nPar3 := iif( Len(aParentStack)>0, ATail(aParentStack), -1 )
+               if ! nFirstNode; cMenuSerial += "|"; endif
+               cMenuSerial += cItCap + Chr(1) + cItAccl + Chr(1) + cItHndl + Chr(1) + ;
+                              "1" + Chr(1) + LTrim(Str(nMenuLevel)) + Chr(1) + LTrim(Str(nPar3))
+               nFirstNode := .F.
+            endif
+            jj++
+         enddo
+         i := jj
+         if ! Empty( cMenuSerial )
+            nCC := UI_GetChildCount( hForm )
+            for jjC := nCC to 1 step -1
+               hC := UI_GetChild( hForm, jjC )
+               if UI_GetType(hC) == 200  // CT_MAINMENU
+                  UI_SetProp( hC, "aMenuItems", cMenuSerial )
+                  exit
+               endif
+            next
          endif
          loop
       endif
@@ -2708,6 +2879,7 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
    local nAbsT, nAbsL, nAbsW, nAbsH, cFldType2
    static aCnt := nil
    static nBandCnt := 0
+   static nMenuCnt := 0
    static aNames := { ;
       "Label", "Edit", "Button", "CheckBox", "ComboBox", "GroupBox", ;
       "ListBox", "RadioButton", "", "", "", "BitBtn", "SpeedButton", ;
@@ -2740,6 +2912,21 @@ static function OnComponentDrop( hForm, nType, nL, nT, nW, nH )
 
    if aCnt == nil; aCnt := Array( 135 ); AFill(aCnt,0); endif
    UI_FormUndoPush( hForm )
+
+   // CT_MAINMENU (200) is outside aNames range — handle it before the bounds check
+   if nType == 200
+      nMenuCnt++
+      cName := "MainMenu" + LTrim( Str( nMenuCnt ) )
+      nCount := UI_GetChildCount( hForm )
+      hCtrl  := UI_GetChild( hForm, nCount )
+      if hCtrl != 0
+         UI_SetProp( hCtrl, "cName", cName )
+      endif
+      SyncDesignerToCode()
+      INS_ComboSelect( _InsGetData(), UI_GetChildCount( hForm ) )
+      InspectorRefresh( hLastCtrl )
+      return nil
+   endif
 
    // CT_BAND (132) is not in aNames — handle it before the bounds check
    if nType == CT_BAND
@@ -4592,6 +4779,9 @@ static function IsNonVisual( nType )
       nType == 140 .or. nType == 141 .or. nType == 142
       return .F.
    endif
+   if nType == 200  // CT_MAINMENU
+      return .T.
+   endif
 return nType >= 38
 
 static function ComponentTypeName( nType )
@@ -4688,6 +4878,7 @@ static function ComponentTypeName( nType )
       case nType == 130; return "CT_GITMERGE"
       case nType == 131; return "CT_COMPARRAY"
       case nType == 132; return "CT_BAND"
+      case nType == 200; return "CT_MAINMENU"
       case nType == 133; return "CT_REPORTLABEL"
       case nType == 134; return "CT_REPORTFIELD"
       case nType == 135; return "CT_REPORTIMAGE"
@@ -4739,7 +4930,8 @@ static function ResolveComponentType( cName )
       { "CT_GITBLAME", 129 }, { "CT_GITMERGE", 130 }, ;
       { "CT_COMPARRAY", 131 }, ;
       { "CT_BAND", 132 }, ;
-      { "CT_REPORTLABEL", 133 }, { "CT_REPORTFIELD", 134 }, { "CT_REPORTIMAGE", 135 } }
+      { "CT_REPORTLABEL", 133 }, { "CT_REPORTFIELD", 134 }, { "CT_REPORTIMAGE", 135 }, ;
+      { "CT_MAINMENU", 200 } }
    for i := 1 to Len( aMap )
       if Upper( cName ) == aMap[i][1]
          return aMap[i][2]

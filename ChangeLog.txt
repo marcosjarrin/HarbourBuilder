@@ -1,6 +1,24 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-24n
+
+  - feat(mac): TMainMenu full implementation for Cocoa/AppKit backend
+    - cocoa_inspector.m: Menu Items Editor (NSPanel modal) with NSTableView
+      showing Caption/Shortcut columns; right panel with Handler/Enabled fields;
+      Add Popup, Add Item, Add Sub-Item, Add Separator, Move Up/Down, Delete buttons;
+      OK saves via UI_SETPROP, Cancel discards; full MEI_Parse/MEI_Serialize
+    - cocoa_inspector.m: property inspector displays '(N nodes)' for type 'M' rows
+      and opens menu editor on '...' button click
+    - hbbuilder_macos.prg: TMainMenu added to Standard palette tab (MM / MainMenu)
+    - hbbuilder_macos.prg: RegenerateFormCode emits aMenuItems, aOnClick, and
+      DEFINE MENUBAR...END MENUBAR block (no-op macros; actual attach via C)
+    - hbbuilder_macos.prg: RestoreFormFromCode parses DEFINE MENUBAR block and
+      sets aMenuItems on the CT_MAINMENU child (type 200)
+    - hbbuilder_macos.prg: IsNonVisual, ComponentTypeName, ResolveComponentType,
+      PaletteOnSelect all handle CT_MAINMENU (type 200) with auto-naming MainMenu1..N
+    - hbbuilder_macos.prg: auto-generates static handler stubs for menu ACTION names
+
 2026-04-24m
 
   - feat(mac): TMainMenu runtime menu attach with NSLog diagnostics and app menu fix

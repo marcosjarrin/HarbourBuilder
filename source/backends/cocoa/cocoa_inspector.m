@@ -75,6 +75,326 @@ static void InsBuildRows( INSDATA * d, PHB_ITEM pArray );
 static void InsPopulateEvents( INSDATA * d );
 static void InsActivateTab( INSDATA * d );
 static void InsRefreshTab( INSDATA * d );
+static void OpenMenuEditor( INSDATA * ins, int nReal );
+
+/* ======================================================================
+ * Menu Items Editor
+ * ====================================================================== */
+
+#define MEI_MAX 128
+
+typedef struct {
+   char  szCaption[128];
+   char  szShortcut[32];
+   char  szHandler[128];
+   int   bSeparator;
+   int   bEnabled;
+   int   nLevel;
+   int   nParent;
+} MEINode;
+
+typedef struct {
+   MEINode nodes[MEI_MAX];
+   int     nCount;
+   int     nSel;
+} MEIDATA;
+
+static void MEI_Serialize( MEIDATA * d, char * out, int outLen )
+{
+   int pos=0; out[0]=0;
+   for(int i=0;i<d->nCount&&pos<outLen-64;i++) {
+      if(i>0) out[pos++]='|';
+      const char * cap=d->nodes[i].bSeparator?"---":d->nodes[i].szCaption;
+      int n=snprintf(out+pos,outLen-pos,"%s\x01%s\x01%s\x01%d\x01%d\x01%d",
+         cap,d->nodes[i].szShortcut,d->nodes[i].szHandler,
+         d->nodes[i].bEnabled,d->nodes[i].nLevel,d->nodes[i].nParent);
+      if(n>0) pos+=n;
+   }
+}
+
+static void MEI_Parse( MEIDATA * d, const char * raw )
+{
+   d->nCount=0;
+   if(!raw||!raw[0]) return;
+   while(*raw&&d->nCount<MEI_MAX) {
+      const char * pipe=strchr(raw,'|');
+      int tl=pipe?(int)(pipe-raw):(int)strlen(raw);
+      if(tl>511) tl=511;
+      char tok[512]; memcpy(tok,raw,tl); tok[tl]=0;
+      int fi=d->nCount;
+      char*f0=tok;
+      char*f1=strchr(f0,'\x01'); if(f1){*f1++=0;}else f1=(char*)"";
+      char*f2=f1[0]?strchr(f1,'\x01'):NULL; if(f2){*f2++=0;}else f2=(char*)"";
+      char*f3=f2?strchr(f2,'\x01'):NULL; if(f3){*f3++=0;}else f3=(char*)"";
+      char*f4=f3?strchr(f3,'\x01'):NULL; if(f4){*f4++=0;}else f4=(char*)"";
+      char*f5=f4?strchr(f4,'\x01'):NULL; if(f5){*f5++=0;}else f5=(char*)"-1";
+      d->nodes[fi].bSeparator=(strcmp(f0,"---")==0);
+      strncpy(d->nodes[fi].szCaption,d->nodes[fi].bSeparator?"":f0,127);
+      strncpy(d->nodes[fi].szShortcut,f1,31);
+      strncpy(d->nodes[fi].szHandler,f2,127);
+      d->nodes[fi].bEnabled=f3[0]?atoi(f3):1;
+      d->nodes[fi].nLevel=f4[0]?atoi(f4):0;
+      d->nodes[fi].nParent=f5[0]?atoi(f5):-1;
+      d->nCount++;
+      if(!pipe) break;
+      raw=pipe+1;
+   }
+}
+
+static void mei_add_node( MEIDATA * d, NSTableView * tv, int nLevel, int bSep )
+{
+   if(d->nCount>=MEI_MAX) return;
+   int insPos=(d->nSel>=0)?d->nSel+1:d->nCount;
+   for(int i=d->nCount;i>insPos;i--) d->nodes[i]=d->nodes[i-1];
+   int nPar=-1;
+   if(nLevel>0)
+      for(int i=insPos-1;i>=0;i--)
+         if(d->nodes[i].nLevel==nLevel-1&&!d->nodes[i].bSeparator){nPar=i;break;}
+   memset(&d->nodes[insPos],0,sizeof(MEINode));
+   if(!bSep) strcpy(d->nodes[insPos].szCaption,"NewItem");
+   d->nodes[insPos].bSeparator=bSep;
+   d->nodes[insPos].bEnabled=bSep?0:1;
+   d->nodes[insPos].nLevel=nLevel;
+   d->nodes[insPos].nParent=nPar;
+   d->nCount++;
+   for(int i=insPos+1;i<d->nCount;i++)
+      if(d->nodes[i].nParent>=insPos) d->nodes[i].nParent++;
+   d->nSel=insPos;
+   [tv reloadData];
+   [tv selectRowIndexes:[NSIndexSet indexSetWithIndex:insPos] byExtendingSelection:NO];
+   [tv scrollRowToVisible:insPos];
+}
+
+@interface HBMenuEditorCtrl : NSObject <NSTableViewDataSource, NSTableViewDelegate>
+{
+@public
+   MEIDATA *    mei;
+   NSTableView * tableView;
+   NSTextField * captionField;
+   NSTextField * shortcutField;
+   NSTextField * handlerField;
+   NSButton *   enabledCheck;
+   NSWindow *   win;
+   BOOL         bUpdating;
+   BOOL         bOK;
+}
+- (void)syncFieldsToNode;
+@end
+
+@implementation HBMenuEditorCtrl
+
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)tv { (void)tv; return mei?mei->nCount:0; }
+
+- (id)tableView:(NSTableView *)tv objectValueForTableColumn:(NSTableColumn *)col row:(NSInteger)row
+{
+   (void)tv;
+   if(!mei||row<0||row>=mei->nCount) return @"";
+   MEINode * n=&mei->nodes[row];
+   if([[col identifier] isEqualToString:@"cap"]) {
+      if(n->bSeparator) return @"──────";
+      NSMutableString * s=[NSMutableString string];
+      for(int ii=0;ii<n->nLevel;ii++) [s appendString:@"  "];
+      [s appendString:[NSString stringWithUTF8String:n->szCaption]];
+      return s;
+   }
+   if([[col identifier] isEqualToString:@"scut"])
+      return [NSString stringWithUTF8String:n->szShortcut];
+   return @"";
+}
+
+- (void)tableViewSelectionDidChange:(NSNotification *)notif
+{
+   (void)notif;
+   if(bUpdating) return;
+   NSInteger row=[tableView selectedRow];
+   if(row<0||!mei||row>=mei->nCount) { mei->nSel=-1; return; }
+   mei->nSel=(int)row;
+   [self syncFieldsToNode];
+}
+
+- (void)syncFieldsToNode
+{
+   if(mei->nSel<0||mei->nSel>=mei->nCount) return;
+   MEINode * n=&mei->nodes[mei->nSel];
+   bUpdating=YES;
+   [captionField  setStringValue:[NSString stringWithUTF8String:n->bSeparator?"":n->szCaption]];
+   [shortcutField setStringValue:[NSString stringWithUTF8String:n->szShortcut]];
+   [handlerField  setStringValue:[NSString stringWithUTF8String:n->szHandler]];
+   [enabledCheck  setState:n->bEnabled?NSControlStateValueOn:NSControlStateValueOff];
+   [captionField  setEnabled:!n->bSeparator];
+   [shortcutField setEnabled:!n->bSeparator];
+   [handlerField  setEnabled:!n->bSeparator];
+   bUpdating=NO;
+}
+
+- (void)captionChanged:(id)f  { if(!bUpdating&&mei->nSel>=0) {
+   strncpy(mei->nodes[mei->nSel].szCaption,[[f stringValue] UTF8String],127);
+   int s=mei->nSel; bUpdating=YES; [tableView reloadData];
+   [tableView selectRowIndexes:[NSIndexSet indexSetWithIndex:s] byExtendingSelection:NO];
+   bUpdating=NO; } }
+- (void)shortcutChanged:(id)f { if(!bUpdating&&mei->nSel>=0)
+   strncpy(mei->nodes[mei->nSel].szShortcut,[[f stringValue] UTF8String],31); }
+- (void)handlerChanged:(id)f  { if(!bUpdating&&mei->nSel>=0)
+   strncpy(mei->nodes[mei->nSel].szHandler,[[f stringValue] UTF8String],127); }
+- (void)enabledToggled:(id)b  { if(!bUpdating&&mei->nSel>=0)
+   mei->nodes[mei->nSel].bEnabled=([b state]==NSControlStateValueOn)?1:0; }
+
+- (void)addPopup:(id)s  { (void)s; mei_add_node(mei,tableView,0,0); [self syncFieldsToNode]; }
+- (void)addItem:(id)s   { (void)s; mei_add_node(mei,tableView,1,0); [self syncFieldsToNode]; }
+- (void)addSubItem:(id)s{ (void)s; mei_add_node(mei,tableView,2,0); [self syncFieldsToNode]; }
+- (void)addSep:(id)s    { (void)s;
+   int lv=(mei->nSel>=0)?mei->nodes[mei->nSel].nLevel:1;
+   mei_add_node(mei,tableView,lv,1); [self syncFieldsToNode]; }
+
+- (void)moveUp:(id)s    { (void)s;
+   if(mei->nSel<=0) return;
+   MEINode tmp=mei->nodes[mei->nSel]; mei->nodes[mei->nSel]=mei->nodes[mei->nSel-1]; mei->nodes[mei->nSel-1]=tmp;
+   mei->nSel--;
+   [tableView reloadData];
+   [tableView selectRowIndexes:[NSIndexSet indexSetWithIndex:mei->nSel] byExtendingSelection:NO]; }
+
+- (void)moveDown:(id)s  { (void)s;
+   if(mei->nSel<0||mei->nSel>=mei->nCount-1) return;
+   MEINode tmp=mei->nodes[mei->nSel]; mei->nodes[mei->nSel]=mei->nodes[mei->nSel+1]; mei->nodes[mei->nSel+1]=tmp;
+   mei->nSel++;
+   [tableView reloadData];
+   [tableView selectRowIndexes:[NSIndexSet indexSetWithIndex:mei->nSel] byExtendingSelection:NO]; }
+
+- (void)deleteNode:(id)s { (void)s;
+   if(mei->nSel<0||mei->nCount==0) return;
+   int del=mei->nSel;
+   for(int i=del;i<mei->nCount-1;i++) mei->nodes[i]=mei->nodes[i+1];
+   mei->nCount--;
+   mei->nSel=del<mei->nCount?del:mei->nCount-1;
+   [tableView reloadData];
+   if(mei->nSel>=0)
+      [tableView selectRowIndexes:[NSIndexSet indexSetWithIndex:mei->nSel] byExtendingSelection:NO];
+   [self syncFieldsToNode]; }
+
+- (void)clickOK:(id)s     { (void)s; bOK=YES; [NSApp stopModal]; }
+- (void)clickCancel:(id)s { (void)s; bOK=NO;  [NSApp stopModal]; }
+
+@end
+
+static void OpenMenuEditor( INSDATA * ins, int nReal )
+{
+   /* Fetch full serial from HBControl (szValue in IROW is too small for menus) */
+   char fullSerial[4096]="";
+   {
+      PHB_DYNS pDyn=hb_dynsymFindName("UI_GETPROP");
+      if(pDyn) {
+         hb_vmPushDynSym(pDyn); hb_vmPushNil();
+         hb_vmPushNumInt(ins->hCtrl);
+         hb_vmPushString("aMenuItems",10);
+         hb_vmDo(2);
+         const char * res=hb_parc(-1);
+         if(res) strncpy(fullSerial,res,sizeof(fullSerial)-1);
+      }
+   }
+
+   MEIDATA * d=(MEIDATA *)calloc(1,sizeof(MEIDATA));
+   d->nSel=-1;
+   MEI_Parse(d,fullSerial);
+
+   /* Build editor window */
+   NSWindow * win=[[NSWindow alloc]
+      initWithContentRect:NSMakeRect(0,0,700,460)
+      styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable
+      backing:NSBackingStoreBuffered defer:NO];
+   [win setTitle:@"Menu Items Editor"];
+   NSView * cv=[win contentView];
+
+   HBMenuEditorCtrl * ctrl=[[HBMenuEditorCtrl alloc] init];
+   ctrl->mei=d; ctrl->win=win; ctrl->bOK=NO; ctrl->bUpdating=NO;
+
+   /* Toolbar */
+   NSArray * btnLabels=@[@"+Popup",@"+Item",@"+SubItem",@"+Sep",@"↑",@"↓",@"✕"];
+   SEL btnSels[]={@selector(addPopup:),@selector(addItem:),@selector(addSubItem:),
+                  @selector(addSep:),@selector(moveUp:),@selector(moveDown:),@selector(deleteNode:)};
+   CGFloat bx=8, ty=426;
+   for(NSUInteger bi=0;bi<7;bi++) {
+      NSButton * b=[[NSButton alloc] initWithFrame:NSMakeRect(bx,ty,65,25)];
+      [b setTitle:btnLabels[bi]]; [b setBezelStyle:NSBezelStyleRounded];
+      [b setTarget:ctrl]; [b setAction:btnSels[bi]];
+      [cv addSubview:b]; bx+=70;
+   }
+
+   /* Left: table */
+   NSScrollView * sw=[[NSScrollView alloc] initWithFrame:NSMakeRect(8,55,390,360)];
+   [sw setHasVerticalScroller:YES]; [sw setAutohidesScrollers:YES];
+   NSTableView * tv=[[NSTableView alloc] init];
+   [tv setDataSource:ctrl]; [tv setDelegate:ctrl];
+   [tv setUsesAlternatingRowBackgroundColors:YES];
+   NSTableColumn * c0=[[NSTableColumn alloc] initWithIdentifier:@"cap"];
+   [c0 setTitle:@"Caption"]; [c0 setWidth:230]; [c0 setResizingMask:NSTableColumnAutoresizingMask];
+   NSTableColumn * c1=[[NSTableColumn alloc] initWithIdentifier:@"scut"];
+   [c1 setTitle:@"Shortcut"]; [c1 setWidth:130];
+   [tv addTableColumn:c0]; [tv addTableColumn:c1];
+   [sw setDocumentView:tv]; [cv addSubview:sw];
+   ctrl->tableView=tv;
+
+   /* Right: form */
+   CGFloat rx=410;
+   NSTextField * lbCap=[NSTextField labelWithString:@"Caption:"];
+   NSTextField * lbScut=[NSTextField labelWithString:@"Shortcut:"];
+   NSTextField * lbHndl=[NSTextField labelWithString:@"OnClick:"];
+   [lbCap  setFrame:NSMakeRect(rx,375,70,22)]; [cv addSubview:lbCap];
+   [lbScut setFrame:NSMakeRect(rx,345,70,22)]; [cv addSubview:lbScut];
+   [lbHndl setFrame:NSMakeRect(rx,315,70,22)]; [cv addSubview:lbHndl];
+
+   NSTextField * efCap =[[NSTextField alloc] initWithFrame:NSMakeRect(rx+75,375,200,22)];
+   NSTextField * efScut=[[NSTextField alloc] initWithFrame:NSMakeRect(rx+75,345,200,22)];
+   NSTextField * efHndl=[[NSTextField alloc] initWithFrame:NSMakeRect(rx+75,315,200,22)];
+   NSButton   * cbEn  =[[NSButton alloc] initWithFrame:NSMakeRect(rx+75,288,140,22)];
+   [cbEn setButtonType:NSButtonTypeSwitch]; [cbEn setTitle:@"Enabled"];
+   [cv addSubview:efCap]; [cv addSubview:efScut];
+   [cv addSubview:efHndl]; [cv addSubview:cbEn];
+   ctrl->captionField=efCap; ctrl->shortcutField=efScut;
+   ctrl->handlerField=efHndl; ctrl->enabledCheck=cbEn;
+   [efCap  setTarget:ctrl]; [efCap  setAction:@selector(captionChanged:)];
+   [efScut setTarget:ctrl]; [efScut setAction:@selector(shortcutChanged:)];
+   [efHndl setTarget:ctrl]; [efHndl setAction:@selector(handlerChanged:)];
+   [cbEn   setTarget:ctrl]; [cbEn   setAction:@selector(enabledToggled:)];
+
+   /* OK / Cancel */
+   NSButton * btnOK=[[NSButton alloc] initWithFrame:NSMakeRect(600,8,90,30)];
+   NSButton * btnCl=[[NSButton alloc] initWithFrame:NSMakeRect(500,8,90,30)];
+   [btnOK setTitle:@"OK"]; [btnOK setBezelStyle:NSBezelStyleRounded];
+   [btnOK setKeyEquivalent:@"\r"];
+   [btnCl setTitle:@"Cancel"]; [btnCl setBezelStyle:NSBezelStyleRounded];
+   [btnCl setKeyEquivalent:@"\033"];
+   [btnOK setTarget:ctrl]; [btnOK setAction:@selector(clickOK:)];
+   [btnCl setTarget:ctrl]; [btnCl setAction:@selector(clickCancel:)];
+   [cv addSubview:btnOK]; [cv addSubview:btnCl];
+
+   [win center];
+   [NSApp runModalForWindow:win];
+   [win orderOut:nil];
+
+   if(ctrl->bOK) {
+      char result[4096]="";
+      MEI_Serialize(d,result,sizeof(result));
+      /* Apply via UI_SetProp directly (IROW.szValue is too small for menus) */
+      PHB_DYNS pDyn=hb_dynsymFindName("UI_SETPROP");
+      if(pDyn) {
+         hb_vmPushDynSym(pDyn); hb_vmPushNil();
+         hb_vmPushNumInt(ins->hCtrl);
+         hb_vmPushString("aMenuItems",10);
+         hb_vmPushString(result,(HB_SIZE)strlen(result));
+         hb_vmDo(3);
+      }
+      /* Update display in IROW */
+      int nNodes=d->nCount;
+      snprintf(ins->rows[nReal].szValue,sizeof(ins->rows[0].szValue),"(%d nodes)",nNodes);
+      /* Trigger two-way sync */
+      if(ins->pOnPropChanged && HB_IS_BLOCK(ins->pOnPropChanged)) {
+         hb_vmPushEvalSym(); hb_vmPush(ins->pOnPropChanged); hb_vmSend(0);
+      }
+      /* Reload inspector display */
+      InsRefreshTab(ins);
+   }
+   free(d);
+}
 
 /* ======================================================================
  * Table view data source / delegate
@@ -261,7 +581,7 @@ static HBFontPickerTarget * s_fontTarget = nil;
    else if( [[col identifier] isEqualToString:@"button"] )
    {
       if( d->rows[nReal].bIsCat ) return @"";
-      if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'P' || d->rows[nReal].cType == 'S' ) return @"...";
+      if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'P' || d->rows[nReal].cType == 'S' || d->rows[nReal].cType == 'M' ) return @"...";
       return @"";
    }
    else
@@ -298,6 +618,10 @@ static HBFontPickerTarget * s_fontTarget = nil;
             if( *p == '|' ) count++;
          return [NSString stringWithFormat:@"(%d items)", count];
       }
+
+      /* Menu: szValue already holds "(N nodes)" set by InsBuildRows */
+      if( d->rows[nReal].cType == 'M' )
+         return [NSString stringWithUTF8String:d->rows[nReal].szValue];
 
       /* Logical: show Yes/No instead of .T./.F. */
       if( d->rows[nReal].cType == 'L' )
@@ -457,6 +781,12 @@ static HBFontPickerTarget * s_fontTarget = nil;
    if( d->rows[nReal].cType == 'A' && [[col identifier] isEqualToString:@"value"] )
    {
       [self openArrayEditorForRow:nReal];
+      return NO;
+   }
+   /* For menu properties, open menu items editor */
+   if( d->rows[nReal].cType == 'M' && [[col identifier] isEqualToString:@"value"] )
+   {
+      OpenMenuEditor( d, nReal );
       return NO;
    }
    return YES;
@@ -979,7 +1309,7 @@ static int s_dropdownChoice = -1;
       /* Show "..." button for color and font properties, hide for others */
       if( [[col identifier] isEqualToString:@"button"] )
       {
-         if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'P' || d->rows[nReal].cType == 'A' || d->rows[nReal].cType == 'S' )
+         if( d->rows[nReal].cType == 'C' || d->rows[nReal].cType == 'F' || d->rows[nReal].cType == 'P' || d->rows[nReal].cType == 'A' || d->rows[nReal].cType == 'S' || d->rows[nReal].cType == 'M' )
          {
             [cell setTitle:@"..."];
             [cell setTransparent:NO];
@@ -1062,6 +1392,8 @@ static int s_dropdownChoice = -1;
             [self openArrayEditorForRow:nReal];
          else if( d->rows[nReal].cType == 'S' )
             [self openTextEditorForRow:nReal];
+         else if( d->rows[nReal].cType == 'M' )
+            OpenMenuEditor( d, nReal );
       }
       /* Click on value column for dropdown properties */
       if( [[clickedCol identifier] isEqualToString:@"value"] && d->rows[nReal].cType == 'D' )
@@ -1421,6 +1753,18 @@ static void InsBuildRows( INSDATA * d, PHB_ITEM pArray )
             strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
          else if( d->rows[d->nRows].cType == 'A' )
             strncpy( d->rows[d->nRows].szValue, hb_arrayGetCPtr(pRow,2), 255 );
+         else if( d->rows[d->nRows].cType == 'M' )
+         {
+            /* Count nodes in serial (pipe-separated) and show display string */
+            const char * raw = hb_arrayGetCPtr(pRow,2);
+            if( raw && raw[0] ) {
+               int cnt=1;
+               for(const char*p=raw;*p;p++) if(*p=='|') cnt++;
+               snprintf(d->rows[d->nRows].szValue,sizeof(d->rows[0].szValue),"(%d nodes)",cnt);
+            } else {
+               strncpy(d->rows[d->nRows].szValue,"(0 nodes)",sizeof(d->rows[0].szValue)-1);
+            }
+         }
          else
             d->rows[d->nRows].szValue[0] = 0;
 
