@@ -1891,7 +1891,7 @@ static function RestoreFormFromCode( hForm, cCode )
             elseif Left( cMLU, 11 ) == "MENUSEPARAT"
                nPar2 := iif( Len(aParentStack)>0, ATail(aParentStack), -1 )
                if ! nFirstNode; cMenuSerial += "|"; endif
-               cMenuSerial += "---" + Chr(1) + Chr(1) + Chr(1) + "1" + Chr(1) + ;
+               cMenuSerial += "---" + Chr(1) + Chr(1) + Chr(1) + "0" + Chr(1) + ;
                               LTrim(Str(nMenuLevel)) + Chr(1) + LTrim(Str(nPar2))
                nFirstNode := .F.
             elseif Left( cMLU, 8 ) == "MENUITEM"

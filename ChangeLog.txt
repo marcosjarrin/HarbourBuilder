@@ -1,6 +1,18 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-24g
+
+  - feat: TMainMenu non-visual component for Linux IDE
+    - CT_MAINMENU (132) registered as non-visual component in Standard palette
+    - HBMenuNode/HBMainMenu structs with flat node array (MAX_MENU_NODES=128)
+    - aMenuItems property (type 'M') serialized as pipe+SOH format
+    - Menu Items Editor dialog in inspector: hierarchy tree + properties pane
+    - Supports popups, items, separators, sub-menus, shortcuts, OnClick handlers
+    - RegenerateFormCode emits DEFINE MENUBAR/POPUP/MENUITEM/MENUSEPARATOR blocks
+    - RestoreFormFromCode parses DEFINE MENUBAR block on project reload
+    - HBMainMenu_Attach() creates native GTK3 menu bar at runtime (HBForm_Run)
+
 2026-04-24f (Linux — nItemIndex por defecto a 1 en ListBox y ComboBox cuando hay items)
 
   - UI_SetProp("aItems"): al setear items, si FItemIndex==0 se fija a 1
