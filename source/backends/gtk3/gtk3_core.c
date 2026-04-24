@@ -3767,6 +3767,39 @@ HB_FUNC( UI_SETPROP )
          }
       }
    }
+   else if( strcasecmp(szProp,"aMenuItems")==0 && HB_ISCHAR(3) &&
+            p->FControlType == CT_MAINMENU )
+   {
+      HBMainMenu * m = (HBMainMenu *)p;
+      const char * raw = hb_parc(3);
+      m->FNodeCount = 0;
+      memset( m->FNodes, 0, sizeof(m->FNodes) );
+      while( *raw && m->FNodeCount < MAX_MENU_NODES )
+      {
+         const char * pipe = strchr( raw, '|' );
+         int tokLen = pipe ? (int)(pipe - raw) : (int)strlen(raw);
+         char tok[512]; int tl = tokLen < 511 ? tokLen : 511;
+         memcpy( tok, raw, tl ); tok[tl] = 0;
+         int fi = m->FNodeCount;
+         char * f0 = tok;
+         char * f1 = strchr(f0, '\x01'); if(f1){*f1++=0;}else f1=(char*)"";
+         char * f2 = f1[0]?strchr(f1,'\x01'):NULL; if(f2){*f2++=0;}else f2=(char*)"";
+         char * f3 = f2?strchr(f2,'\x01'):NULL; if(f3){*f3++=0;}else f3=(char*)"";
+         char * f4 = f3?strchr(f3,'\x01'):NULL; if(f4){*f4++=0;}else f4=(char*)"";
+         char * f5 = f4?strchr(f4,'\x01'):NULL; if(f5){*f5++=0;}else f5=(char*)"-1";
+         m->FNodes[fi].bSeparator = (strcmp(f0,"---")==0) ? 1 : 0;
+         if( !m->FNodes[fi].bSeparator )
+            strncpy( m->FNodes[fi].szCaption, f0, sizeof(m->FNodes[fi].szCaption)-1 );
+         strncpy( m->FNodes[fi].szShortcut, f1, sizeof(m->FNodes[fi].szShortcut)-1 );
+         strncpy( m->FNodes[fi].szHandler,  f2, sizeof(m->FNodes[fi].szHandler)-1 );
+         m->FNodes[fi].bEnabled = f3[0]?atoi(f3):1;
+         m->FNodes[fi].nLevel   = f4[0]?atoi(f4):0;
+         m->FNodes[fi].nParent  = f5[0]?atoi(f5):-1;
+         m->FNodeCount++;
+         if( !pipe ) break;
+         raw = pipe + 1;
+      }
+   }
 }
 
 /* Stubs for controls not yet implemented on Linux */
@@ -3905,6 +3938,26 @@ HB_FUNC( UI_GETPROP )
          strncat( szAll, cb->FItems[ci], sizeof(szAll) - strlen(szAll) - 1 );
       }
       hb_retc( szAll );
+   }
+   else if( strcasecmp(szProp,"aMenuItems")==0 && p->FControlType==CT_MAINMENU )
+   {
+      HBMainMenu * m = (HBMainMenu *)p;
+      char szSerial[4096] = "";
+      int pos = 0;
+      for( int i = 0; i < m->FNodeCount && pos < (int)sizeof(szSerial)-64; i++ ) {
+         if( i > 0 ) szSerial[pos++] = '|';
+         const char * cap = m->FNodes[i].bSeparator ? "---" : m->FNodes[i].szCaption;
+         int n = snprintf( szSerial+pos, sizeof(szSerial)-pos,
+            "%s\x01%s\x01%s\x01%d\x01%d\x01%d",
+            cap,
+            m->FNodes[i].szShortcut,
+            m->FNodes[i].szHandler,
+            m->FNodes[i].bEnabled,
+            m->FNodes[i].nLevel,
+            m->FNodes[i].nParent );
+         if( n>0 ) pos+=n;
+      }
+      hb_retc( szSerial );
    }
    else if( strcasecmp(szProp,"cDataSource")==0 &&
             ( p->FControlType==CT_BROWSE || p->FControlType==CT_DBGRID ) )
@@ -4224,6 +4277,33 @@ HB_FUNC( UI_GETALLPROPS )
             hb_itemRelease( pRow );
          }
          ADD_S("cDataSource",br->FDataSourceName,"Data");
+         break;
+      }
+      case CT_MAINMENU:
+      {
+         HBMainMenu * m = (HBMainMenu *)p;
+         char szSerial[4096] = "";
+         int pos = 0;
+         for( int i = 0; i < m->FNodeCount && pos < (int)sizeof(szSerial) - 64; i++ ) {
+            if( i > 0 ) szSerial[pos++] = '|';
+            const char * cap = m->FNodes[i].bSeparator ? "---" : m->FNodes[i].szCaption;
+            int n = snprintf( szSerial + pos, sizeof(szSerial) - pos,
+               "%s\x01%s\x01%s\x01%d\x01%d\x01%d",
+               cap,
+               m->FNodes[i].szShortcut,
+               m->FNodes[i].szHandler,
+               m->FNodes[i].bEnabled,
+               m->FNodes[i].nLevel,
+               m->FNodes[i].nParent );
+            if( n > 0 ) pos += n;
+         }
+         pRow = hb_itemArrayNew(4);
+         hb_arraySetC( pRow, 1, "aMenuItems" );
+         hb_arraySetC( pRow, 2, szSerial );
+         hb_arraySetC( pRow, 3, "Data" );
+         hb_arraySetC( pRow, 4, "M" );
+         hb_arrayAdd( pArray, pRow );
+         hb_itemRelease( pRow );
          break;
       }
       case CT_TIMER:
