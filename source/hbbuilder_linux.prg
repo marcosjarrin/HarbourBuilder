@@ -1781,6 +1781,10 @@ static function RestoreFormFromCode( hForm, cCode )
    local nT, nL, nW, nH, cText, cName, hCtrl
    local nPos, nPos2, cTitle, cVal, kk, nCount, cTypeStr
    local cFolderName, hFolder, nPageIdx, kkF, hChildN
+   local cMenuSerial, nMenuLevel, aParentStack, nFirstNode, jj
+   local cML, cMLU, cPopCap, nQ1, nQ2, nPar, nPar2, nPar3
+   local nQ3, nQ4, nQ5, cItCap, cItHndl, cItAccl, nAct, nSpc, nAccl
+   local nCC, jjC, hC
 
    if Empty( cCode ) .or. hForm == 0
       return nil
@@ -1852,6 +1856,82 @@ static function RestoreFormFromCode( hForm, cCode )
                   hCtrl := UI_DropNonVisual( hForm, nType, cName )
                endif
             endif
+         endif
+         loop
+      endif
+
+      // Parse DEFINE MENUBAR block for TMainMenu
+      if Upper( AllTrim( cTrim ) ) == "DEFINE MENUBAR"
+         cMenuSerial := ""
+         nMenuLevel  := 0
+         aParentStack := {}
+         nFirstNode  := .T.
+         jj := i + 1
+         do while jj <= Len( aLines )
+            cML  := AllTrim( aLines[jj] )
+            cMLU := Upper( cML )
+            if cMLU == "END MENUBAR"
+               exit
+            elseif Left( cMLU, 12 ) == "DEFINE POPUP"
+               nQ1 := At( '"', cML )
+               nQ2 := iif( nQ1 > 0, At( '"', SubStr( cML, nQ1+1 ) ), 0 )
+               cPopCap := iif( nQ1>0 .and. nQ2>0, SubStr( cML, nQ1+1, nQ2-1 ), "" )
+               nPar := iif( Len( aParentStack ) > 0, ATail(aParentStack), -1 )
+               if ! nFirstNode; cMenuSerial += "|"; endif
+               cMenuSerial += cPopCap + Chr(1) + Chr(1) + Chr(1) + "1" + Chr(1) + ;
+                              LTrim(Str(nMenuLevel)) + Chr(1) + LTrim(Str(nPar))
+               AAdd( aParentStack, Len( HB_ATokens( cMenuSerial, "|" ) ) - 1 )
+               nMenuLevel++
+               nFirstNode := .F.
+            elseif cMLU == "END POPUP"
+               nMenuLevel--
+               if Len( aParentStack ) > 0
+                  ASize( aParentStack, Len(aParentStack)-1 )
+               endif
+            elseif Left( cMLU, 11 ) == "MENUSEPARAT"
+               nPar2 := iif( Len(aParentStack)>0, ATail(aParentStack), -1 )
+               if ! nFirstNode; cMenuSerial += "|"; endif
+               cMenuSerial += "---" + Chr(1) + Chr(1) + Chr(1) + "1" + Chr(1) + ;
+                              LTrim(Str(nMenuLevel)) + Chr(1) + LTrim(Str(nPar2))
+               nFirstNode := .F.
+            elseif Left( cMLU, 8 ) == "MENUITEM"
+               nQ3  := At( '"', cML )
+               nQ4  := iif( nQ3>0, At( '"', SubStr(cML,nQ3+1) ), 0 )
+               cItCap := iif( nQ3>0 .and. nQ4>0, SubStr(cML,nQ3+1,nQ4-1), "" )
+               cItHndl := ""
+               cItAccl := ""
+               nAct := At( "ACTION ", cMLU )
+               if nAct > 0
+                  cItHndl := SubStr( cML, nAct + 7 )
+                  nSpc := At( " ", cItHndl )
+                  if nSpc > 0; cItHndl := Left(cItHndl,nSpc-1); endif
+                  if Right(cItHndl,2) == "()"; cItHndl := Left(cItHndl,Len(cItHndl)-2); endif
+               endif
+               nAccl := At( 'ACCEL "', cML )
+               if nAccl > 0
+                  cItAccl := SubStr( cML, nAccl+7 )
+                  nQ5 := At( '"', cItAccl )
+                  if nQ5>0; cItAccl := Left(cItAccl,nQ5-1); endif
+               endif
+               nPar3 := iif( Len(aParentStack)>0, ATail(aParentStack), -1 )
+               if ! nFirstNode; cMenuSerial += "|"; endif
+               cMenuSerial += cItCap + Chr(1) + cItAccl + Chr(1) + cItHndl + Chr(1) + ;
+                              "1" + Chr(1) + LTrim(Str(nMenuLevel)) + Chr(1) + LTrim(Str(nPar3))
+               nFirstNode := .F.
+            endif
+            jj++
+         enddo
+         i := jj  // skip past END MENUBAR
+         // Set aMenuItems on the most recently created CT_MAINMENU child
+         if ! Empty( cMenuSerial )
+            nCC := UI_GetChildCount( hForm )
+            for jjC := nCC to 1 step -1
+               hC := UI_GetChild( hForm, jjC )
+               if UI_GetType(hC) == 132  // CT_MAINMENU
+                  UI_SetProp( hC, "aMenuItems", cMenuSerial )
+                  exit
+               endif
+            next
          endif
          loop
       endif
