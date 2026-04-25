@@ -1805,13 +1805,23 @@ static function SyncDesignerToCode()
    cNewCode := RegenerateFormCode( aForms[ nActiveForm ][ 1 ], oDesignForm:hCpp )
 
    // Strip the auto-generated launcher FUNCTION FormN() from preserved code
-   // (RegenerateFormCode re-appends a fresh one; keeping old copies causes duplicates)
+   // (RegenerateFormCode re-appends a fresh one; keeping old copies causes duplicates).
+   // Harbour RTrim only strips spaces — strip CR/LF/space explicitly so trailing
+   // newlines don't accumulate (each click would add a CRLF and trigger SCI_SETTEXT
+   // flash on Scintilla).
    if ! Empty( cMethods )
       cLauncher := "FUNCTION " + aForms[ nActiveForm ][ 1 ] + "()"
       nLPos := At( Upper( cLauncher ), Upper( cMethods ) )
       if nLPos > 0
-         cMethods := RTrim( Left( cMethods, nLPos - 1 ) )
+         cMethods := Left( cMethods, nLPos - 1 )
       endif
+      do while Len( cMethods ) > 0 .and. ;
+         ( Right( cMethods, 1 ) == Chr(10) .or. ;
+           Right( cMethods, 1 ) == Chr(13) .or. ;
+           Right( cMethods, 1 ) == " "    .or. ;
+           Right( cMethods, 1 ) == Chr(9) )
+         cMethods := Left( cMethods, Len( cMethods ) - 1 )
+      enddo
    endif
 
    // Append preserved METHOD implementations (before the launcher)
@@ -1831,6 +1841,13 @@ static function SyncDesignerToCode()
    cNewCode += "   oForm:Activate()" + Chr(13) + Chr(10)
    cNewCode += "RETURN oForm" + Chr(13) + Chr(10)
    cNewCode += cSepLine
+
+   // Skip the editor update when regenerated code matches stored — common
+   // case for plain mouse clicks that change selection but not layout.
+   // Avoids unnecessary SCI_SETTEXT round-trips.
+   if cNewCode == aForms[ nActiveForm ][ 3 ]
+      return nil
+   endif
 
    // Update stored code and editor tab. Guard against the re-entrant
    // loop: CodeEditorSetTabText fires OnEditorTextChange, which calls
@@ -2112,6 +2129,10 @@ static function RestoreFormFromCode( hForm, cCode )
    local cFldSerial, cExistFields, hBandCtrl, nLastQ, nQpos, cTail, cBandFields
    local aBandField, cBandFldLine, aBandRec
    local hRCtrl, nCtType
+   local cMenuName, cMenuSerial, nMenuLevel, aParentStack, nFirstNode
+   local jj, cML, cMLU, cPopCap, cItCap, cItHndl, cItAccl
+   local nQ1, nQ2, nQ3, nQ4, nQ5, nAct, nAccl, nPar, nPar2, nPar3
+   local nCC, jjC, hC
 
    if Empty( cCode ) .or. hForm == 0
       return nil
@@ -2197,6 +2218,118 @@ static function RestoreFormFromCode( hForm, cCode )
                if nType >= 38
                   hCtrl := UI_DropNonVisual( hForm, nType, cName )
                endif
+            endif
+         endif
+         loop
+      endif
+
+      // Parse DEFINE MENUBAR ::oXxx ... END MENUBAR block for TMainMenu
+      // Reconstructs the chr(1)-serialized aMenuItems string and assigns
+      // it to the matching CT_MAINMENU child so the inspector menu editor
+      // sees the items after Open. Format mirrors classes.prg builder:
+      //   caption \x01 shortcut \x01 handler \x01 enabled \x01 level \x01 parent
+      if Left( Upper( cTrim ), 14 ) == "DEFINE MENUBAR"
+         cMenuName := ""
+         nPos := At( "::o", cTrim )
+         if nPos > 0
+            cMenuName := SubStr( cTrim, nPos + 3 )
+            nPos2 := 1
+            do while nPos2 <= Len( cMenuName ) .and. ;
+               ( IsAlpha( SubStr( cMenuName, nPos2, 1 ) ) .or. ;
+                 IsDigit( SubStr( cMenuName, nPos2, 1 ) ) .or. ;
+                 SubStr( cMenuName, nPos2, 1 ) == "_" )
+               nPos2++
+            enddo
+            cMenuName := Left( cMenuName, nPos2 - 1 )
+         endif
+         cMenuSerial  := ""
+         nMenuLevel   := 0
+         aParentStack := {}
+         nFirstNode   := .T.
+         jj := i + 1
+         do while jj <= Len( aLines )
+            cML  := AllTrim( StrTran( aLines[jj], Chr(13), "" ) )
+            cMLU := Upper( cML )
+            if Left( cMLU, 11 ) == "END MENUBAR"
+               exit
+            elseif Left( cMLU, 12 ) == "DEFINE POPUP"
+               nQ1 := At( '"', cML )
+               nQ2 := iif( nQ1 > 0, At( '"', SubStr( cML, nQ1 + 1 ) ), 0 )
+               cPopCap := iif( nQ1 > 0 .and. nQ2 > 0, ;
+                  SubStr( cML, nQ1 + 1, nQ2 - 1 ), "" )
+               nPar := iif( Len( aParentStack ) > 0, ATail( aParentStack ), -1 )
+               if ! nFirstNode; cMenuSerial += "|"; endif
+               cMenuSerial += cPopCap + Chr(1) + Chr(1) + Chr(1) + "1" + Chr(1) + ;
+                              LTrim( Str( nMenuLevel ) ) + Chr(1) + LTrim( Str( nPar ) )
+               AAdd( aParentStack, Len( HB_ATokens( cMenuSerial, "|" ) ) - 1 )
+               nMenuLevel++
+               nFirstNode := .F.
+            elseif Left( cMLU, 9 ) == "END POPUP"
+               nMenuLevel--
+               if Len( aParentStack ) > 0
+                  ASize( aParentStack, Len( aParentStack ) - 1 )
+               endif
+            elseif Left( cMLU, 13 ) == "MENUSEPARATOR"
+               nPar2 := iif( Len( aParentStack ) > 0, ATail( aParentStack ), -1 )
+               if ! nFirstNode; cMenuSerial += "|"; endif
+               cMenuSerial += "---" + Chr(1) + Chr(1) + Chr(1) + "1" + Chr(1) + ;
+                              LTrim( Str( nMenuLevel ) ) + Chr(1) + LTrim( Str( nPar2 ) )
+               nFirstNode := .F.
+            elseif Left( cMLU, 9 ) == "MENUITEM "
+               nQ3 := At( '"', cML )
+               nQ4 := iif( nQ3 > 0, At( '"', SubStr( cML, nQ3 + 1 ) ), 0 )
+               cItCap := iif( nQ3 > 0 .and. nQ4 > 0, ;
+                  SubStr( cML, nQ3 + 1, nQ4 - 1 ), "" )
+               cItHndl := ""
+               cItAccl := ""
+               nAct := At( " ACTION ", cMLU )
+               if nAct > 0
+                  cItHndl := AllTrim( SubStr( cML, nAct + 8 ) )
+                  nPos := At( "(", cItHndl )
+                  if nPos > 0
+                     cItHndl := AllTrim( Left( cItHndl, nPos - 1 ) )
+                  else
+                     nPos := At( " ", cItHndl )
+                     if nPos > 0; cItHndl := Left( cItHndl, nPos - 1 ); endif
+                  endif
+               endif
+               nAccl := At( 'ACCEL "', cML )
+               if nAccl > 0
+                  cItAccl := SubStr( cML, nAccl + 7 )
+                  nQ5 := At( '"', cItAccl )
+                  if nQ5 > 0; cItAccl := Left( cItAccl, nQ5 - 1 ); endif
+               endif
+               nPar3 := iif( Len( aParentStack ) > 0, ATail( aParentStack ), -1 )
+               if ! nFirstNode; cMenuSerial += "|"; endif
+               cMenuSerial += cItCap + Chr(1) + cItAccl + Chr(1) + cItHndl + Chr(1) + ;
+                              "1" + Chr(1) + LTrim( Str( nMenuLevel ) ) + Chr(1) + ;
+                              LTrim( Str( nPar3 ) )
+               nFirstNode := .F.
+            endif
+            jj++
+         enddo
+         i := jj
+         if ! Empty( cMenuSerial )
+            hC  := 0
+            nCC := UI_GetChildCount( hForm )
+            if ! Empty( cMenuName )
+               for jjC := 1 to nCC
+                  if AllTrim( UI_GetProp( UI_GetChild( hForm, jjC ), "cName" ) ) == cMenuName
+                     hC := UI_GetChild( hForm, jjC )
+                     exit
+                  endif
+               next
+            endif
+            if hC == 0
+               for jjC := nCC to 1 step -1
+                  if UI_GetType( UI_GetChild( hForm, jjC ) ) == 200  // CT_MAINMENU
+                     hC := UI_GetChild( hForm, jjC )
+                     exit
+                  endif
+               next
+            endif
+            if hC != 0
+               UI_SetProp( hC, "aMenuItems", cMenuSerial )
             endif
          endif
          loop
@@ -7770,7 +7903,12 @@ HB_FUNC( W32_ABOUTDIALOG )
 #define SCI_CLEARALL       2004
 #define SCI_GETLENGTH      2006
 #define SCI_GETCURRENTPOS  2008
+#define SCI_GETANCHOR      2009
 #define SCI_SETSEL         2160
+#define SCI_GETFIRSTVISIBLELINE  2152
+#define SCI_SETFIRSTVISIBLELINE  2613
+#define SCI_GETXOFFSET     2398
+#define SCI_SETXOFFSET     2397
 #define SCI_GOTOPOS        2025
 #define SCI_GOTOLINE       2024
 #define SCI_SCROLLCARET    2169
@@ -9763,12 +9901,36 @@ HB_FUNC( CODEEDITORSETTABTEXT )
 
       if( bChanged )
       {
+         /* Suppress flash by freezing redraw across the SCI_SETTEXT
+            (which internally clears+inserts and exposes white background
+            during form drag). Save scroll position so editor doesn't jump. */
+         int nFirstVis = (int) SciMsg( ed->hEdit, SCI_GETFIRSTVISIBLELINE, 0, 0 );
+         int nXOffset  = (int) SciMsg( ed->hEdit, SCI_GETXOFFSET, 0, 0 );
+         int nCurPos   = (int) SciMsg( ed->hEdit, SCI_GETCURRENTPOS, 0, 0 );
+         int nAnchor   = (int) SciMsg( ed->hEdit, SCI_GETANCHOR, 0, 0 );
+
+         SendMessage( ed->hEdit, WM_SETREDRAW, FALSE, 0 );
+
          ed->bSettingText = 1;
          SciMsg( ed->hEdit, SCI_SETTEXT, 0, (LPARAM) ed->aTexts[nTab] );
          SciMsg( ed->hEdit, SCI_EMPTYUNDOBUFFER, 0, 0 );
          /* Scintilla handles syntax highlighting automatically via lexer */
          UpdateHarbourFolding( ed->hEdit );
          ed->bSettingText = 0;
+
+         /* Restore scroll + cursor (clamped to new doc length) */
+         {
+            int nLen = (int) SciMsg( ed->hEdit, SCI_GETLENGTH, 0, 0 );
+            if( nCurPos > nLen ) nCurPos = nLen;
+            if( nAnchor > nLen ) nAnchor = nLen;
+            SciMsg( ed->hEdit, SCI_SETSEL, nAnchor, nCurPos );
+            SciMsg( ed->hEdit, SCI_SETFIRSTVISIBLELINE, nFirstVis, 0 );
+            SciMsg( ed->hEdit, SCI_SETXOFFSET, nXOffset, 0 );
+         }
+
+         SendMessage( ed->hEdit, WM_SETREDRAW, TRUE, 0 );
+         /* Single non-erasing repaint — no white background flicker */
+         InvalidateRect( ed->hEdit, NULL, FALSE );
       }
    }
 }

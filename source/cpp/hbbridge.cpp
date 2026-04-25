@@ -3229,6 +3229,12 @@ HB_FUNC( UI_DROPNONVISUAL )
          SetWindowLongPtr( hChild, GWLP_USERDATA, (LONG_PTR) ctrl );
       }
 
+      /* Subclass new child so its STATIC HWND returns HTTRANSPARENT and
+         clicks bubble to the form's drag handler. Without this, the
+         non-visual icon dropped during project load can't be moved. */
+      if( form->FDesignMode )
+         form->SubclassChildren();
+
       form->SelectControl( ctrl, FALSE );
       form->UpdateOverlay();
    }

@@ -1,6 +1,57 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-25c
+
+  - sample(mainmenu): new IDE-loadable sample at samples/projects/mainmenu/
+    showcasing the cross-platform DEFINE MENUBAR DSL — class-based form
+    (CLASS TForm1 FROM TForm) with COMPONENT ::oMenu1 TYPE CT_MAINMENU,
+    File / Edit / Help popups, accelerators, and aOnClick block array
+    aligned 1:1 with menu nodes (popups + separators = nil). Same source
+    builds on Win32 / macOS / Linux.
+
+  - fix(win32-ide): RestoreFormFromCode now reverse-parses DEFINE MENUBAR
+    ... END MENUBAR blocks back into the chr(1)-serialized aMenuItems
+    string (caption|shortcut|handler|enabled|level|parent format). Walks
+    DEFINE POPUP / MENUITEM [ACTION fn(args)] [ACCEL "key"] /
+    MENUSEPARATOR / END POPUP, tracks parent stack and nLevel matching
+    inspector levels (popup=0, item=1, sub=2). Inspector menu editor now
+    populates with the loaded items instead of showing an empty menu.
+    Match strategy: by ::oMenuName from DEFINE MENUBAR, fallback to
+    last CT_MAINMENU child.
+
+  - fix(win32-ide): TMainMenu non-visual icon could not be moved on the
+    form after loading a project. UI_DROPNONVISUAL created the STATIC
+    HWND with SS_NOTIFY but did not subclass its WNDPROC, so the static
+    absorbed WM_LBUTTONDOWN and the form's drag handler never fired.
+    UI_DROPNONVISUAL now calls form->SubclassChildren() when FDesignMode
+    so the new child returns HTTRANSPARENT in WM_NCHITTEST and clicks
+    bubble to the form (matches the fresh-drop palette path).
+
+  - fix(win32-ide): white flash on Scintilla when dragging the design
+    form. Two root causes:
+      a) SyncDesignerToCode preserved cMethods (user METHOD impls +
+         static functions) across regens via RTrim(Left(cMethods,
+         nLPos-1)). Harbour RTrim only strips spaces — not CR/LF — so
+         a trailing \r\n accumulated each cycle (+2 bytes per click),
+         making cNewCode != stored on every selection change and forcing
+         a full SCI_SETTEXT round-trip. Replaced with explicit trailing
+         strip of CR / LF / Space / Tab.
+      b) Form drag fires OnResize continuously, regenerating cNewCode
+         with new ::Left / ::Top values. SCI_SETTEXT internally
+         clears+reloads the buffer and exposes the white background mid-
+         operation. CODEEDITORSETTABTEXT now wraps SCI_SETTEXT with
+         WM_SETREDRAW FALSE/TRUE, preserves scroll (SCI_GETFIRSTVISIBLELINE
+         / SCI_GETXOFFSET) and cursor (SCI_GETCURRENTPOS / SCI_GETANCHOR
+         clamped to new doc length), and ends with a non-erasing
+         InvalidateRect so the repaint paints the new content over the
+         old without clearing first. New SCI_* defines added.
+
+  - fix(win32-ide): added skip-if-equal early-out at the start of
+    SyncDesignerToCode (compare cNewCode to aForms[nActiveForm][3] and
+    return when identical) — plain mouse clicks that don't change layout
+    no longer touch Scintilla at all.
+
 2026-04-25b
 
   - feat(win32): TMainMenu full implementation matching Mac/Linux
