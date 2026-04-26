@@ -1,6 +1,64 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-26j
+
+  - feat(macos-palette): Wired Lazarus VCL-style component icons (44
+    PNGs) onto the macOS palette via UI_PaletteSetCompIcon. Sourced
+    from /Applications/Lazarus/images/components and copied into
+    resources/ + the .app bundle. Mapped CT_* -> tXxx.png covering
+    Standard / Additional / Cocoa / Dialogs / Data Controls and the two
+    menu components (CT_MAINMENU/CT_POPUPMENU). Build script copies the
+    PNGs into Contents/Resources during bundle creation. Replaces the
+    previous SF Symbol fallbacks for these components with native-looking
+    Delphi/Lazarus icons.
+
+  - chore(macos-palette): Removed ReportDesigner (CT 92) from the ERP
+    palette tab in hbbuilder_macos.prg — component remained registered
+    but was unused / not yet implemented.
+
+  - feat(db-mysql): Real TMySQL implementation via libmysqlclient
+    (brew mysql-client 9.6.0). Added source/cocoa_mysql.c exposing
+    HBMYSQL_OPEN/CLOSE/EXEC/QUERY/FIELDS/ERROR/LASTID/TABLES bindings
+    over the MySQL C API. Replaced the TMySQL stub in source/core/
+    classes.prg with a full-featured class:
+      * Properties: cServer, nPort, cUser, cPassword, cDatabase,
+        cCharSet (sent via SET NAMES, default utf8mb4), lAutoCommit,
+        cTable, cSQL (drive cursor navigation).
+      * Methods: Open, Close, Execute, Query, Tables, TableExists,
+        LastInsertId, LoadCursor, FieldCount/FieldName/GoTop/Eof/
+        FieldGet/Skip (DBGrid-compatible cursor).
+      * Events: bOnConnect, bOnDisconnect, bOnError (called on Open
+        success, Close, and any failure with the libmysqlclient
+        message).
+    build_mac.sh detects /usr/local/opt/mysql-client and conditionally
+    compiles cocoa_mysql.c + links -lmysqlclient.
+
+  - feat(db-mariadb): TMariaDB now fully functional — inherits TMySQL
+    so it picks up the libmysqlclient backend transparently. Wire-
+    compatible client speaks to both MySQL and MariaDB servers; only
+    the cDriver tag differs.
+
+  - feat(db-postgresql): Real TPostgreSQL implementation via libpq
+    (brew libpq). Added source/cocoa_pgsql.c with HBPGSQL_OPEN/CLOSE/
+    EXEC/QUERY/FIELDS/ERROR/LASTID/TABLES bindings. Replaced the
+    TPostgreSQL stub with a full class mirroring TMySQL's API:
+    same properties, methods and events plus cIdSequence and an
+    optional cSeq parameter on LastInsertId() that maps to PostgreSQL
+    CURRVAL semantics. Tables() reads from pg_catalog.pg_tables
+    excluding system schemas. build_mac.sh detects /usr/local/opt/
+    libpq and conditionally compiles cocoa_pgsql.c + links -lpq.
+
+  - feat(samples): Three new IDE-style sample projects demonstrating
+    the database backends end-to-end:
+      * samples/projects/mysql      - TMySQL form
+      * samples/projects/mariadb    - TMariaDB form
+      * samples/projects/postgresql - TPostgreSQL form
+    Each project includes Project1.hbp, Project1.prg (wires bOnConnect/
+    bOnDisconnect/bOnError + Connect/Execute buttons) and Form1.prg
+    (host/port/user/password/database edits, tables listbox, SQL memo,
+    output memo, status label).
+
 2026-04-26i
 
   - feat(macos-palette): Per-component PNG icon overrides on the

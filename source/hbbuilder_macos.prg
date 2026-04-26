@@ -488,7 +488,6 @@ static function CreatePalette()
    nTab := oPal:AddTab( "ERP" )
    oPal:AddComp( nTab, "PP",   "Preprocessor",  90 )
    oPal:AddComp( nTab, "Scr",  "ScriptEngine",  91 )
-   oPal:AddComp( nTab, "Rpt",  "ReportDesigner", 92 )
    oPal:AddComp( nTab, "BC",   "Barcode",       93 )
    oPal:AddComp( nTab, "PDF",  "PDFGenerator",  94 )
    oPal:AddComp( nTab, "XLS",  "ExcelExport",   95 )
@@ -550,9 +549,55 @@ static function CreatePalette()
    // Load palette icons (Silk icon set by famfamfam, CC BY 2.5)
    UI_PaletteLoadImages( oPal:hCpp, ResPath( "palette.bmp" ) )
 
-   // Per-component PNG overrides
-   UI_PaletteSetCompIcon( 200, ResPath( "tmainmenu.png"  ) )  // CT_MAINMENU
-   UI_PaletteSetCompIcon( 201, ResPath( "tpopupmenu.png" ) )  // CT_POPUPMENU
+   // Per-component PNG overrides (Lazarus icon set, /Applications/Lazarus/images/components)
+   AEval( { ;
+      {   1, "tlabel.png"        }, ;  // Label
+      {   2, "tedit.png"         }, ;  // Edit
+      {   3, "tbutton.png"       }, ;  // Button
+      {   4, "tcheckbox.png"     }, ;  // CheckBox
+      {   5, "tcombobox.png"     }, ;  // ComboBox
+      {   6, "tgroupbox.png"     }, ;  // GroupBox
+      {   7, "tlistbox.png"      }, ;  // ListBox
+      {   8, "tradiobutton.png"  }, ;  // RadioButton
+      {  12, "tbitbtn.png"       }, ;  // BitBtn
+      {  13, "tspeedbutton.png"  }, ;  // SpeedButton
+      {  14, "timage.png"        }, ;  // Image
+      {  15, "tshape.png"        }, ;  // Shape
+      {  16, "tbevel.png"        }, ;  // Bevel
+      {  20, "ttreeview.png"     }, ;  // TTreeView
+      {  21, "tlistview.png"     }, ;  // TableView
+      {  22, "tprogressbar.png"  }, ;  // ProgressBar
+      {  24, "tmemo.png"         }, ;  // Memo
+      {  25, "tpanel.png"        }, ;  // Panel
+      {  26, "tscrollbar.png"    }, ;  // ScrollBar
+      {  28, "tmaskedit.png"     }, ;  // MaskEdit
+      {  29, "tstringgrid.png"   }, ;  // StringGrid
+      {  30, "tscrollbox.png"    }, ;  // ScrollBox
+      {  31, "tstatictext.png"   }, ;  // StaticText
+      {  32, "tlabelededit.png"  }, ;  // LabeledEdit
+      {  33, "tpagecontrol.png"  }, ;  // TFolder
+      {  34, "ttrackbar.png"     }, ;  // Slider
+      {  35, "tupdown.png"       }, ;  // Stepper
+      {  36, "tdateedit.png"     }, ;  // DatePicker
+      {  37, "tcalendar.png"     }, ;  // Calendar
+      {  38, "ttimer.png"        }, ;  // Timer
+      {  39, "tpaintbox.png"     }, ;  // PaintBox
+      {  40, "topendialog.png"   }, ;  // OpenPanel
+      {  41, "tsavedialog.png"   }, ;  // SavePanel
+      {  42, "tfontdialog.png"   }, ;  // FontPanel
+      {  43, "tcolordialog.png"  }, ;  // ColorPanel
+      {  44, "tfinddialog.png"   }, ;  // FindPanel
+      {  45, "treplacedialog.png"}, ;  // ReplacePanel
+      {  80, "tdbgrid.png"       }, ;  // DBGrid
+      {  81, "tdbnavigator.png"  }, ;  // DBNavigator
+      {  82, "tdbtext.png"       }, ;  // DBText
+      {  83, "tdbedit.png"       }, ;  // DBEdit
+      {  84, "tdbcombobox.png"   }, ;  // DBComboBox
+      {  85, "tdbcheckbox.png"   }, ;  // DBCheckBox
+      {  86, "tdbimage.png"      }, ;  // DBImage
+      { 200, "tmainmenu.png"     }, ;  // MainMenu
+      { 201, "tpopupmenu.png"    }  ;  // PopupMenu
+   }, {| a | UI_PaletteSetCompIcon( a[ 1 ], ResPath( a[ 2 ] ) ) } )
 
 return nil
 
