@@ -4661,6 +4661,11 @@ static GtkWidget * HBPopupMenu_Build( HBMainMenu * m )
    if( !m || m->FNodeCount == 0 ) return NULL;
 
    GtkWidget * rootMenu = gtk_menu_new();
+   /* Private accel group — used only to render the visible Ctrl+X / Ctrl+C
+    * labels next to popup items. Not attached to a window, so the keystrokes
+    * are NOT bound globally and won't steal focus from edits/scintilla. */
+   GtkAccelGroup * popupAccels = gtk_accel_group_new();
+   gtk_menu_set_accel_group( GTK_MENU(rootMenu), popupAccels );
    GtkWidget * popupShells[8] = {0};
    popupShells[0] = rootMenu;
 
@@ -4702,6 +4707,13 @@ static GtkWidget * HBPopupMenu_Build( HBMainMenu * m )
             g_signal_connect_data( mi, "activate",
                G_CALLBACK(on_mainmenu_item_activated), cbd,
                (GClosureNotify)free, 0 );
+         }
+
+         if( n->szShortcut[0] ) {
+            GdkModifierType mod; guint key;
+            ParseShortcut( n->szShortcut, &mod, &key );
+            if( key )
+               gtk_widget_add_accelerator( mi, "activate", popupAccels, key, mod, GTK_ACCEL_VISIBLE );
          }
       }
 

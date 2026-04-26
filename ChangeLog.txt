@@ -1,6 +1,21 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-26h
+
+  - fix(linux-popup): TPopupMenu items declared with ACCEL "Ctrl+X"
+    were displayed without the accelerator text in the right column of
+    the popup. HBPopupMenu_Build was reading every node field except
+    n->szShortcut, so the parsed shortcut never reached gtk. Mirror the
+    HBMainMenu_Attach logic: parse n->szShortcut with ParseShortcut and
+    call gtk_widget_add_accelerator with GTK_ACCEL_VISIBLE on the leaf
+    item. Use a private GtkAccelGroup attached to the popup menu (via
+    gtk_menu_set_accel_group) instead of the form's s_accelGroup, so
+    the labels render but the keys are NOT bound globally — a popup is
+    contextual and its shortcuts must not steal focus from edit/memo/
+    scintilla widgets on the form. Verified against samples/projects/
+    popup which uses Ctrl+X/C/V/A and Ctrl+B/I/U on a sub-popup.
+
 2026-04-26g
 
   - fix(macos-menu): Keyboard accelerators on NSMenu items rendered as
