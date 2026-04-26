@@ -1356,6 +1356,21 @@ ENDCLASS
 METHOD New() CLASS TMainMenu
 return Self
 
+CLASS TPopupMenu
+   DATA hCpp       INIT 0
+   DATA oParent    INIT nil
+   DATA _aBuilding INIT nil
+   ASSIGN aMenuItems( v ) INLINE iif( ::hCpp != 0, ;
+      UI_SetProp( ::hCpp, "aMenuItems", ;
+         iif( ValType(v) == "A", TMainMenu_Serialize(v), v ) ), nil )
+   ASSIGN aOnClick( a )   INLINE iif( ::hCpp != 0, UI_SetProp( ::hCpp, "aOnClick", a ), nil )
+   METHOD New() CONSTRUCTOR
+   METHOD Popup() INLINE iif( ::hCpp != 0, UI_PopupMenuShow( ::hCpp ), nil )
+ENDCLASS
+
+METHOD New() CLASS TPopupMenu
+return Self
+
 STATIC FUNCTION _HBMenuCtx( nOp, xArg )
    STATIC oMenu  := nil
    STATIC nLevel := 0
@@ -3861,6 +3876,13 @@ function HB_CreateComponent( nType, oParent )
          oComp:oParent := oParent
          if oParent != nil .and. __objHasMsg( oParent, "HCPP" ) .and. oParent:hCpp != 0
             oComp:hCpp := UI_MainMenuNew( oParent:hCpp )
+         endif
+         return oComp
+      case nType == 136  // CT_POPUPMENU (Linux only for now)
+         oComp := TPopupMenu():New()
+         oComp:oParent := oParent
+         if oParent != nil .and. __objHasMsg( oParent, "HCPP" ) .and. oParent:hCpp != 0
+            oComp:hCpp := UI_PopupMenuNew( oParent:hCpp )
          endif
          return oComp
       case nType == CT_WEBSERVER;  return TWebServer():New()

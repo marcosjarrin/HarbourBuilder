@@ -172,6 +172,9 @@
 #define CT_COMPARRAY       131
 #define CT_MAINMENU        132   // Linux non-visual menu bar (same value as CT_BAND, which is Windows-only)
 
+// TPopupMenu — Linux non-visual context menu (shown via :Popup() at cursor)
+#define CT_POPUPMENU       136
+
 // Report designer
 #define CT_BAND            132
 #define CT_REPORTLABEL     133

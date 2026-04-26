@@ -145,6 +145,7 @@
 #define CT_EARTHVIEW  111
 #define CT_MAP        112
 #define CT_MAINMENU   132
+#define CT_POPUPMENU  136
 
 #define MAX_CHILDREN  256
 
@@ -457,6 +458,7 @@ static int IsNonVisualControl( int t )
       case CT_PRINTER: case CT_REPORT: case CT_LABELS: case CT_PAGESETUP:
       case CT_PRINTDIALOG: case CT_BARCODEPRINTER:
       case CT_MAINMENU:
+      case CT_POPUPMENU:
          return 1;
       default:
          return 0;
@@ -1988,6 +1990,7 @@ static HBControl * HBForm_CreateControlOfType( HBForm * form, int ctrlType,
             { CT_PAINTBOX,   "TPaintBox",       "",           105, 105 },
             { CT_TIMER,      "TTimer",          "",            32,  32 },
             { CT_MAINMENU,   "TMainMenu",       "",            32,  32 },
+            { CT_POPUPMENU,  "TPopupMenu",      "",            32,  32 },
             { CT_OPENDIALOG, "TOpenDialog",     "",            32,  32 },
             { CT_SAVEDIALOG, "TSaveDialog",     "",            32,  32 },
             { CT_FONTDIALOG, "TFontDialog",     "",            32,  32 },
@@ -2080,6 +2083,7 @@ static HBControl * HBForm_CreateControlOfType( HBForm * form, int ctrlType,
                   case CT_BEVEL:    sz = sizeof(HBBevel); break;
                   case CT_TIMER:    sz = sizeof(HBTimer); break;
                   case CT_MAINMENU: sz = sizeof(HBMainMenu); break;
+                  case CT_POPUPMENU: sz = sizeof(HBMainMenu); break;
                   case CT_TABCONTROL2: sz = sizeof(HBTabControl2); break;
                   /* CT_SPEEDBTN uses base HBControl */
                }
@@ -3791,7 +3795,7 @@ HB_FUNC( UI_SETPROP )
       }
    }
    else if( strcasecmp(szProp,"aMenuItems")==0 && HB_ISCHAR(3) &&
-            p->FControlType == CT_MAINMENU )
+            (p->FControlType == CT_MAINMENU || p->FControlType == CT_POPUPMENU) )
    {
       HBMainMenu * m = (HBMainMenu *)p;
       const char * raw = hb_parc(3);
@@ -3823,7 +3827,8 @@ HB_FUNC( UI_SETPROP )
          raw = pipe + 1;
       }
    }
-   else if( strcasecmp(szProp,"aOnClick")==0 && p->FControlType == CT_MAINMENU )
+   else if( strcasecmp(szProp,"aOnClick")==0 &&
+            (p->FControlType == CT_MAINMENU || p->FControlType == CT_POPUPMENU) )
    {
       HBMainMenu * m = (HBMainMenu *)p;
       PHB_ITEM pArr = hb_param(3, HB_IT_ARRAY);
@@ -3984,7 +3989,8 @@ HB_FUNC( UI_GETPROP )
       }
       hb_retc( szAll );
    }
-   else if( strcasecmp(szProp,"aMenuItems")==0 && p->FControlType==CT_MAINMENU )
+   else if( strcasecmp(szProp,"aMenuItems")==0 &&
+            (p->FControlType==CT_MAINMENU || p->FControlType==CT_POPUPMENU) )
    {
       HBMainMenu * m = (HBMainMenu *)p;
       char szSerial[4096] = "";
@@ -4325,6 +4331,7 @@ HB_FUNC( UI_GETALLPROPS )
          break;
       }
       case CT_MAINMENU:
+      case CT_POPUPMENU:
       {
          HBMainMenu * m = (HBMainMenu *)p;
          char szSerial[4096] = "";
@@ -4642,6 +4649,94 @@ static void HBMainMenu_Attach( HBControl * p, HBForm * form )
          }
       }
    }
+}
+
+/* TPopupMenu: builds a standalone GtkMenu (not attached to a menu bar) from
+ * the same Chr(1)+pipe-serialized aMenuItems as TMainMenu. Level-0 items go
+ * directly into the root popup; cascading sub-popups are built via lookahead
+ * the same way as the menu bar builder. Caller owns the returned widget and
+ * is responsible for showing it (gtk_menu_popup_at_pointer). */
+static GtkWidget * HBPopupMenu_Build( HBMainMenu * m )
+{
+   if( !m || m->FNodeCount == 0 ) return NULL;
+
+   GtkWidget * rootMenu = gtk_menu_new();
+   GtkWidget * popupShells[8] = {0};
+   popupShells[0] = rootMenu;
+
+   for( int i = 0; i < m->FNodeCount; i++ )
+   {
+      HBMenuNode * n = &m->FNodes[i];
+      int lv = n->nLevel;
+      GtkWidget * parentShell = (lv >= 0 && lv < 8) ? popupShells[lv] : NULL;
+      if( !parentShell ) continue;
+
+      if( n->bSeparator )
+      {
+         GtkWidget * sep = gtk_separator_menu_item_new();
+         gtk_menu_shell_append( GTK_MENU_SHELL(parentShell), sep );
+         continue;
+      }
+
+      int hasChildren = ( i + 1 < m->FNodeCount && m->FNodes[i+1].nLevel > lv );
+      char gtkLabel[256]; hb_amp_to_gtk_mnemonic( n->szCaption, gtkLabel, sizeof gtkLabel );
+      GtkWidget * mi = gtk_menu_item_new_with_mnemonic( gtkLabel );
+
+      if( hasChildren )
+      {
+         GtkWidget * sub = gtk_menu_new();
+         gtk_menu_item_set_submenu( GTK_MENU_ITEM(mi), sub );
+         if( lv + 1 < 8 ) popupShells[lv+1] = sub;
+         for( int lv2 = lv + 2; lv2 < 8; lv2++ ) popupShells[lv2] = NULL;
+      }
+      else
+      {
+         if( !n->bEnabled )
+            gtk_widget_set_sensitive( mi, FALSE );
+
+         if( n->szHandler[0] || m->FOnClickArray ) {
+            HBMenuCBData * cbd = (HBMenuCBData *)malloc(sizeof(HBMenuCBData));
+            strncpy( cbd->szHandler, n->szHandler, 127 );
+            cbd->pMenu    = m;
+            cbd->nNodeIdx = i;
+            g_signal_connect_data( mi, "activate",
+               G_CALLBACK(on_mainmenu_item_activated), cbd,
+               (GClosureNotify)free, 0 );
+         }
+      }
+
+      gtk_menu_shell_append( GTK_MENU_SHELL(parentShell), mi );
+   }
+
+   gtk_widget_show_all( rootMenu );
+   return rootMenu;
+}
+
+/* UI_PopupMenuNew( hForm ) --> hPopup — non-visual popup menu component */
+HB_FUNC( UI_POPUPMENUNEW )
+{
+   HBForm * pForm = GetForm(1);
+   HBMainMenu * p = (HBMainMenu *) calloc( 1, sizeof(HBMainMenu) );
+   HBControl_Init( &p->base );
+   strcpy( p->base.FClassName, "TPopupMenu" );
+   strcpy( p->base.FName,      "PopupMenu" );
+   p->base.FControlType = CT_POPUPMENU;
+   p->base.FWidth = 0; p->base.FHeight = 0;
+   p->base.FEnabled = 1;
+   p->FNodeCount = 0;
+   if( pForm ) HBControl_AddChild( &pForm->base, &p->base );
+   RetCtrl( &p->base );
+}
+
+/* UI_PopupMenuShow( hPopup ) — build and pop the menu at the current pointer */
+HB_FUNC( UI_POPUPMENUSHOW )
+{
+   HBControl * c = GetCtrl(1);
+   if( !c || c->FControlType != CT_POPUPMENU ) return;
+   EnsureGTK();
+   GtkWidget * menu = HBPopupMenu_Build( (HBMainMenu *)c );
+   if( !menu ) return;
+   gtk_menu_popup_at_pointer( GTK_MENU(menu), NULL );
 }
 
 /* ======================================================================
@@ -7465,7 +7560,7 @@ HB_FUNC( UI_FORMCLEARCHILDREN )
    for( int i = 0; i < pForm->base.FChildCount; i++ )
    {
       HBControl * c = pForm->base.FChildren[i];
-      if( c->FControlType == CT_MAINMENU ) {
+      if( c->FControlType == CT_MAINMENU || c->FControlType == CT_POPUPMENU ) {
          HBMainMenu * m = (HBMainMenu *)c;
          if( m->FOnClickArray ) { hb_itemRelease( m->FOnClickArray ); m->FOnClickArray = NULL; }
       }
@@ -11345,6 +11440,7 @@ HB_FUNC( UI_FORMPASTECONTROLS )
       else if( t == CT_GROUPBOX ) sz = sizeof(HBGroupBox);
       else if( t == CT_TIMER )    sz = sizeof(HBTimer);
       else if( t == CT_MAINMENU ) sz = sizeof(HBMainMenu);
+      else if( t == CT_POPUPMENU ) sz = sizeof(HBMainMenu);
 
       c = (HBControl *) calloc( 1, sz );
       if( !c ) continue;

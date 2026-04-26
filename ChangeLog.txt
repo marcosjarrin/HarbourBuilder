@@ -1,6 +1,28 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-26d
+
+  - feat(linux): TPopupMenu — non-visual context-menu component, palette
+    entry sits next to TMainMenu. Same MENUITEM/POPUP/MENUSEPARATOR
+    primitives as TMainMenu, with bookends DEFINE POPUPMENU <oPop> /
+    END POPUPMENU; level-0 items become the popup's top-level entries
+    (not forced popups, unlike menubar). Trigger via oPopup:Popup() —
+    builds a standalone GtkMenu on demand and gtk_menu_popup_at_pointer.
+    CT_POPUPMENU = 136 (avoids clash with CT_REPORTLABEL=133). Backend
+    reuses HBMainMenu struct since the data layout is identical.
+    Sample at samples/projects/popup with a Show-Popup button (the
+    button:OnClick is wired in Project1.prg's Main, not in the form's
+    CreateForm, because the IDE's RegenerateFormCode currently strips
+    manual code from CreateForm on Save — TODO: extend the @ ... BUTTON
+    xcommand to accept ACTION and have the IDE codegen emit it).
+
+  - palette: inserted a 32×32 popup-menu icon at position 12 in
+    resources/palette.bmp (cursor + floating popup with highlighted
+    item), shifting positions 12..109 to 13..110 to keep the
+    AddComp-position → palette-icon mapping aligned across all
+    Additional/GTK3/etc. tabs.
+
 2026-04-26c
 
   - fix(gtk3): TMainMenu captions rendered "&File" literally instead of

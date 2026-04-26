@@ -422,6 +422,12 @@
 #xcommand END POPUP                                       => _HBMenuEndPopup()
 #xcommand END MENUBAR                                     => _HBMenuEnd()
 
+// TPopupMenu DSL — same MENUITEM/POPUP/SEPARATOR primitives, different bookends.
+// Level-0 MENUITEMs become the popup's top-level entries; nested DEFINE POPUP
+// produces cascading sub-menus.
+#xcommand DEFINE POPUPMENU <oPop>                         => _HBMenuStart( <oPop> )
+#xcommand END POPUPMENU                                   => _HBMenuEnd()
+
 // Menu
 #xcommand DEFINE MENUBAR OF <oForm> => ;
    <oForm>:CreateMenu()
