@@ -143,6 +143,7 @@ oRaiz:<span class="fn">Expand</span>()</pre>
   <tr><th>Propriedade</th><th>Tipo</th><th>Padrao</th><th>Descricao</th></tr>
   <tr><td><code>aColumns</code></td><td>Array</td><td>{"Column1","Column2","Column3"}</td><td>Cabecalhos de coluna (max 8)</td></tr>
   <tr><td><code>aItems</code></td><td>Array</td><td>{}</td><td>Linhas; cada elemento e array de strings, uma por coluna (max 64)</td></tr>
+  <tr><td><code>aImages</code></td><td>Array</td><td>{}</td><td>Caminhos PNG/ICO para ImageList (max 16); necessario para modos Icon/SmallIcon</td></tr>
   <tr><td><code>nViewStyle</code></td><td>Numerico</td><td>2</td><td>0=Icone, 1=Lista, 2=Relatorio, 3=IconePequeno</td></tr>
 </table>
 
@@ -151,6 +152,7 @@ oRaiz:<span class="fn">Expand</span>()</pre>
   <tr><td><code>SetColumns( aCols )</code></td><td>Define cabecalhos a partir de array de strings</td></tr>
   <tr><td><code>SetItems( aRows )</code></td><td>Substitui todas as linhas; <code>SetItems({})</code> limpa</td></tr>
   <tr><td><code>AddItem( aCells )</code></td><td>Adiciona uma linha no final</td></tr>
+  <tr><td><code>SetImages( aPaths )</code></td><td>Carrega PNG/ICO no ImageList 32x32 + 16x16; linha N usa icone <code>N % count</code></td></tr>
 </table>
 
 <table>
@@ -194,7 +196,19 @@ oLV:<span class="fn">AddItem</span>( { <span class="st">"Charlie"</span>, <span 
 </ul>
 
 <h3>Modos de exibicao</h3>
-<p>A propriedade <code>nViewStyle</code> aparece no inspector como dropdown com os valores enumerados (<code>vsIcon</code>, <code>vsList</code>, <code>vsReport</code>, <code>vsSmallIcon</code>). Alterar o valor em runtime atualiza o controle imediatamente. Os modos <strong>Icon</strong> e <strong>SmallIcon</strong> requerem um ImageList associado para exibir icones; sem ImageList os itens aparecem apenas com texto.</p>
+<p>A propriedade <code>nViewStyle</code> aparece no inspector como dropdown com os valores enumerados (<code>vsIcon</code>, <code>vsList</code>, <code>vsReport</code>, <code>vsSmallIcon</code>). Alterar o valor em runtime atualiza o controle imediatamente. Os modos <strong>Icon</strong> e <strong>SmallIcon</strong> requerem um ImageList associado para exibir icones.</p>
+
+<h3>Editar imagens no Inspector</h3>
+<p>A propriedade <code>aImages</code> abre um dialogo dedicado <em>ListView Images Editor</em> ao clicar <code>...</code>: lista de caminhos + botoes <code>+ Add</code> (file picker .png/.ico/.bmp), <code>- Del</code>, <code>Up</code>, <code>Down</code>. As imagens carregam em runtime via GDI+, escaladas para 32x32 (vsIcon) e 16x16 (vsSmallIcon). Atribuicao por linha e round-robin: <code>row[N]:icone = aImages[N mod len(aImages)]</code>.</p>
+
+<pre><span class="cm">// Definir ListView com icones</span>
+@ <span class="nb">50</span>, <span class="nb">20</span> <span class="cmd">LISTVIEW</span> oLV <span class="cmd">OF</span> oForm <span class="cmd">SIZE</span> <span class="nb">480</span>, <span class="nb">250</span> ;
+   <span class="cmd">COLUMNS</span> <span class="st">"Nome"</span>, <span class="st">"Idade"</span> ;
+   <span class="cmd">ITEMS</span> <span class="st">"Alice;30"</span>, <span class="st">"Bob;25"</span> ;
+   <span class="cmd">IMAGES</span> <span class="st">"user.png"</span>, <span class="st">"admin.png"</span>
+
+oLV:nViewStyle := <span class="nb">0</span>  <span class="cm">// Modo Icon: exibe PNGs 32x32</span>
+</pre>
 
 <!-- TProgressBar -->
 <h2 id="progressbar">TProgressBar <span class="badge new">CT_PROGRESSBAR = 22</span></h2>

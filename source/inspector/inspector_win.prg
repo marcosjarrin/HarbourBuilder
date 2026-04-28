@@ -296,6 +296,7 @@ static void InsUpdateCombo( INSDATA * d );  /* updates combo from current rows d
 static void InsArrayEdit( INSDATA * d, int nLVRow );
 static void InsMenuEdit( INSDATA * d, int nLVRow );
 static void InsListViewItemsEdit( INSDATA * d, int nLVRow );
+static void InsListViewImagesEdit( INSDATA * d, int nLVRow );
 static int  InsGetCtrlType( HB_PTRUINT hCtrl );
 
 /* Sentinel message IDs for MLEdit dialog internal signaling */
@@ -464,11 +465,15 @@ static LRESULT CALLBACK InsBtnProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
          InsFontPick( d, nLV );
       else if( cType == 'A' )
       {
-         /* aItems on TListView (CT_LISTVIEW=21) gets the dedicated grid editor;
-            other arrays use the plain pipe-separated array dialog. */
-         if( lstrcmpiA( szName, "aItems" ) == 0 && d &&
-             InsGetCtrlType( d->hCtrl ) == 21 )
+         /* TListView (CT_LISTVIEW=21) gets dedicated editors per prop:
+              aItems  -> grid with cells
+              aImages -> file picker list
+            Other arrays fall back to the plain pipe-separated dialog. */
+         int nLVCT = ( d ? InsGetCtrlType( d->hCtrl ) : -1 );
+         if( nLVCT == 21 && lstrcmpiA( szName, "aItems" ) == 0 )
             InsListViewItemsEdit( d, nLV );
+         else if( nLVCT == 21 && lstrcmpiA( szName, "aImages" ) == 0 )
+            InsListViewImagesEdit( d, nLV );
          else
             InsArrayEdit( d, nLV );
       }
@@ -1320,6 +1325,271 @@ static void InsListViewItemsEdit( INSDATA * d, int nLVRow )
    }
    free( v );
    s_pLVID = NULL;
+}
+
+/* ===== ListView Images Editor (CT_LISTVIEW aImages) ======================
+ * Modal dialog: ListBox of PNG paths + Add/Del/Up/Down + OK/Cancel.
+ * Add opens GetOpenFileName for *.png/*.ico, appends path. Result is
+ * pipe-separated string written back via UI_SetProp("aImages", ...).
+ * ====================================================================== */
+
+#define LVIM_MAX_PATHS 16
+#define LVIM_PATH_LEN  260
+#define LVIM_IDC_LIST  3101
+#define LVIM_IDC_ADD   3110
+#define LVIM_IDC_DEL   3111
+#define LVIM_IDC_UP    3112
+#define LVIM_IDC_DN    3113
+#define LVIM_IDC_OK    3114
+#define LVIM_IDC_CAN   3115
+
+typedef struct _LVIM {
+   HWND hDlg;
+   HWND hList;
+   int  nPathCount;
+   char szPaths[LVIM_MAX_PATHS][LVIM_PATH_LEN];
+   BOOL bOK;
+} LVIM;
+
+static LVIM * s_pLVIM = NULL;
+
+static void LVIM_Refresh( LVIM * v )
+{
+   int i;
+   SendMessage( v->hList, LB_RESETCONTENT, 0, 0 );
+   for( i = 0; i < v->nPathCount; i++ )
+      SendMessageA( v->hList, LB_ADDSTRING, 0, (LPARAM) v->szPaths[i] );
+}
+
+static int LVIM_GetSel( LVIM * v )
+{
+   return (int) SendMessage( v->hList, LB_GETCURSEL, 0, 0 );
+}
+
+static LRESULT CALLBACK LVIMDlgProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
+{
+   LVIM * v = s_pLVIM;
+   (void) lParam;
+   switch( msg )
+   {
+      case WM_COMMAND:
+      {
+         int id = LOWORD( wParam );
+         if( id == LVIM_IDC_OK ) {
+            v->bOK = TRUE; DestroyWindow( hWnd ); return 0;
+         }
+         if( id == LVIM_IDC_CAN ) {
+            v->bOK = FALSE; DestroyWindow( hWnd ); return 0;
+         }
+         if( id == LVIM_IDC_ADD ) {
+            OPENFILENAMEA ofn = {0};
+            char szFile[LVIM_PATH_LEN] = "";
+            if( v->nPathCount >= LVIM_MAX_PATHS ) return 0;
+            ofn.lStructSize = sizeof(ofn);
+            ofn.hwndOwner = hWnd;
+            ofn.lpstrFilter = "Image files (*.png;*.ico;*.bmp)\0*.png;*.ico;*.bmp\0"
+                              "PNG (*.png)\0*.png\0"
+                              "All files (*.*)\0*.*\0";
+            ofn.lpstrFile = szFile;
+            ofn.nMaxFile = sizeof(szFile);
+            ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY |
+                        OFN_EXPLORER;
+            ofn.lpstrDefExt = "png";
+            if( GetOpenFileNameA( &ofn ) ) {
+               lstrcpynA( v->szPaths[v->nPathCount], szFile, LVIM_PATH_LEN );
+               v->nPathCount++;
+               LVIM_Refresh( v );
+               SendMessage( v->hList, LB_SETCURSEL, v->nPathCount - 1, 0 );
+            }
+            return 0;
+         }
+         if( id == LVIM_IDC_DEL ) {
+            int sel = LVIM_GetSel( v ), i;
+            if( sel < 0 || sel >= v->nPathCount ) return 0;
+            for( i = sel; i < v->nPathCount - 1; i++ )
+               lstrcpynA( v->szPaths[i], v->szPaths[i+1], LVIM_PATH_LEN );
+            v->szPaths[v->nPathCount-1][0] = 0;
+            v->nPathCount--;
+            LVIM_Refresh( v );
+            if( sel >= v->nPathCount ) sel = v->nPathCount - 1;
+            if( sel >= 0 ) SendMessage( v->hList, LB_SETCURSEL, sel, 0 );
+            return 0;
+         }
+         if( id == LVIM_IDC_UP ) {
+            int sel = LVIM_GetSel( v );
+            char tmp[LVIM_PATH_LEN];
+            if( sel <= 0 ) return 0;
+            lstrcpynA( tmp, v->szPaths[sel-1], LVIM_PATH_LEN );
+            lstrcpynA( v->szPaths[sel-1], v->szPaths[sel], LVIM_PATH_LEN );
+            lstrcpynA( v->szPaths[sel], tmp, LVIM_PATH_LEN );
+            LVIM_Refresh( v );
+            SendMessage( v->hList, LB_SETCURSEL, sel - 1, 0 );
+            return 0;
+         }
+         if( id == LVIM_IDC_DN ) {
+            int sel = LVIM_GetSel( v );
+            char tmp[LVIM_PATH_LEN];
+            if( sel < 0 || sel >= v->nPathCount - 1 ) return 0;
+            lstrcpynA( tmp, v->szPaths[sel+1], LVIM_PATH_LEN );
+            lstrcpynA( v->szPaths[sel+1], v->szPaths[sel], LVIM_PATH_LEN );
+            lstrcpynA( v->szPaths[sel], tmp, LVIM_PATH_LEN );
+            LVIM_Refresh( v );
+            SendMessage( v->hList, LB_SETCURSEL, sel + 1, 0 );
+            return 0;
+         }
+         break;
+      }
+      case WM_CLOSE:
+         v->bOK = FALSE; DestroyWindow( hWnd ); return 0;
+   }
+   return DefWindowProcA( hWnd, msg, wParam, lParam );
+}
+
+static void InsListViewImagesEdit( INSDATA * d, int nLVRow )
+{
+   HINSTANCE hInst = GetModuleHandle( NULL );
+   WNDCLASSA wc = {0};
+   static BOOL bReg = FALSE;
+   HWND hDlg, hPar = d->hWnd;
+   int sw, sh, x, y;
+   const int dlgW = 540, dlgH = 360;
+   int nReal;
+   LVIM * v;
+   MSG msg;
+   BOOL bDone = FALSE;
+   const char * src;
+   char buf[LVIM_PATH_LEN]; int j;
+
+   if( nLVRow < 0 || nLVRow >= d->nVisible ) return;
+   nReal = d->map[nLVRow];
+
+   v = (LVIM *) calloc( 1, sizeof(LVIM) );
+   if( !v ) return;
+
+   /* Parse current value into v->szPaths */
+   src = d->rows[nReal].szValue;
+   j = 0;
+   while( src && *src && v->nPathCount < LVIM_MAX_PATHS ) {
+      if( *src == '|' ) {
+         buf[j] = 0;
+         lstrcpynA( v->szPaths[v->nPathCount++], buf, LVIM_PATH_LEN );
+         j = 0;
+      } else if( j < LVIM_PATH_LEN - 1 ) buf[j++] = *src;
+      src++;
+   }
+   if( j > 0 && v->nPathCount < LVIM_MAX_PATHS ) {
+      buf[j] = 0;
+      lstrcpynA( v->szPaths[v->nPathCount++], buf, LVIM_PATH_LEN );
+   }
+   s_pLVIM = v;
+
+   if( !bReg ) {
+      wc.lpfnWndProc = LVIMDlgProc;
+      wc.hInstance = hInst;
+      wc.hCursor = LoadCursor( NULL, IDC_ARROW );
+      wc.hbrBackground = (HBRUSH)( COLOR_BTNFACE + 1 );
+      wc.lpszClassName = "HBLVIMDlg";
+      RegisterClassA( &wc );
+      bReg = TRUE;
+   }
+
+   sw = GetSystemMetrics( SM_CXSCREEN );
+   sh = GetSystemMetrics( SM_CYSCREEN );
+   x = ( sw - dlgW ) / 2; if( x < 0 ) x = 50;
+   y = ( sh - dlgH ) / 2; if( y < 0 ) y = 50;
+   hDlg = CreateWindowExA( WS_EX_DLGMODALFRAME | WS_EX_APPWINDOW,
+      "HBLVIMDlg", "ListView Images Editor",
+      WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+      x, y, dlgW, dlgH, NULL, NULL, hInst, NULL );
+   if( !hDlg ) { free( v ); s_pLVIM = NULL; return; }
+   v->hDlg = hDlg;
+   if( s_bDarkIDE ) {
+      BOOL bDark = TRUE;
+      DwmSetWindowAttribute( hDlg, DWMWA_USE_IMMERSIVE_DARK_MODE,
+         &bDark, sizeof(bDark) );
+   }
+
+   /* Toolbar */
+   {
+      struct { const char * txt; int id; int x; int w; } btns[] = {
+         { "+ Add",  LVIM_IDC_ADD, 8,    70 },
+         { "- Del",  LVIM_IDC_DEL, 82,   60 },
+         { "Up",     LVIM_IDC_UP,  146,  40 },
+         { "Down",   LVIM_IDC_DN,  190,  50 }
+      };
+      int i;
+      for( i = 0; i < 4; i++ )
+         CreateWindowExA( 0, "BUTTON", btns[i].txt,
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            btns[i].x, 8, btns[i].w, 26,
+            hDlg, (HMENU)(LONG_PTR) btns[i].id, hInst, NULL );
+   }
+
+   /* ListBox */
+   v->hList = CreateWindowExA( WS_EX_CLIENTEDGE, "LISTBOX", "",
+      WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL |
+      LBS_NOTIFY | LBS_HASSTRINGS,
+      8, 44, dlgW - 32, dlgH - 120,
+      hDlg, (HMENU)(LONG_PTR) LVIM_IDC_LIST, hInst, NULL );
+   if( s_bDarkIDE ) {
+      /* Subclass not implemented for ListBox here — accept light bg */
+   }
+   LVIM_Refresh( v );
+
+   /* OK / Cancel */
+   CreateWindowExA( 0, "BUTTON", "OK",
+      WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
+      dlgW - 180, dlgH - 70, 70, 28,
+      hDlg, (HMENU)(LONG_PTR) LVIM_IDC_OK, hInst, NULL );
+   CreateWindowExA( 0, "BUTTON", "Cancel",
+      WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+      dlgW - 100, dlgH - 70, 70, 28,
+      hDlg, (HMENU)(LONG_PTR) LVIM_IDC_CAN, hInst, NULL );
+
+   /* Hint */
+   CreateWindowExA( 0, "STATIC",
+      "Add: pick PNG/ICO file. Order = round-robin per item row.",
+      WS_CHILD | WS_VISIBLE | SS_LEFT,
+      8, dlgH - 64, dlgW - 200, 18,
+      hDlg, NULL, hInst, NULL );
+
+   ShowWindow( hDlg, SW_SHOW );
+   UpdateWindow( hDlg );
+   EnableWindow( hPar, FALSE );
+
+   while( !bDone && GetMessage( &msg, NULL, 0, 0 ) ) {
+      if( !IsWindow( hDlg ) ) { bDone = TRUE; break; }
+      if( !IsDialogMessageA( hDlg, &msg ) ) {
+         TranslateMessage( &msg );
+         DispatchMessage( &msg );
+      }
+   }
+   EnableWindow( hPar, TRUE );
+   SetForegroundWindow( hPar );
+
+   if( v->bOK ) {
+      char result[8192] = "";
+      int i, o = 0;
+      for( i = 0; i < v->nPathCount; i++ ) {
+         const char * t = v->szPaths[i];
+         if( i > 0 && o < (int)sizeof(result) - 1 ) result[o++] = '|';
+         while( *t && o < (int)sizeof(result) - 1 ) result[o++] = *t++;
+      }
+      result[o] = 0;
+      lstrcpynA( d->rows[nReal].szValue, result, sizeof(d->rows[0].szValue) );
+      InsApplyValue( d, nReal, result );
+      InsRebuild( d );
+      if( d->pOnPropChanged && HB_IS_BLOCK( d->pOnPropChanged ) ) {
+         if( hb_vmRequestReenter() ) {
+            hb_vmPushEvalSym();
+            hb_vmPush( d->pOnPropChanged );
+            hb_vmSend( 0 );
+            hb_vmRequestRestore();
+         }
+      }
+   }
+   free( v );
+   s_pLVIM = NULL;
 }
 
 /* ===== Menu Items Editor (CT_MAINMENU) ===================================

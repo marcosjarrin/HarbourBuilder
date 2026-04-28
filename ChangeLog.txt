@@ -1,6 +1,42 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-28b
+
+  - feat(win-listview): ImageList runtime support for vsIcon and
+    vsSmallIcon view modes. TListView gains FImages[16][260],
+    FImageCount, FImgListLarge (32x32) and FImgListSmall (16x16)
+    HIMAGELIST handles. New helper LoadPngSized(path, size) builds
+    a square 32-bit PARGB HBITMAP via GDI+; RebuildImageLists()
+    creates both ImageLists with ILC_COLOR32|ILC_MASK and attaches
+    them via LVM_SETIMAGELIST (LVSIL_NORMAL + LVSIL_SMALL). Repopulate
+    sets LVITEMA.iImage = row_index % FImageCount so rows cycle
+    through the available icons (round-robin V1).
+
+  - feat(win-listview): aImages property wired on CT_LISTVIEW. Wire
+    format: pipe-separated PNG/ICO paths ("c:\a.png|c:\b.png").
+    UI_SetProp / UI_GetProp / UI_GetAllProps in hbbridge.cpp emit
+    and consume it. TListView class (classes.prg) gains aImages
+    DATA + SetImages(aPaths) METHOD. xcommand in hbbuilder.ch
+    accepts [ IMAGES <imgs,...> ]. Codegen emits IMAGES clause
+    after ITEMS; restore parser extracts IMAGES "p1","p2" stopping
+    at end of @ command (and ITEMS extraction now stops at IMAGES
+    so paths don't get parsed as item rows).
+
+  - feat(win-inspector): Dedicated ListView Images Editor
+    (InsListViewImagesEdit). Modal popup HBLVIMDlg shows a ListBox
+    of current paths, toolbar +Add / -Del / Up / Down, and OK /
+    Cancel. +Add launches GetOpenFileName with filters for .png /
+    .ico / .bmp, appends selection. Dispatch in InsBtnProc routes
+    aImages on CT_LISTVIEW here; aItems still routes to the grid
+    editor; other arrays fall back to the generic array dialog.
+
+  - docs: ES / EN / PT controls-native.html: TListView section
+    extended with aImages property, IMAGES xBase clause example,
+    "Editing images in the Inspector" subsection describing the
+    dedicated picker dialog, and a note on round-robin per-row
+    icon assignment.
+
 2026-04-28
 
   - feat(win-listview): Real TListView implementation with editable

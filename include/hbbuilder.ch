@@ -382,10 +382,12 @@
       [ SIZE <nWidth>, <nHeight> ] ;
       [ COLUMNS <cols,...> ] ;
       [ ITEMS <items,...> ] ;
+      [ IMAGES <imgs,...> ] ;
    => ;
       <oCtrl> := TListView():New( <oParent>, <nLeft>, <nTop>, <nWidth>, <nHeight> ) ;
       [; <oCtrl>:SetColumns( \{ <cols> \} ) ] ;
-      [; <oCtrl>:SetItems( \{ <items> \} ) ]
+      [; <oCtrl>:SetItems( \{ <items> \} ) ] ;
+      [; <oCtrl>:SetImages( \{ <imgs> \} ) ]
 
 // GroupBox
 #xcommand @ <nTop>, <nLeft> GROUPBOX <oCtrl> ;

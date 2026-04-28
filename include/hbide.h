@@ -826,20 +826,30 @@ public:
 #define LV_MAX_COLS  8
 #define LV_MAX_ROWS  64
 #define LV_TXT_LEN   64
+#define LV_MAX_IMGS  16
+#define LV_PATH_LEN  260
 
 class TListView : public TControl
 {
 public:
-   int  FViewStyle;  /* 0=vsIcon, 1=vsList, 2=vsReport, 3=vsSmallIcon */
-   int  FColCount;
-   int  FRowCount;
-   char FColumns[LV_MAX_COLS][LV_TXT_LEN];
-   char FCells[LV_MAX_ROWS][LV_MAX_COLS][LV_TXT_LEN];
+   int        FViewStyle;  /* 0=vsIcon, 1=vsList, 2=vsReport, 3=vsSmallIcon */
+   int        FColCount;
+   int        FRowCount;
+   char       FColumns[LV_MAX_COLS][LV_TXT_LEN];
+   char       FCells[LV_MAX_ROWS][LV_MAX_COLS][LV_TXT_LEN];
+   /* ImageList state — pipe-separated PNG paths in FImages stored
+      via SetImages(); ImageLists built lazily in CreateHandle/Repopulate
+      and re-attached when paths change. */
+   char       FImages[LV_MAX_IMGS][LV_PATH_LEN];
+   int        FImageCount;
+   HIMAGELIST FImgListLarge;  /* 32x32 for vsIcon */
+   HIMAGELIST FImgListSmall;  /* 16x16 for vsSmallIcon (and report row icons) */
 
    TListView();
    void CreateParams( DWORD * pdwStyle, DWORD * pdwExStyle, const char ** pszClass );
    void CreateHandle( HWND hParent );
    void Repopulate();
+   void RebuildImageLists();
    const PROPDESC * GetPropDescs( int * pnCount );
 };
 

@@ -1790,6 +1790,26 @@ HB_FUNC( UI_SETPROP )
       }
       lv->Repopulate();
    }
+   else if( lstrcmpi( szProp, "aImages" ) == 0 && p->FControlType == CT_LISTVIEW && HB_ISCHAR(3) )
+   {  TListView * lv = (TListView*)p;
+      const char * s = hb_parc(3); char buf[LV_PATH_LEN]; int j = 0;
+      lv->FImageCount = 0;
+      memset( lv->FImages, 0, sizeof(lv->FImages) );
+      while( *s && lv->FImageCount < LV_MAX_IMGS ) {
+         if( *s == '|' ) {
+            buf[j] = 0;
+            lstrcpynA( lv->FImages[lv->FImageCount++], buf, LV_PATH_LEN );
+            j = 0;
+         } else if( j < LV_PATH_LEN - 1 ) buf[j++] = *s;
+         s++;
+      }
+      if( j > 0 && lv->FImageCount < LV_MAX_IMGS ) {
+         buf[j] = 0;
+         lstrcpynA( lv->FImages[lv->FImageCount++], buf, LV_PATH_LEN );
+      }
+      lv->RebuildImageLists();
+      lv->Repopulate();
+   }
    else if( lstrcmpi( szProp, "nViewStyle" ) == 0 && p->FControlType == CT_LISTVIEW )
    {  TListView * lv = (TListView*)p;
       lv->FViewStyle = hb_parni(3);
@@ -2273,6 +2293,14 @@ HB_FUNC( UI_GETPROP )
             if( ci > 0 ) lstrcatA( szAll, ";" );
             lstrcatA( szAll, lv->FCells[ri][ci] );
          }
+      }
+      hb_retc( szAll );
+   }
+   else if( lstrcmpi( szProp, "aImages" ) == 0 && p->FControlType == CT_LISTVIEW )
+   {  TListView * lv = (TListView*)p; char szAll[4096] = ""; int ii;
+      for( ii = 0; ii < lv->FImageCount; ii++ ) {
+         if( ii > 0 ) lstrcatA( szAll, "|" );
+         lstrcatA( szAll, lv->FImages[ii] );
       }
       hb_retc( szAll );
    }
@@ -3067,6 +3095,22 @@ HB_FUNC( UI_GETALLPROPS )
          hb_arraySetC( pRow, 4, "A" );
          hb_arrayAdd( pArray, pRow );
          hb_itemRelease( pRow );
+         /* aImages — pipe-separated PNG paths */
+         {
+            char szImgs[4096] = "";
+            int ii;
+            for( ii = 0; ii < lv->FImageCount; ii++ ) {
+               if( ii > 0 ) lstrcatA( szImgs, "|" );
+               lstrcatA( szImgs, lv->FImages[ii] );
+            }
+            pRow = hb_itemArrayNew(4);
+            hb_arraySetC( pRow, 1, "aImages" );
+            hb_arraySetC( pRow, 2, szImgs );
+            hb_arraySetC( pRow, 3, "Data" );
+            hb_arraySetC( pRow, 4, "A" );
+            hb_arrayAdd( pArray, pRow );
+            hb_itemRelease( pRow );
+         }
          ADD_PROP_N( "nViewStyle", lv->FViewStyle, "Appearance" );
          break;
       }

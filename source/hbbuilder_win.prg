@@ -1096,6 +1096,14 @@ static function RegenerateFormCode( cName, hForm )
                      cCreate += '"' + hb_ATokens( cVal, "|" )[ kk ] + '"'
                   next
                endif
+               cVal := UI_GetProp( hCtrl, "aImages" )
+               if ValType( cVal ) == "C" .and. ! Empty( cVal )
+                  cCreate += ' IMAGES '
+                  for kk := 1 to Len( hb_ATokens( cVal, "|" ) )
+                     if kk > 1; cCreate += ', '; endif
+                     cCreate += '"' + hb_ATokens( cVal, "|" )[ kk ] + '"'
+                  next
+               endif
                cCreate += e
             case nType == 22  // ProgressBar
                cCreate += '   // ::o' + cCtrlName + ' (TProgressBar) at ' + ;
@@ -2996,9 +3004,12 @@ static function RestoreFormFromCode( hForm, cCode )
             endif
             // Extract ITEMS "row1cells", "row2cells" — each item already
             // semicolon-separated cells; join rows with '|' for backend.
+            // Stop at IMAGES keyword so paths don't get parsed as items.
             nPos := At( " ITEMS ", Upper( cTrim ) )
             if nPos > 0 .and. hCtrl != 0
                cText := SubStr( cTrim, nPos + 7 )
+               nPos2 := At( " IMAGES ", Upper( cText ) )
+               if nPos2 > 0; cText := Left( cText, nPos2 - 1 ); endif
                cVal := ""
                do while ! Empty( cText )
                   nPos2 := At( '"', cText )
@@ -3012,6 +3023,25 @@ static function RestoreFormFromCode( hForm, cCode )
                enddo
                if ! Empty( cVal )
                   UI_SetProp( hCtrl, "aItems", cVal )
+               endif
+            endif
+            // Extract IMAGES "path1.png","path2.png",...
+            nPos := At( " IMAGES ", Upper( cTrim ) )
+            if nPos > 0 .and. hCtrl != 0
+               cText := SubStr( cTrim, nPos + 8 )
+               cVal := ""
+               do while ! Empty( cText )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  cText := SubStr( cText, nPos2 + 1 )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  if ! Empty( cVal ); cVal += "|"; endif
+                  cVal += Left( cText, nPos2 - 1 )
+                  cText := SubStr( cText, nPos2 + 1 )
+               enddo
+               if ! Empty( cVal )
+                  UI_SetProp( hCtrl, "aImages", cVal )
                endif
             endif
          case " RADIOBUTTON " $ Upper( cTrim )

@@ -1125,8 +1125,45 @@ const PROPDESC * TTreeView::GetPropDescs( int * pnCount )
 static PROPDESC aListViewProps[] = {
    { "aColumns",   PT_STRING, 0, "Data" },
    { "aItems",     PT_STRING, 0, "Data" },
+   { "aImages",    PT_STRING, 0, "Data" },
    { "nViewStyle", PT_NUMBER, 0, "Appearance" },
 };
+
+/* Forward decl — full impl lives further down in this file */
+static HBITMAP LoadPng32( const char * szPath );
+
+/* Load a PNG at an arbitrary square size (16/32/etc) for ImageList use */
+static HBITMAP LoadPngSized( const char * szPath, int size )
+{
+   if( !szPath || size <= 0 ) return NULL;
+   int wlen = MultiByteToWideChar( CP_UTF8, 0, szPath, -1, NULL, 0 );
+   if( wlen <= 0 ) return NULL;
+   WCHAR * wpath = (WCHAR *) malloc( wlen * sizeof(WCHAR) );
+   MultiByteToWideChar( CP_UTF8, 0, szPath, -1, wpath, wlen );
+
+   ULONG_PTR gpToken = 0;
+   Gdiplus::GdiplusStartupInput gpInput;
+   Gdiplus::GdiplusStartup( &gpToken, &gpInput, NULL );
+
+   HBITMAP hbm = NULL;
+   Gdiplus::Bitmap * src = Gdiplus::Bitmap::FromFile( wpath, FALSE );
+   if( src && src->GetLastStatus() == Gdiplus::Ok )
+   {
+      Gdiplus::Bitmap dst( size, size, PixelFormat32bppPARGB );
+      Gdiplus::Graphics g( &dst );
+      g.SetInterpolationMode( Gdiplus::InterpolationModeHighQualityBicubic );
+      g.SetSmoothingMode( Gdiplus::SmoothingModeHighQuality );
+      g.Clear( Gdiplus::Color( 0, 0, 0, 0 ) );
+      g.DrawImage( src, Gdiplus::Rect( 0, 0, size, size ),
+                   0, 0, src->GetWidth(), src->GetHeight(),
+                   Gdiplus::UnitPixel );
+      dst.GetHBITMAP( Gdiplus::Color( 0, 0, 0, 0 ), &hbm );
+   }
+   if( src ) delete src;
+   Gdiplus::GdiplusShutdown( gpToken );
+   free( wpath );
+   return hbm;
+}
 
 TListView::TListView()
 {
@@ -1136,8 +1173,12 @@ TListView::TListView()
    FWidth = 200; FHeight = 150;
    FColCount = 3;
    FRowCount = 0;
+   FImageCount = 0;
+   FImgListLarge = NULL;
+   FImgListSmall = NULL;
    memset( FColumns, 0, sizeof(FColumns) );
    memset( FCells,   0, sizeof(FCells) );
+   memset( FImages,  0, sizeof(FImages) );
    lstrcpynA( FColumns[0], "Column1", LV_TXT_LEN );
    lstrcpynA( FColumns[1], "Column2", LV_TXT_LEN );
    lstrcpynA( FColumns[2], "Column3", LV_TXT_LEN );
@@ -1157,7 +1198,37 @@ void TListView::CreateHandle( HWND hParent )
    {
       SendMessage( FHandle, LVM_SETEXTENDEDLISTVIEWSTYLE, 0,
          LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES );
+      RebuildImageLists();
       Repopulate();
+   }
+}
+
+void TListView::RebuildImageLists()
+{
+   int i;
+   if( FImgListLarge ) { ImageList_Destroy( FImgListLarge ); FImgListLarge = NULL; }
+   if( FImgListSmall ) { ImageList_Destroy( FImgListSmall ); FImgListSmall = NULL; }
+   if( FImageCount <= 0 ) {
+      if( FHandle ) {
+         SendMessage( FHandle, LVM_SETIMAGELIST, LVSIL_NORMAL, 0 );
+         SendMessage( FHandle, LVM_SETIMAGELIST, LVSIL_SMALL,  0 );
+      }
+      return;
+   }
+   FImgListLarge = ImageList_Create( 32, 32, ILC_COLOR32 | ILC_MASK,
+      FImageCount, 4 );
+   FImgListSmall = ImageList_Create( 16, 16, ILC_COLOR32 | ILC_MASK,
+      FImageCount, 4 );
+   for( i = 0; i < FImageCount; i++ )
+   {
+      HBITMAP hbL = LoadPngSized( FImages[i], 32 );
+      HBITMAP hbS = LoadPngSized( FImages[i], 16 );
+      if( hbL ) { ImageList_Add( FImgListLarge, hbL, NULL ); DeleteObject( hbL ); }
+      if( hbS ) { ImageList_Add( FImgListSmall, hbS, NULL ); DeleteObject( hbS ); }
+   }
+   if( FHandle ) {
+      SendMessage( FHandle, LVM_SETIMAGELIST, LVSIL_NORMAL, (LPARAM) FImgListLarge );
+      SendMessage( FHandle, LVM_SETIMAGELIST, LVSIL_SMALL,  (LPARAM) FImgListSmall );
    }
 }
 
@@ -1182,15 +1253,16 @@ void TListView::Repopulate()
       SendMessageA( FHandle, LVM_INSERTCOLUMNA, c, (LPARAM) &col );
    }
 
-   /* Insert rows */
+   /* Insert rows — assign sequential image index when ImageList loaded */
    for( i = 0; i < FRowCount; i++ )
    {
       LVITEMA item;
       memset( &item, 0, sizeof(item) );
-      item.mask = LVIF_TEXT;
+      item.mask = LVIF_TEXT | ( FImageCount > 0 ? LVIF_IMAGE : 0 );
       item.iItem = i;
       item.iSubItem = 0;
       item.pszText = FCells[i][0];
+      item.iImage = ( FImageCount > 0 ) ? ( i % FImageCount ) : 0;
       SendMessageA( FHandle, LVM_INSERTITEMA, 0, (LPARAM) &item );
       for( c = 1; c < FColCount; c++ )
       {

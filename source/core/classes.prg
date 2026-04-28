@@ -783,6 +783,7 @@ CLASS TListView INHERIT TControl
 
    DATA aColumns INIT {}
    DATA aItems   INIT {}
+   DATA aImages  INIT {}
 
    ACCESS nViewStyle      INLINE UI_GetProp( ::hCpp, "nViewStyle" )
    ASSIGN nViewStyle( n ) INLINE UI_SetProp( ::hCpp, "nViewStyle", n )
@@ -791,6 +792,7 @@ CLASS TListView INHERIT TControl
    METHOD SetColumns( aCols )
    METHOD SetItems( aRows )
    METHOD AddItem( aCells )
+   METHOD SetImages( aPaths )
 
 ENDCLASS
 
@@ -855,6 +857,19 @@ METHOD AddItem( aCells ) CLASS TListView
 
    /* Append: re-emit full aItems string */
    ::SetItems( ::aItems )
+
+return Self
+
+METHOD SetImages( aPaths ) CLASS TListView
+
+   local cVal := "", i
+   if aPaths == nil; aPaths := {}; endif
+   for i := 1 to Len( aPaths )
+      if i > 1; cVal += "|"; endif
+      cVal += aPaths[i]
+   next
+   ::aImages := aPaths
+   UI_SetProp( ::hCpp, "aImages", cVal )
 
 return Self
 
