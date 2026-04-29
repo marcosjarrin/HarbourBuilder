@@ -1,6 +1,54 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-29
+
+  - feat(macos-palette): Per-component PNG icons for the Git tab
+    (CT 121-130 → menu_icons/menu_git_*.png) wired in
+    hbbuilder_macos.prg AEval table. PNGs already shipped in
+    HbBuilder.app/Contents/Resources/menu_icons/.
+
+  - feat(macos-palette): Palette icons rendered at 48x48 (was 32x32).
+    PalShowTab buttons resized 52x50 → 64x60 with
+    NSImageScaleProportionallyUpOrDown so 32px BMP-strip icons scale
+    up cleanly. SF Symbol composite canvas 32→48 (bg 22→34, padding
+    tweaked). UI_PaletteSetCompIcon PNG canvas 32→48 (max png 24→44).
+    Main bar nBarH 84 → 100 to fit taller palette buttons (palette
+    panel = nBarH − segH(24) − 2 = 74, fits 60h buttons).
+
+  - feat(macos-listview): TListView (CT_LISTVIEW = 21) on Cocoa
+    NSTableView gains real aColumns / aItems support. New
+    HBListViewDataSource (NSTableViewDataSource/Delegate) backs
+    the table: rows from FData (";"-cells, "|"-rows), columns from
+    FHeaders (pipe-split). CT_LISTVIEW realize block now builds
+    columns from FHeaders (falls back to 3 stub cols when empty)
+    instead of the previous 3 dummy NSTableColumn slots. UI_SetProp
+    on CT_LISTVIEW splits aColumns→FHeaders (rebuilds NSTableColumns
+    + reload) and aItems→FData (reload) — handled before the
+    generic combined "aHeaders/aColumns/aTabs/aItems" branch so
+    aItems no longer clobbers FHeaders. UI_GetProp returns FData
+    for aItems on CT_LISTVIEW. UI_GetAllProps emits aColumns +
+    aItems as type "A" so the inspector shows them via the generic
+    multi-line dialog. hbbuilder_macos.prg: codegen emits
+    "@ y, x LISTVIEW ::oCtrl OF Self SIZE w, h COLUMNS ... ITEMS ..."
+    and restore parser handles the LISTVIEW DSL (COLUMNS terminates
+    at ITEMS to avoid swallowing item rows). Class wrapper
+    classes.prg::TListView already cross-platform (UI_ListViewNew +
+    SetColumns / SetItems / AddItem / SetImages).
+
+  - feat(macos-build): TBRun pipeline (Step 6 + 7) now compiles +
+    links cocoa_mysql.c + cocoa_pgsql.c into the user-app build,
+    matching build_mac.sh. Step 6 probes brew prefixes
+    /usr/local/opt/{mysql-client,libpq} (Intel) with fallback to
+    /opt/homebrew/opt/{mysql-client,libpq} (Apple Silicon),
+    compiles each binding with the correct -I path. Step 7 appends
+    the resulting .o files when present and adds
+    -L<prefix>/lib -lmysqlclient -lpq, so projects that pull
+    classes.prg (which references HBMYSQL_* / HBPGSQL_* HB_FUNCs
+    via TMySQL / TPostgreSQL) now link cleanly. No LoadLibrary
+    stubs — direct linking against libmysqlclient / libpq, same
+    as the IDE itself.
+
 2026-04-28c
 
   - chore(win-codegen): SyncDesignerToCode no longer auto-emits the

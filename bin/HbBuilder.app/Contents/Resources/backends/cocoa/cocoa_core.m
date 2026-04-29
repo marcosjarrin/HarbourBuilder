@@ -964,6 +964,54 @@ static int         s_pendingPage   = 0;
 }
 @end
 
+/* NSTableView data source for TListView (CT_LISTVIEW): multi-column grid.
+ * Columns from FHeaders ("|"-separated). Rows from FData ("|"-separated rows,
+ * each row ";"-separated cells). */
+@interface HBListViewDataSource : NSObject <NSTableViewDataSource, NSTableViewDelegate>
+{
+@public
+   __weak HBControl * owner;
+   NSMutableArray * rows;     /* array of NSArray<NSString *> */
+}
+- (void)rebuild;
+@end
+
+@implementation HBListViewDataSource
+- (void)rebuild
+{
+   rows = [NSMutableArray array];
+   HBControl * o = owner;
+   if( !o || !o->FData[0] ) return;
+   NSString * s = [NSString stringWithUTF8String:o->FData];
+   for( NSString * raw in [s componentsSeparatedByString:@"|"] ) {
+      if( [raw length] == 0 ) continue;
+      NSArray * cells = [raw componentsSeparatedByString:@";"];
+      [rows addObject:cells];
+   }
+}
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)tv
+{ (void)tv; if( !rows ) [self rebuild]; return (NSInteger)[rows count]; }
+- (id)tableView:(NSTableView *)tv objectValueForTableColumn:(NSTableColumn *)col row:(NSInteger)row
+{
+   (void)tv;
+   if( !rows ) [self rebuild];
+   if( row < 0 || row >= (NSInteger)[rows count] ) return @"";
+   NSArray * cells = [rows objectAtIndex:row];
+   NSInteger ci = [[col identifier] integerValue];
+   if( ci < 0 || ci >= (NSInteger)[cells count] ) return @"";
+   return [cells objectAtIndex:ci];
+}
+- (void)tableViewSelectionDidChange:(NSNotification *)note
+{
+   HBControl * o = owner;
+   if( !o ) return;
+   NSTableView * tv = [note object];
+   NSInteger sel = [tv selectedRow];
+   o->FListSelIndex = ( sel >= 0 ) ? (int)(sel + 1) : 0;
+   [o fireEvent:o->FOnChange];
+}
+@end
+
 /* TShape backing view — draws rectangle/square/round/ellipse/circle using
  * the owning HBControl's FShape, FClrPane (fill), FPenColor, FPenWidth. */
 @interface HBShapeView : NSView
@@ -1996,12 +2044,44 @@ static NSImage * HBResolveBitBtnImage( int kind, const char * picture )
       case CT_LISTVIEW: {
          NSScrollView * sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(FLeft,FTop,FWidth,FHeight)];
          NSTableView * tv = [[NSTableView alloc] initWithFrame:NSMakeRect(0,0,FWidth,FHeight)];
-         for( int i = 0; i < 3; i++ ) {
-            NSString * ident = [NSString stringWithFormat:@"col%d", i];
-            NSTableColumn * col = [[NSTableColumn alloc] initWithIdentifier:ident];
-            [col setWidth:60]; [[col headerCell] setStringValue:[NSString stringWithFormat:@"Col%d",i+1]];
-            [tv addTableColumn:col];
+         [tv setUsesAlternatingRowBackgroundColors:YES];
+         [tv setGridStyleMask:NSTableViewSolidHorizontalGridLineMask |
+                              NSTableViewSolidVerticalGridLineMask];
+         /* Build columns from FHeaders ("|"-separated). Fall back to 3 stub cols
+          * when FHeaders is empty so newly dropped controls render visibly. */
+         if( FHeaders[0] ) {
+            const char * src = FHeaders;
+            int idx = 0;
+            while( src && *src ) {
+               const char * sep = strchr( src, '|' );
+               int len = sep ? (int)(sep - src) : (int)strlen(src);
+               if( len > 0 ) {
+                  NSTableColumn * col = [[NSTableColumn alloc]
+                     initWithIdentifier:[NSString stringWithFormat:@"%d", idx++]];
+                  [col setWidth:100];
+                  [[col headerCell] setStringValue:
+                     [[NSString alloc] initWithBytes:src length:len encoding:NSUTF8StringEncoding]];
+                  [tv addTableColumn:col];
+               }
+               src = sep ? sep + 1 : NULL;
+            }
+         } else {
+            for( int i = 0; i < 3; i++ ) {
+               NSTableColumn * col = [[NSTableColumn alloc]
+                  initWithIdentifier:[NSString stringWithFormat:@"%d", i]];
+               [col setWidth:80];
+               [[col headerCell] setStringValue:[NSString stringWithFormat:@"Col%d",i+1]];
+               [tv addTableColumn:col];
+            }
          }
+         /* Attach data source (rows from FData) */
+         HBListViewDataSource * ds = [[HBListViewDataSource alloc] init];
+         ds->owner = self;
+         [tv setDataSource:ds];
+         [tv setDelegate:ds];
+         static NSMutableArray * s_listviewDS = nil;
+         if( !s_listviewDS ) s_listviewDS = [NSMutableArray array];
+         [s_listviewDS addObject:ds];
          [sv setDocumentView:tv]; [sv setHasVerticalScroller:YES]; [sv setBorderType:NSBezelBorder];
          v = sv; break;
       }
@@ -6140,6 +6220,65 @@ HB_FUNC( UI_SETPROP )
          if( idx >= 0 && idx < 3 ) strcpy( p->FRdd, rddNames[idx] );
       }
    }
+   /* CT_LISTVIEW splits aColumns→FHeaders (column titles) and aItems→FData
+    * (";"-cells, "|"-rows). Handle BEFORE the generic combined handler so
+    * aItems doesn't clobber FHeaders. */
+   else if( p->FControlType == CT_LISTVIEW &&
+            ( strcasecmp(szProp,"aColumns")==0 || strcasecmp(szProp,"aHeaders")==0 ||
+              strcasecmp(szProp,"aItems")==0 ) )
+   {
+      char * dst = ( strcasecmp(szProp,"aItems")==0 ) ? p->FData : p->FHeaders;
+      size_t cap = ( strcasecmp(szProp,"aItems")==0 )
+                   ? sizeof(p->FData) : sizeof(p->FHeaders);
+      if( HB_ISCHAR(3) ) {
+         strncpy( dst, hb_parc(3), cap - 1 );
+         dst[cap - 1] = 0;
+      } else if( HB_ISARRAY(3) ) {
+         PHB_ITEM pArr = hb_param(3, HB_IT_ARRAY);
+         int n = (int) hb_arrayLen( pArr );
+         int pos = 0;
+         dst[0] = 0;
+         for( int i = 1; i <= n && pos < (int)cap - 2; i++ ) {
+            const char * s = hb_arrayGetCPtr( pArr, i );
+            int slen = (int)strlen( s );
+            if( i > 1 && pos < (int)cap - 1 ) dst[pos++] = '|';
+            if( pos + slen >= (int)cap - 1 ) slen = (int)cap - 1 - pos;
+            memcpy( dst + pos, s, (size_t)slen );
+            pos += slen;
+         }
+         dst[pos] = 0;
+      }
+      /* Refresh NSTableView: rebuild columns when aColumns set, always reload data. */
+      if( p->FView && [p->FView isKindOfClass:[NSScrollView class]] ) {
+         NSScrollView * sv = (NSScrollView *) p->FView;
+         NSTableView * tv = (NSTableView *) [sv documentView];
+         if( tv ) {
+            if( strcasecmp(szProp,"aColumns")==0 || strcasecmp(szProp,"aHeaders")==0 ) {
+               while( [[tv tableColumns] count] > 0 )
+                  [tv removeTableColumn:[[tv tableColumns] lastObject]];
+               const char * src = p->FHeaders;
+               int idx = 0;
+               while( src && *src ) {
+                  const char * sep = strchr( src, '|' );
+                  int len = sep ? (int)(sep - src) : (int)strlen(src);
+                  if( len > 0 ) {
+                     NSTableColumn * col = [[NSTableColumn alloc]
+                        initWithIdentifier:[NSString stringWithFormat:@"%d", idx++]];
+                     [col setWidth:100];
+                     [[col headerCell] setStringValue:
+                        [[NSString alloc] initWithBytes:src length:len encoding:NSUTF8StringEncoding]];
+                     [tv addTableColumn:col];
+                  }
+                  src = sep ? sep + 1 : NULL;
+               }
+            }
+            id ds = [tv dataSource];
+            if( [ds isKindOfClass:[HBListViewDataSource class]] )
+               [(HBListViewDataSource *)ds rebuild];
+            [tv reloadData];
+         }
+      }
+   }
    else if( strcasecmp(szProp,"aHeaders")==0 || strcasecmp(szProp,"aColumns")==0 ||
             strcasecmp(szProp,"aTabs")==0 || strcasecmp(szProp,"aItems")==0 )
    {
@@ -6821,6 +6960,9 @@ HB_FUNC( UI_GETPROP )
    else if( strcasecmp(szProp,"cTable")==0 )    hb_retc( p->FTable );
    else if( strcasecmp(szProp,"cSQL")==0 )      hb_retc( p->FSQL );
    else if( strcasecmp(szProp,"cRDD")==0 )      hb_retc( p->FRdd );
+   /* CT_LISTVIEW: aItems lives in FData (rows), aColumns in FHeaders */
+   else if( p->FControlType == CT_LISTVIEW && strcasecmp(szProp,"aItems")==0 )
+      hb_retc( p->FData );
    else if( strcasecmp(szProp,"aHeaders")==0 || strcasecmp(szProp,"aColumns")==0 ||
             strcasecmp(szProp,"aTabs")==0 || strcasecmp(szProp,"aItems")==0 )
       hb_retc( p->FHeaders );
@@ -7145,6 +7287,9 @@ HB_FUNC( UI_GETALLPROPS )
          ADD_N("nRowCount",  p->FRowCount,  "Data");
          ADD_N("nFixedRows", p->FFixedRows, "Data");
          ADD_N("nFixedCols", p->FFixedCols, "Data"); break;
+      case CT_LISTVIEW:
+         ADD_A("aColumns", p->FHeaders, "Data");
+         ADD_A("aItems",   p->FData,    "Data"); break;
       case CT_MAP: {
          char szLat[32], szLon[32];
          snprintf(szLat, sizeof(szLat), "%.6f", p->FLat);
@@ -8130,10 +8275,10 @@ static void PalShowTab( PALDATA * pd, int nTab )
       }
    }
 
-   /* Create 52x50 buttons for this tab */
+   /* Create 64x60 buttons for this tab — fits 48x48 icons */
    PaletteTab * t = &pd->tabs[nTab];
    CGFloat xPos = 4;
-   int btnW = 52, btnH = 50;
+   int btnW = 64, btnH = 60;
    CGFloat y = 0;
 
    /* Icons in palette.bmp are laid out sequentially following the AddComp
@@ -8166,6 +8311,7 @@ static void PalShowTab( PALDATA * pd, int nTab )
       if( hasImage ) {
          [btn setImage:pd->palImages[imgIdx]];
          [btn setImagePosition:NSImageOnly];
+         [btn setImageScaling:NSImageScaleProportionallyUpOrDown];
          [btn setTitle:@""];
       } else {
          [btn setTitle:title];
@@ -8296,20 +8442,20 @@ HB_FUNC( UI_PALETTELOADIMAGES )
                      [glyph setTemplate:YES];
                   }
 
-                  NSImage * composed = [[NSImage alloc] initWithSize:NSMakeSize(32, 32)];
+                  NSImage * composed = [[NSImage alloc] initWithSize:NSMakeSize(48, 48)];
                   [composed lockFocus];
                   /* Light-grey rounded-rect background */
-                  CGFloat bgH = 22, bgY = (32 - bgH) / 2.0;
+                  CGFloat bgH = 34, bgY = (48 - bgH) / 2.0;
                   NSBezierPath * bg = [NSBezierPath bezierPathWithRoundedRect:
-                     NSMakeRect(2, bgY, 28, bgH) xRadius:4 yRadius:4];
+                     NSMakeRect(3, bgY, 42, bgH) xRadius:6 yRadius:6];
                   [[NSColor colorWithCalibratedWhite:0.93 alpha:1.0] setFill];
                   [bg fill];
                   [[NSColor colorWithCalibratedWhite:0.75 alpha:1.0] setStroke];
                   [bg setLineWidth:0.5];
                   [bg stroke];
                   /* Symbol centered inside the background */
-                  CGFloat gH = bgH - 4;
-                  NSRect gRect = NSMakeRect((32 - gH) / 2.0, bgY + 2, gH, gH);
+                  CGFloat gH = bgH - 6;
+                  NSRect gRect = NSMakeRect((48 - gH) / 2.0, bgY + 3, gH, gH);
                   if( @available(macOS 12.0, *) ) {
                      /* Colored image — draw directly, no template */
                      NSRect srcRect = NSMakeRect(0, 0, [glyph size].width, [glyph size].height);
@@ -8385,13 +8531,13 @@ HB_FUNC( UI_PALETTESETCOMPICON )
    NSImage * png = [[NSImage alloc] initWithContentsOfFile:path];
    if( !png ) return;
 
-   /* Draw PNG centered on transparent 32x32 canvas — no tile background. */
-   NSImage * composed = [[NSImage alloc] initWithSize:NSMakeSize(32, 32)];
+   /* Draw PNG centered on transparent 48x48 canvas — no tile background. */
+   NSImage * composed = [[NSImage alloc] initWithSize:NSMakeSize(48, 48)];
    [composed lockFocus];
    CGFloat pngW = [png size].width, pngH = [png size].height;
-   if( pngW > 24 ) pngW = 24;
-   if( pngH > 24 ) pngH = 24;
-   NSRect dst = NSMakeRect((32 - pngW) / 2.0, (32 - pngH) / 2.0, pngW, pngH);
+   if( pngW > 44 ) pngW = 44;
+   if( pngH > 44 ) pngH = 44;
+   NSRect dst = NSMakeRect((48 - pngW) / 2.0, (48 - pngH) / 2.0, pngW, pngH);
    NSRect srcRect = NSMakeRect(0, 0, [png size].width, [png size].height);
    [png drawInRect:dst fromRect:srcRect
       operation:NSCompositingOperationSourceOver fraction:1.0

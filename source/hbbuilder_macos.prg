@@ -86,7 +86,7 @@ function Main()
 
    // C++Builder classic proportions scaled to current screen
    // Reference: 1024x768 -> Inspector 250px (24.4%), Bar 100px (13%)
-   nBarH    := 84                            // two toolbar rows(28+28) + tabs(24) + margins(4)
+   nBarH    := 100                           // two toolbar rows(28+28) + tabs(24) + 48x48 palette buttons
    nInsW    := Int( nScreenW * 0.18 )        // ~18% of screen width
 
    // === Window 1: Main Bar (full screen width) ===
@@ -667,7 +667,17 @@ static function CreatePalette()
       {  51, "tollama.png"       }, ;  // Ollama
       { 110, "topenai.png"       }, ;  // Whisper (OpenAI)
       { 200, "tmainmenu.png"     }, ;  // MainMenu
-      { 201, "tpopupmenu.png"    }  ;  // PopupMenu
+      { 201, "tpopupmenu.png"    }, ;  // PopupMenu
+      { 121, "menu_icons/menu_git_init.png"   }, ;  // GitRepo
+      { 122, "menu_icons/menu_git_commit.png" }, ;  // GitCommit
+      { 123, "menu_icons/menu_git_branch.png" }, ;  // GitBranch
+      { 124, "menu_icons/menu_git_log.png"    }, ;  // GitLog
+      { 125, "menu_icons/menu_git_diff.png"   }, ;  // GitDiff
+      { 126, "menu_icons/menu_git_clone.png"  }, ;  // GitRemote
+      { 127, "menu_icons/menu_git_stash.png"  }, ;  // GitStash
+      { 128, "menu_icons/menu_git_status.png" }, ;  // GitTag
+      { 129, "menu_icons/menu_git_log.png"    }, ;  // GitBlame
+      { 130, "menu_icons/menu_git_pull.png"   }  ;  // GitMerge
    }, {| a | UI_PaletteSetCompIcon( a[ 1 ], ResPath( a[ 2 ] ) ) } )
 
 return nil
@@ -1130,6 +1140,29 @@ static function RegenerateFormCode( cName, hForm )
                      // Preserve leading whitespace (indentation = hierarchy);
                      // only strip trailing spaces.
                      cCreate += '"' + RTrim( aHdrs[kk] ) + '"'
+                  next
+               endif
+               cCreate += e
+            case nType == 21  // ListView (TListView)
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' LISTVIEW ::o' + cCtrlName + ' OF ' + cParent + ' SIZE ' + ;
+                  LTrim(Str(nCW)) + ", " + LTrim(Str(nCH))
+               cVal := UI_GetProp( hCtrl, "aColumns" )
+               if ValType( cVal ) == "C" .and. ! Empty( cVal )
+                  aHdrs := hb_ATokens( cVal, "|" )
+                  cCreate += ' COLUMNS '
+                  for kk := 1 to Len( aHdrs )
+                     if kk > 1; cCreate += ', '; endif
+                     cCreate += '"' + aHdrs[kk] + '"'
+                  next
+               endif
+               cVal := UI_GetProp( hCtrl, "aItems" )
+               if ValType( cVal ) == "C" .and. ! Empty( cVal )
+                  aHdrs := hb_ATokens( cVal, "|" )
+                  cCreate += ' ITEMS '
+                  for kk := 1 to Len( aHdrs )
+                     if kk > 1; cCreate += ', '; endif
+                     cCreate += '"' + aHdrs[kk] + '"'
                   next
                endif
                cCreate += e
@@ -2642,6 +2675,47 @@ static function RestoreFormFromCode( hForm, cCode )
                   UI_SetProp( hCtrl, "aItems", cVal )
                endif
             endif
+         case " LISTVIEW " $ Upper( cTrim )
+            hCtrl := UI_ListViewNew( hForm, nL, nT, nW, nH )
+            // COLUMNS "c1", "c2" ... ITEMS "r1c1;r1c2", "r2c1;r2c2"
+            nPos := At( "COLUMNS ", Upper( cTrim ) )
+            if nPos > 0
+               cText := SubStr( cTrim, nPos + 8 )
+               nPos2 := At( "ITEMS ", Upper( cText ) )
+               if nPos2 > 0; cText := Left( cText, nPos2 - 1 ); endif
+               cVal := ""
+               do while ! Empty( cText )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  cText := SubStr( cText, nPos2 + 1 )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  if ! Empty( cVal ); cVal += "|"; endif
+                  cVal += Left( cText, nPos2 - 1 )
+                  cText := SubStr( cText, nPos2 + 1 )
+               enddo
+               if hCtrl != 0 .and. ! Empty( cVal )
+                  UI_SetProp( hCtrl, "aColumns", cVal )
+               endif
+            endif
+            nPos := At( "ITEMS ", Upper( cTrim ) )
+            if nPos > 0
+               cText := SubStr( cTrim, nPos + 6 )
+               cVal := ""
+               do while ! Empty( cText )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  cText := SubStr( cText, nPos2 + 1 )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  if ! Empty( cVal ); cVal += "|"; endif
+                  cVal += Left( cText, nPos2 - 1 )
+                  cText := SubStr( cText, nPos2 + 1 )
+               enddo
+               if hCtrl != 0 .and. ! Empty( cVal )
+                  UI_SetProp( hCtrl, "aItems", cVal )
+               endif
+            endif
          case " FOLDER " $ Upper( cTrim )
             hCtrl := UI_TabControlNew( hForm, nL, nT, nW, nH )
             nPos := At( "PROMPTS ", Upper( cTrim ) )
@@ -3898,6 +3972,7 @@ static function TBRun()
    local cResDir, cBackends, cSciInc, cSciCocoa, cLexInc, cSciLib
    local cOldTab, cSepLine, nP1, nP2, cUserCode
    local cAppTitle, cAppName
+   local cMysqlPfx, cPgsqlPfx
    local hForm, nCount, hCtrl, oReport, oBand, cBandType, nBandH
    static nLastHash := 0
 
@@ -4168,7 +4243,7 @@ static function TBRun()
       endif
    endif
 
-   // Step 6: Compile Cocoa backend + editor + GT dummy
+   // Step 6: Compile Cocoa backend + editor + GT dummy + DB bindings
    if ! lError
       MAC_ProgressStep( 6, "Compiling Cocoa backend..." )
       cLog += "[6] Compiling Cocoa backend..." + Chr(10)
@@ -4197,6 +4272,32 @@ static function TBRun()
                  " -o " + cBuildDir + "/stddlgs_mac.o 2>&1"
          MAC_ShellExec( cCmd )
       endif
+      // MySQL bindings: probe brew prefix (Intel + Apple Silicon)
+      cMysqlPfx := ""
+      if hb_DirExists( "/usr/local/opt/mysql-client" )
+         cMysqlPfx := "/usr/local/opt/mysql-client"
+      elseif hb_DirExists( "/opt/homebrew/opt/mysql-client" )
+         cMysqlPfx := "/opt/homebrew/opt/mysql-client"
+      endif
+      if ! Empty( cMysqlPfx )
+         cCmd := "clang -c -O2 -I" + cHbInc + " -I" + cMysqlPfx + "/include/mysql" + ;
+                 " " + cBackends + "/cocoa_mysql.c" + ;
+                 " -o " + cBuildDir + "/cocoa_mysql.o 2>&1"
+         MAC_ShellExec( cCmd )
+      endif
+      // PostgreSQL bindings
+      cPgsqlPfx := ""
+      if hb_DirExists( "/usr/local/opt/libpq" )
+         cPgsqlPfx := "/usr/local/opt/libpq"
+      elseif hb_DirExists( "/opt/homebrew/opt/libpq" )
+         cPgsqlPfx := "/opt/homebrew/opt/libpq"
+      endif
+      if ! Empty( cPgsqlPfx )
+         cCmd := "clang -c -O2 -I" + cHbInc + " -I" + cPgsqlPfx + "/include" + ;
+                 " " + cBackends + "/cocoa_pgsql.c" + ;
+                 " -o " + cBuildDir + "/cocoa_pgsql.o 2>&1"
+         MAC_ShellExec( cCmd )
+      endif
       cLog += "    OK" + Chr(10)
    endif
 
@@ -4212,6 +4313,8 @@ static function TBRun()
               " " + cBuildDir + "/cocoa_editor.o" + ;
               " " + cBuildDir + "/gt_dummy.o" + ;
               If( File( cBuildDir + "/stddlgs_mac.o" ), " " + cBuildDir + "/stddlgs_mac.o", "" ) + ;
+              If( File( cBuildDir + "/cocoa_mysql.o" ), " " + cBuildDir + "/cocoa_mysql.o", "" ) + ;
+              If( File( cBuildDir + "/cocoa_pgsql.o" ), " " + cBuildDir + "/cocoa_pgsql.o", "" ) + ;
               " " + cBuildDir + "/hix_runtime.o" + ;
               " " + cBuildDir + "/hix_template.o" + ;
               " " + cSciLib + "/libscintilla.a" + ;
@@ -4223,6 +4326,8 @@ static function TBRun()
               " -lrddntx -lrddnsx -lrddcdx -lrddfpt" + ;
               " -lhbhsx -lhbsix -lhbusrrdd" + ;
               " -lgtcgi -lgtstd" + ;
+              If( File( cBuildDir + "/cocoa_mysql.o" ) .and. ! Empty( cMysqlPfx ), " -L" + cMysqlPfx + "/lib -lmysqlclient", "" ) + ;
+              If( File( cBuildDir + "/cocoa_pgsql.o" ) .and. ! Empty( cPgsqlPfx ), " -L" + cPgsqlPfx + "/lib -lpq", "" ) + ;
               " -framework Cocoa -framework QuartzCore -framework MapKit -framework CoreLocation -framework SceneKit -framework WebKit" + If( Val( MAC_ShellExec( "sw_vers -productVersion | cut -d. -f1" ) ) >= 11, " -framework UniformTypeIdentifiers", "" ) + ;
               " -lm -lpthread -lc++ -lsqlite3 -lcups 2>&1"
       cOutput := MAC_ShellExec( cCmd )

@@ -776,6 +776,104 @@ METHOD SetItems( aLabels ) CLASS TListBox
 return Self
 
 //----------------------------------------------------------------------------//
+// TListView - Multi-column list (LVS_REPORT) with editable aColumns / aItems
+//----------------------------------------------------------------------------//
+
+CLASS TListView INHERIT TControl
+
+   DATA aColumns INIT {}
+   DATA aItems   INIT {}
+   DATA aImages  INIT {}
+
+   ACCESS nViewStyle      INLINE UI_GetProp( ::hCpp, "nViewStyle" )
+   ASSIGN nViewStyle( n ) INLINE UI_SetProp( ::hCpp, "nViewStyle", n )
+
+   METHOD New( oParent, nLeft, nTop, nWidth, nHeight )
+   METHOD SetColumns( aCols )
+   METHOD SetItems( aRows )
+   METHOD AddItem( aCells )
+   METHOD SetImages( aPaths )
+
+ENDCLASS
+
+METHOD New( oParent, nLeft, nTop, nWidth, nHeight ) CLASS TListView
+
+   if nWidth == nil;  nWidth := 200; endif
+   if nHeight == nil; nHeight := 150; endif
+
+   ::oParent := oParent
+   ::hCpp := UI_ListViewNew( oParent:hCpp, nLeft, nTop, nWidth, nHeight )
+
+return Self
+
+METHOD SetColumns( aCols ) CLASS TListView
+
+   local cVal := "", i
+   if aCols != nil .and. Len( aCols ) > 0
+      for i := 1 to Len( aCols )
+         if i > 1; cVal += "|"; endif
+         cVal += aCols[i]
+      next
+      ::aColumns := aCols
+      UI_SetProp( ::hCpp, "aColumns", cVal )
+   endif
+
+return Self
+
+METHOD SetItems( aRows ) CLASS TListView
+
+   local cVal := "", i, j, aRow
+   if aRows == nil; aRows := {}; endif
+   for i := 1 to Len( aRows )
+      if i > 1; cVal += "|"; endif
+      aRow := aRows[i]
+      if ValType( aRow ) == "A"
+         for j := 1 to Len( aRow )
+            if j > 1; cVal += ";"; endif
+            cVal += aRow[j]
+         next
+      else
+         cVal += aRow
+      endif
+   next
+   ::aItems := aRows
+   UI_SetProp( ::hCpp, "aItems", cVal )
+
+return Self
+
+METHOD AddItem( aCells ) CLASS TListView
+
+   local i, cRow := ""
+   if ValType( aCells ) == "A"
+      for i := 1 to Len( aCells )
+         if i > 1; cRow += ";"; endif
+         cRow += aCells[i]
+      next
+      AAdd( ::aItems, aCells )
+   else
+      cRow := aCells
+      AAdd( ::aItems, aCells )
+   endif
+
+   /* Append: re-emit full aItems string */
+   ::SetItems( ::aItems )
+
+return Self
+
+METHOD SetImages( aPaths ) CLASS TListView
+
+   local cVal := "", i
+   if aPaths == nil; aPaths := {}; endif
+   for i := 1 to Len( aPaths )
+      if i > 1; cVal += "|"; endif
+      cVal += aPaths[i]
+   next
+   ::aImages := aPaths
+   UI_SetProp( ::hCpp, "aImages", cVal )
+
+return Self
+
+//----------------------------------------------------------------------------//
 // TBrwColumn - Column descriptor for TBrowse
 //----------------------------------------------------------------------------//
 

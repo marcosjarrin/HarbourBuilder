@@ -376,6 +376,19 @@
       <oCtrl> := TListBox():New( <oParent>, <nLeft>, <nTop>, <nWidth>, <nHeight> ) ;
       [; <oCtrl>:SetItems( \{ <items> \} ) ]
 
+// ListView
+#xcommand @ <nTop>, <nLeft> LISTVIEW <oCtrl> ;
+      [ OF <oParent> ] ;
+      [ SIZE <nWidth>, <nHeight> ] ;
+      [ COLUMNS <cols,...> ] ;
+      [ ITEMS <items,...> ] ;
+      [ IMAGES <imgs,...> ] ;
+   => ;
+      <oCtrl> := TListView():New( <oParent>, <nLeft>, <nTop>, <nWidth>, <nHeight> ) ;
+      [; <oCtrl>:SetColumns( \{ <cols> \} ) ] ;
+      [; <oCtrl>:SetItems( \{ <items> \} ) ] ;
+      [; <oCtrl>:SetImages( \{ <imgs> \} ) ]
+
 // GroupBox
 #xcommand @ <nTop>, <nLeft> GROUPBOX <oCtrl> ;
       [ PROMPT <cText> ] ;
