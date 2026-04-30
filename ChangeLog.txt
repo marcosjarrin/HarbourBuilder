@@ -1,6 +1,17 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-30d
+
+  - fix(macos-build): build_mac.sh now detects Homebrew prefix per arch
+    (arm64 -> /opt/homebrew/opt, x86_64 -> /usr/local/opt) via
+    `brew --prefix mysql-client` / `brew --prefix libpq`. Auto-installs
+    packages if missing. Compiles cocoa_mysql.c + cocoa_pgsql.c
+    unconditionally and links -lmysqlclient -lpq. Fixes link failure on
+    Apple Silicon: "Undefined symbols _HB_FUN_HBMYSQL_*/_HB_FUN_HBPGSQL_*"
+    caused by EXTERNAL declarations in classes.prg referencing symbols
+    that were never compiled when /usr/local/opt paths missed.
+
 2026-04-30c
 
   - fix(macos-tbrun): Copy cocoa_mysql.c + cocoa_pgsql.c into .app bundle

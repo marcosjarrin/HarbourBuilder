@@ -230,26 +230,65 @@ else
 fi
 
 # [3g/4] MySQL bindings for TMySQL class (libmysqlclient via brew mysql-client)
-MYSQL_PREFIX="/usr/local/opt/mysql-client"
-if [ -d "$MYSQL_PREFIX" ] && needs_rebuild "$PROJDIR/source/backends/cocoa/cocoa_mysql.c" cocoa_mysql.o; then
+# classes.prg uses EXTERNAL HBMYSQL_* — symbols must always link, so detect or
+# install Homebrew package regardless of arch (/opt/homebrew on arm64,
+# /usr/local on x86_64).
+detect_brew_prefix() {
+   # $1 = formula name; echoes prefix or empty
+   local pkg="$1" pfx=""
+   if command -v brew >/dev/null 2>&1; then
+      pfx=$(brew --prefix "$pkg" 2>/dev/null || true)
+      [ -n "$pfx" ] && [ -d "$pfx" ] && { echo "$pfx"; return; }
+   fi
+   for cand in "/opt/homebrew/opt/$pkg" "/usr/local/opt/$pkg"; do
+      [ -d "$cand" ] && { echo "$cand"; return; }
+   done
+}
+
+MYSQL_PREFIX=$(detect_brew_prefix mysql-client)
+if [ -z "$MYSQL_PREFIX" ]; then
+   if command -v brew >/dev/null 2>&1; then
+      echo "[3g/4] mysql-client not found — installing via brew..."
+      brew install mysql-client
+      MYSQL_PREFIX=$(detect_brew_prefix mysql-client)
+   fi
+fi
+if [ -z "$MYSQL_PREFIX" ]; then
+   echo "ERROR: mysql-client not found and brew unavailable. Install Homebrew, then: brew install mysql-client"
+   exit 1
+fi
+echo "[3g/4] mysql-client at $MYSQL_PREFIX"
+if needs_rebuild "$PROJDIR/source/backends/cocoa/cocoa_mysql.c" cocoa_mysql.o; then
    echo "[3g/4] Compiling cocoa_mysql.c..."
    clang -c -O2 -mmacosx-version-min=10.15 \
-      -I"$HBINC" -I"$MYSQL_PREFIX/include/mysql" \
+      -I"$HBINC" -I"$MYSQL_PREFIX/include/mysql" -I"$MYSQL_PREFIX/include" \
       "$PROJDIR/source/backends/cocoa/cocoa_mysql.c" -o cocoa_mysql.o
    NEED_LINK=1
-elif [ -d "$MYSQL_PREFIX" ]; then
+else
    echo "[3g/4] cocoa_mysql.o — up to date"
 fi
 
 # [3h/4] PostgreSQL bindings for TPostgreSQL class (libpq via brew libpq)
-PGSQL_PREFIX="/usr/local/opt/libpq"
-if [ -d "$PGSQL_PREFIX" ] && needs_rebuild "$PROJDIR/source/backends/cocoa/cocoa_pgsql.c" cocoa_pgsql.o; then
+PGSQL_PREFIX=$(detect_brew_prefix libpq)
+if [ -z "$PGSQL_PREFIX" ]; then
+   if command -v brew >/dev/null 2>&1; then
+      echo "[3h/4] libpq not found — installing via brew..."
+      brew install libpq
+      PGSQL_PREFIX=$(detect_brew_prefix libpq)
+   fi
+fi
+if [ -z "$PGSQL_PREFIX" ]; then
+   echo "ERROR: libpq not found and brew unavailable. Install Homebrew, then: brew install libpq"
+   exit 1
+fi
+echo "[3h/4] libpq at $PGSQL_PREFIX"
+if needs_rebuild "$PROJDIR/source/backends/cocoa/cocoa_pgsql.c" cocoa_pgsql.o; then
    echo "[3h/4] Compiling cocoa_pgsql.c..."
    clang -c -O2 -mmacosx-version-min=10.15 \
       -I"$HBINC" -I"$PGSQL_PREFIX/include" \
       "$PROJDIR/source/backends/cocoa/cocoa_pgsql.c" -o cocoa_pgsql.o
    NEED_LINK=1
-elif [ -d "$PGSQL_PREFIX" ]; then
+else
    echo "[3h/4] cocoa_pgsql.o — up to date"
 fi
 
@@ -265,18 +304,10 @@ if [ "$NEED_LINK" -eq 0 ] && [ -f "${PROG}" ]; then
 fi
 
 echo "[4/4] Linking ${PROG}..."
-MYSQL_OBJ=""
-MYSQL_LDFLAGS=""
-if [ -f cocoa_mysql.o ]; then
-   MYSQL_OBJ="cocoa_mysql.o"
-   MYSQL_LDFLAGS="-L${MYSQL_PREFIX}/lib -lmysqlclient"
-fi
-PGSQL_OBJ=""
-PGSQL_LDFLAGS=""
-if [ -f cocoa_pgsql.o ]; then
-   PGSQL_OBJ="cocoa_pgsql.o"
-   PGSQL_LDFLAGS="-L${PGSQL_PREFIX}/lib -lpq"
-fi
+MYSQL_OBJ="cocoa_mysql.o"
+MYSQL_LDFLAGS="-L${MYSQL_PREFIX}/lib -lmysqlclient"
+PGSQL_OBJ="cocoa_pgsql.o"
+PGSQL_LDFLAGS="-L${PGSQL_PREFIX}/lib -lpq"
 clang++ -o ${PROG} \
    ${SRC}.o cocoa_core.o cocoa_inspector.o cocoa_webserver.o cocoa_editor.o cocoa_editor_reg.o cocoa_inspector_reg.o stddlgs_mac.o ${MYSQL_OBJ} ${PGSQL_OBJ} \
    hix_runtime.o hix_template.o \
