@@ -139,6 +139,17 @@ else
    echo "[4/6] gtk3_inspector.o — up to date"
 fi
 
+# [4b/6] DB bindings via runtime dlopen — no -dev headers needed at build
+# time. Mirrors Win hb_db_real.cpp pattern. libmysqlclient.so / libpq.so
+# resolved at launch; missing libs return safe defaults.
+rm -f hbmysql.o hbpgsql.o hbdb_stub.o
+if needs_rebuild "$PROJDIR/source/backends/gtk3/gtk3_db_real.c" hbdb_real.o; then
+   echo "[4b] Compiling DB bindings (dlopen-based)..."
+   gcc -c -O2 -I"$HBINC" \
+      "$PROJDIR/source/backends/gtk3/gtk3_db_real.c" -o hbdb_real.o
+   NEED_LINK=1
+fi
+
 # Skip link if nothing changed
 if [ "$NEED_LINK" -eq 0 ] && [ -f "${PROG}" ]; then
    echo "[5/6] ${PROG} — up to date (nothing changed)"
@@ -150,7 +161,10 @@ fi
 
 # [5/6] Link
 echo "[5/6] Linking ${PROG}..."
-gcc ${PROG}.o gtk3_core.o gtk3_inspector.o -g -o ${PROG} \
+EXTRA_OBJS=""
+[ -f hbdb_real.o ] && EXTRA_OBJS="$EXTRA_OBJS hbdb_real.o"
+
+gcc ${PROG}.o gtk3_core.o gtk3_inspector.o $EXTRA_OBJS -g -o ${PROG} \
    -L"$HBLIB" \
    -Wl,--start-group \
    -lhbcommon -lhbvm -lhbrtl -lhbrdd -lhbmacro -lhblang -lhbcpage -lhbpp \

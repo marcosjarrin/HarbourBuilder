@@ -388,6 +388,9 @@ typedef struct {
    int  FColumnCount;
    char FColumns[16][64];
    int  FColumnWidths[16];
+   /* Row data: "|"-separated rows, each row ";"-separated cells.
+    * Mirrors macOS FData / Win FCells format so codegen matches. */
+   char FRowData[8192];
 } HBListView;
 
 #define MAX_BROWSE_COLS 16
@@ -1374,18 +1377,91 @@ static void HBTreeView_CreateWidget( HBControl * p, GtkWidget * container )
    HBGeneric_CreateWidget( p, container, sw );
 }
 
+/* Build (or rebuild) the GtkTreeView for an HBListView from FColumns[] +
+ * FRowData. Caller passes the GtkScrolledWindow it lives in (or NULL to
+ * create a fresh one, which is the form-realize path). */
+static GtkWidget * HBListView_BuildTreeView( HBListView * lv )
+{
+   int nCols = lv->FColumnCount;
+   int stubCols = 0;
+   if( nCols <= 0 ) { nCols = 3; stubCols = 1; }
+   if( nCols > 16 ) nCols = 16;
+
+   GType types[16];
+   for( int i = 0; i < nCols; i++ ) types[i] = G_TYPE_STRING;
+   GtkListStore * store = gtk_list_store_newv( nCols, types );
+
+   GtkWidget * tv = gtk_tree_view_new_with_model( GTK_TREE_MODEL(store) );
+   for( int i = 0; i < nCols; i++ ) {
+      const char * title = stubCols ? "" : lv->FColumns[i];
+      char fallback[16];
+      if( stubCols ) { snprintf(fallback, sizeof(fallback), "Col%d", i+1); title = fallback; }
+      GtkCellRenderer * r = gtk_cell_renderer_text_new();
+      GtkTreeViewColumn * col = gtk_tree_view_column_new_with_attributes(
+         title, r, "text", i, NULL );
+      int w = lv->FColumnWidths[i] > 0 ? lv->FColumnWidths[i] : 100;
+      gtk_tree_view_column_set_resizable( col, TRUE );
+      gtk_tree_view_column_set_fixed_width( col, w );
+      gtk_tree_view_column_set_sizing( col, GTK_TREE_VIEW_COLUMN_FIXED );
+      gtk_tree_view_append_column( GTK_TREE_VIEW(tv), col );
+   }
+   if( lv->FGridLines )
+      gtk_tree_view_set_grid_lines( GTK_TREE_VIEW(tv), GTK_TREE_VIEW_GRID_LINES_BOTH );
+
+   /* Populate rows from FRowData ("|"-rows, ";"-cells) */
+   if( lv->FRowData[0] ) {
+      const char * src = lv->FRowData;
+      while( src && *src ) {
+         const char * pipe = strchr( src, '|' );
+         int rlen = pipe ? (int)(pipe - src) : (int)strlen(src);
+         if( rlen > 0 ) {
+            char rowbuf[2048];
+            int cp = rlen < (int)sizeof(rowbuf) - 1 ? rlen : (int)sizeof(rowbuf) - 1;
+            memcpy( rowbuf, src, cp ); rowbuf[cp] = 0;
+            GtkTreeIter it;
+            gtk_list_store_append( store, &it );
+            const char * cs = rowbuf;
+            int ci = 0;
+            while( cs && *cs && ci < nCols ) {
+               const char * semi = strchr( cs, ';' );
+               int clen = semi ? (int)(semi - cs) : (int)strlen(cs);
+               char cellbuf[512];
+               int cc = clen < (int)sizeof(cellbuf) - 1 ? clen : (int)sizeof(cellbuf) - 1;
+               memcpy( cellbuf, cs, cc ); cellbuf[cc] = 0;
+               gtk_list_store_set( store, &it, ci, cellbuf, -1 );
+               cs = semi ? semi + 1 : NULL;
+               ci++;
+            }
+         }
+         src = pipe ? pipe + 1 : NULL;
+      }
+   }
+   g_object_unref( store );
+   return tv;
+}
+
 static void HBListView_CreateWidget( HBControl * p, GtkWidget * container )
 {
+   HBListView * lv = (HBListView *) p;
    GtkWidget * sw = gtk_scrolled_window_new( NULL, NULL );
-   GtkListStore * store = gtk_list_store_new( 2, G_TYPE_STRING, G_TYPE_STRING );
-   GtkWidget * tv = gtk_tree_view_new_with_model( GTK_TREE_MODEL(store) );
-   GtkCellRenderer * r = gtk_cell_renderer_text_new();
-   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Name", r, "text", 0, NULL );
-   gtk_tree_view_insert_column_with_attributes( GTK_TREE_VIEW(tv), -1, "Value", r, "text", 1, NULL );
+   GtkWidget * tv = HBListView_BuildTreeView( lv );
    gtk_container_add( GTK_CONTAINER(sw), tv );
    gtk_scrolled_window_set_shadow_type( GTK_SCROLLED_WINDOW(sw), GTK_SHADOW_IN );
-   g_object_unref( store );
    HBGeneric_CreateWidget( p, container, sw );
+}
+
+/* Rebuild the inner GtkTreeView when aColumns/aItems change after the
+ * widget is realized. The outer GtkScrolledWindow stays in place so the
+ * form-fixed positioning is preserved. */
+static void HBListView_RefreshWidget( HBListView * lv )
+{
+   if( !lv->base.FWidget || !GTK_IS_SCROLLED_WINDOW( lv->base.FWidget ) ) return;
+   GtkWidget * sw = lv->base.FWidget;
+   GtkWidget * old = gtk_bin_get_child( GTK_BIN(sw) );
+   if( old ) gtk_widget_destroy( old );
+   GtkWidget * tv = HBListView_BuildTreeView( lv );
+   gtk_container_add( GTK_CONTAINER(sw), tv );
+   gtk_widget_show_all( sw );
 }
 
 static void HBProgressBar_CreateWidget( HBControl * p, GtkWidget * container )
@@ -3734,6 +3810,61 @@ HB_FUNC( UI_SETPROP )
          }
       }
    }
+   /* CT_LISTVIEW: aColumns -> FColumns[] (column titles), aItems -> FRowData
+    * (";"-cells, "|"-rows). Handle BEFORE the combo/listbox aItems branch so
+    * the listview branch claims the property first. */
+   else if( p->FControlType == CT_LISTVIEW &&
+            ( strcasecmp(szProp,"aColumns")==0 || strcasecmp(szProp,"aHeaders")==0 ||
+              strcasecmp(szProp,"aItems")==0 ) )
+   {
+      HBListView * lv = (HBListView *)p;
+      char * dst = NULL;
+      size_t cap = 0;
+      char tmpHdr[1024];
+      int isCols = ( strcasecmp(szProp,"aItems") != 0 );
+      if( isCols ) { dst = tmpHdr; cap = sizeof(tmpHdr); }
+      else         { dst = lv->FRowData; cap = sizeof(lv->FRowData); }
+
+      if( HB_ISCHAR(3) ) {
+         strncpy( dst, hb_parc(3), cap - 1 );
+         dst[cap - 1] = 0;
+      } else if( HB_ISARRAY(3) ) {
+         PHB_ITEM pArr = hb_param(3, HB_IT_ARRAY);
+         int n = (int) hb_arrayLen( pArr );
+         int pos = 0;
+         dst[0] = 0;
+         for( int i = 1; i <= n && pos < (int)cap - 2; i++ ) {
+            const char * s = hb_arrayGetCPtr( pArr, i );
+            int slen = (int)strlen( s );
+            if( i > 1 && pos < (int)cap - 1 ) dst[pos++] = '|';
+            if( pos + slen >= (int)cap - 1 ) slen = (int)cap - 1 - pos;
+            memcpy( dst + pos, s, (size_t)slen );
+            pos += slen;
+         }
+         dst[pos] = 0;
+      } else {
+         dst[0] = 0;
+      }
+      if( isCols ) {
+         /* Split FColumns[] from pipe-separated tmpHdr */
+         memset( lv->FColumns, 0, sizeof(lv->FColumns) );
+         int ci = 0;
+         const char * src = tmpHdr;
+         while( *src && ci < 16 ) {
+            const char * pipe = strchr( src, '|' );
+            int len = pipe ? (int)(pipe - src) : (int)strlen(src);
+            if( len > 63 ) len = 63;
+            memcpy( lv->FColumns[ci], src, len );
+            lv->FColumns[ci][len] = 0;
+            if( lv->FColumnWidths[ci] <= 0 ) lv->FColumnWidths[ci] = 100;
+            ci++;
+            if( !pipe ) break;
+            src = pipe + 1;
+         }
+         lv->FColumnCount = ci;
+      }
+      HBListView_RefreshWidget( lv );
+   }
    else if( strcasecmp(szProp,"aItems")==0 && HB_ISCHAR(3) &&
             (p->FControlType==CT_COMBOBOX || p->FControlType==CT_LISTBOX) )
    {
@@ -4026,6 +4157,19 @@ HB_FUNC( UI_GETPROP )
       }
       hb_retc( szCols );
    }
+   else if( p->FControlType == CT_LISTVIEW &&
+            ( strcasecmp(szProp,"aColumns")==0 || strcasecmp(szProp,"aHeaders")==0 ) )
+   {
+      HBListView * lv = (HBListView *)p;
+      char szCols[1024] = "";
+      for( int ci = 0; ci < lv->FColumnCount; ci++ ) {
+         if( ci > 0 ) strcat( szCols, "|" );
+         strncat( szCols, lv->FColumns[ci], sizeof(szCols) - strlen(szCols) - 1 );
+      }
+      hb_retc( szCols );
+   }
+   else if( p->FControlType == CT_LISTVIEW && strcasecmp(szProp,"aItems")==0 )
+      hb_retc( ((HBListView *)p)->FRowData );
    else if( strcasecmp(szProp,"cAppTitle")==0 && p->FControlType == CT_FORM )
       hb_retc( ((HBForm *)p)->FAppTitle );
    else if( strcasecmp(szProp,"aTabs")==0 && p->FControlType == CT_TABCONTROL2 )
@@ -4294,6 +4438,29 @@ HB_FUNC( UI_GETALLPROPS )
          ADD_N("nViewStyle",lv->FViewStyle,"Appearance");
          ADD_L("lGridLines",lv->FGridLines,"Appearance");
          ADD_N("nColumnCount",lv->FColumnCount,"Data");
+         /* aColumns + aItems as type "A" arrays for the inspector */
+         {
+            char szCols[1024] = "";
+            for( int ci = 0; ci < lv->FColumnCount; ci++ ) {
+               if( ci > 0 ) strcat( szCols, "|" );
+               strncat( szCols, lv->FColumns[ci], sizeof(szCols) - strlen(szCols) - 1 );
+            }
+            pRow = hb_itemArrayNew(4);
+            hb_arraySetC( pRow, 1, "aColumns" );
+            hb_arraySetC( pRow, 2, szCols );
+            hb_arraySetC( pRow, 3, "Data" );
+            hb_arraySetC( pRow, 4, "A" );
+            hb_arrayAdd( pArray, pRow );
+            hb_itemRelease( pRow );
+
+            pRow = hb_itemArrayNew(4);
+            hb_arraySetC( pRow, 1, "aItems" );
+            hb_arraySetC( pRow, 2, lv->FRowData );
+            hb_arraySetC( pRow, 3, "Data" );
+            hb_arraySetC( pRow, 4, "A" );
+            hb_arrayAdd( pArray, pRow );
+            hb_itemRelease( pRow );
+         }
          break;
       }
       case CT_TABCONTROL2: {
@@ -7432,7 +7599,7 @@ HB_FUNC( UI_PALETTELOADIMAGES )
          int nCtrlType = pt->btns[btnIdx].nControlType;
          if( imgIdx >= 0 && imgIdx < nIcons && icons[imgIdx] )
          {
-            GdkPixbuf * scaled = gdk_pixbuf_scale_simple( icons[imgIdx], 28, 28, GDK_INTERP_BILINEAR );
+            GdkPixbuf * scaled = gdk_pixbuf_scale_simple( icons[imgIdx], 44, 44, GDK_INTERP_BILINEAR );
             GtkWidget * img = gtk_image_new_from_pixbuf( scaled );
             g_object_unref( scaled );
 
@@ -7475,8 +7642,8 @@ HB_FUNC( UI_PALETTESETCOMPICON )
    GdkPixbuf * pb = gdk_pixbuf_new_from_file( szPath, &err );
    if( !pb ) { if( err ) g_error_free( err ); return; }
 
-   /* Scale to 28x28 to match palette button icon size */
-   GdkPixbuf * scaled = gdk_pixbuf_scale_simple( pb, 28, 28, GDK_INTERP_BILINEAR );
+   /* Scale to 44x44 to match palette button icon size */
+   GdkPixbuf * scaled = gdk_pixbuf_scale_simple( pb, 44, 44, GDK_INTERP_BILINEAR );
    g_object_unref( pb );
    if( !scaled ) return;
 

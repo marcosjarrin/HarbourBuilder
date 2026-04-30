@@ -51,7 +51,7 @@ function Main()
    aOpenFiles := {}
 
    // C++Builder classic proportions scaled to current screen
-   nBarH    := 72                            // toolbar(36) + tabs(24) + margins(12)
+   nBarH    := 90                            // two toolbar rows + tabs + 44x44 palette buttons
    nInsW    := Int( nScreenW * 0.18 ) + 20    // ~18% of screen width + 20px
 
    // === Window 1: Main Bar (full screen width) ===
@@ -608,7 +608,17 @@ static function CreatePalette()
       { 119, "tlua.png"          }, ;
       { 120, "truby.png"         }, ;
       { 200, "tmainmenu.png"     }, ;
-      { 201, "tpopupmenu.png"    }  ;
+      { 201, "tpopupmenu.png"    }, ;
+      { 121, "menu_icons/menu_git_init.png"   }, ;
+      { 122, "menu_icons/menu_git_commit.png" }, ;
+      { 123, "menu_icons/menu_git_branch.png" }, ;
+      { 124, "menu_icons/menu_git_log.png"    }, ;
+      { 125, "menu_icons/menu_git_diff.png"   }, ;
+      { 126, "menu_icons/menu_git_clone.png"  }, ;
+      { 127, "menu_icons/menu_git_stash.png"  }, ;
+      { 128, "menu_icons/menu_git_status.png" }, ;
+      { 129, "menu_icons/menu_git_log.png"    }, ;
+      { 130, "menu_icons/menu_git_pull.png"   }  ;
    }, {| a | UI_PaletteSetCompIcon( a[ 1 ], "../resources/" + a[ 2 ] ) } )
 
 return nil
@@ -869,6 +879,29 @@ static function RegenerateFormCode( cName, hForm )
                if ValType( nVal ) == "N" .and. nVal > 0
                   cCreate += '   ::o' + cCtrlName + ':Value := ' + LTrim( Str( nVal ) ) + e
                endif
+            case nType == 21  // ListView (TListView)
+               cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
+                  ' LISTVIEW ::o' + cCtrlName + ' OF Self SIZE ' + ;
+                  LTrim(Str(nCW)) + ", " + LTrim(Str(nCH))
+               cVal := UI_GetProp( hCtrl, "aColumns" )
+               if ValType( cVal ) == "C" .and. ! Empty( cVal )
+                  aHdrs := hb_ATokens( cVal, "|" )
+                  cCreate += ' COLUMNS '
+                  for kk := 1 to Len( aHdrs )
+                     if kk > 1; cCreate += ', '; endif
+                     cCreate += '"' + aHdrs[kk] + '"'
+                  next
+               endif
+               cVal := UI_GetProp( hCtrl, "aItems" )
+               if ValType( cVal ) == "C" .and. ! Empty( cVal )
+                  aHdrs := hb_ATokens( cVal, "|" )
+                  cCreate += ' ITEMS '
+                  for kk := 1 to Len( aHdrs )
+                     if kk > 1; cCreate += ', '; endif
+                     cCreate += '"' + aHdrs[kk] + '"'
+                  next
+               endif
+               cCreate += e
             case nType == 7  // ListBox
                cCreate += '   @ ' + LTrim(Str(nT)) + ", " + LTrim(Str(nL)) + ;
                   ' LISTBOX ::o' + cCtrlName + ' OF Self SIZE ' + ;
@@ -2347,6 +2380,47 @@ static function RestoreFormFromCode( hForm, cCode )
             endif
          case " GROUPBOX " $ Upper( cTrim )
             hCtrl := UI_GroupBoxNew( hForm, cText, nL, nT, nW, nH )
+         case " LISTVIEW " $ Upper( cTrim )
+            hCtrl := UI_ListViewNew( hForm, nL, nT, nW, nH )
+            // COLUMNS "c1", "c2" ... ITEMS "r1c1;r1c2", "r2c1;r2c2"
+            nPos := At( "COLUMNS ", Upper( cTrim ) )
+            if nPos > 0 .and. hCtrl != 0
+               cText := SubStr( cTrim, nPos + 8 )
+               nPos2 := At( "ITEMS ", Upper( cText ) )
+               if nPos2 > 0; cText := Left( cText, nPos2 - 1 ); endif
+               cVal := ""
+               do while ! Empty( cText )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  cText := SubStr( cText, nPos2 + 1 )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  if ! Empty( cVal ); cVal += "|"; endif
+                  cVal += Left( cText, nPos2 - 1 )
+                  cText := SubStr( cText, nPos2 + 1 )
+               enddo
+               if ! Empty( cVal )
+                  UI_SetProp( hCtrl, "aColumns", cVal )
+               endif
+            endif
+            nPos := At( "ITEMS ", Upper( cTrim ) )
+            if nPos > 0 .and. hCtrl != 0
+               cText := SubStr( cTrim, nPos + 6 )
+               cVal := ""
+               do while ! Empty( cText )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  cText := SubStr( cText, nPos2 + 1 )
+                  nPos2 := At( '"', cText )
+                  if nPos2 == 0; exit; endif
+                  if ! Empty( cVal ); cVal += "|"; endif
+                  cVal += Left( cText, nPos2 - 1 )
+                  cText := SubStr( cText, nPos2 + 1 )
+               enddo
+               if ! Empty( cVal )
+                  UI_SetProp( hCtrl, "aItems", cVal )
+               endif
+            endif
          case " LISTBOX " $ Upper( cTrim )
             hCtrl := UI_ListBoxNew( hForm, nL, nT, nW, nH )
             nPos := At( "ITEMS ", Upper( cTrim ) )
@@ -2871,7 +2945,7 @@ static function TBRun()
       cLog += "    OK" + Chr(10)
    endif
 
-   // Step 6: Compile GTK3 backend
+   // Step 6: Compile GTK3 backend + DB bindings
    if ! lError
       GTK_ProgressStep( "Compiling GTK3 backend..." )
       cLog += "[6] Compiling GTK3 backend..." + Chr(10)
@@ -2881,6 +2955,15 @@ static function TBRun()
               "  (pkg-config --exists webkit2gtk-4.0 2>/dev/null && echo '-DHAVE_WEBKIT2GTK '$(pkg-config --cflags webkit2gtk-4.0) || echo ''))" + ;
               " " + cProjDir + "/source/backends/gtk3/gtk3_core.c" + ;
               " -o " + cBuildDir + "/gtk3_core.o 2>&1"
+      GTK_ShellExec( cCmd )
+      // DB bindings via runtime dlopen — libmysqlclient.so / libpq.so
+      // resolved at launch. classes.prg EXTERNAL HBMYSQL_*/HBPGSQL_* link
+      // to safe-default impls when libs are missing on the user box.
+      GTK_ShellExec( "rm -f " + cBuildDir + "/hbmysql.o " + ;
+                     cBuildDir + "/hbpgsql.o " + cBuildDir + "/hbdb_stub.o" )
+      cCmd := "gcc -c -O2 -I" + cHbInc + ;
+              " " + cProjDir + "/source/backends/gtk3/gtk3_db_real.c" + ;
+              " -o " + cBuildDir + "/hbdb_real.o 2>&1"
       GTK_ShellExec( cCmd )
       cLog += "    OK" + Chr(10)
    endif
@@ -2893,6 +2976,7 @@ static function TBRun()
               " " + cBuildDir + "/main.o" + ;
               " " + cBuildDir + "/classes.o" + ;
               " " + cBuildDir + "/gtk3_core.o" + ;
+              If( File( cBuildDir + "/hbdb_real.o" ), " " + cBuildDir + "/hbdb_real.o", "" ) + ;
               " -L" + cHbLib + ;
               " -Wl,--start-group" + ;
               " -lhbvm -lhbrtl -lhbcommon -lhbcpage -lhblang" + ;

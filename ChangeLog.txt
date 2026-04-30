@@ -1,6 +1,44 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-30
+
+  - feat(linux-palette): Per-component PNG icons for the Git tab
+    (CT 121-130 → menu_icons/menu_git_*.png) wired in
+    hbbuilder_linux.prg AEval table. Mirrors the macOS port.
+
+  - feat(linux-palette): Palette icons rendered at 44x44 (was 28x28).
+    UI_PaletteLoadImages and UI_PaletteSetCompIcon both scale to 44px
+    via gdk_pixbuf_scale_simple. Main bar nBarH 72 → 90 to fit the
+    taller palette buttons.
+
+  - feat(linux-listview): TListView (CT_LISTVIEW = 21) on GTK
+    GtkTreeView gains real aColumns / aItems support. HBListView
+    struct extended with FRowData (";"-cells, "|"-rows). New
+    HBListView_BuildTreeView builds the inner GtkTreeView with a
+    GtkListStore sized to FColumnCount (3-column stub fallback when
+    empty), populates rows from FRowData, and HBListView_RefreshWidget
+    rebuilds it in place after aColumns / aItems changes. UI_SetProp
+    on CT_LISTVIEW splits aColumns → FColumns[] and aItems →
+    FRowData, claimed before the combo/listbox aItems branch so it
+    no longer routes to that path. UI_GetProp returns the joined
+    FColumns or FRowData. UI_GetAllProps emits aColumns + aItems as
+    type "A" for the inspector. hbbuilder_linux.prg: codegen emits
+    "@ y, x LISTVIEW ::oCtrl OF Self SIZE w, h COLUMNS ... ITEMS ..."
+    and the restore parser handles the LISTVIEW DSL (COLUMNS
+    terminates at ITEMS to avoid swallowing item rows).
+
+  - feat(linux-build): Real HBMYSQL_* / HBPGSQL_* impl via runtime
+    dlopen — mirrors the Win hb_db_real.cpp pattern, no -dev headers
+    or import libs at build time. New source/backends/gtk3/gtk3_db_real.c
+    matches mysql.h / libpq-fe.h ABI exactly and resolves
+    libmysqlclient.so / libpq.so at launch, falling back across
+    common SONAMEs (libmysqlclient.so.21/.20/.18, libmariadb.so.3,
+    libpq.so.5). Missing libs return safe defaults (0 / false /
+    empty array) so the IDE and user-app builds stay link-clean on
+    stock systems without DB packages installed. Linked into both
+    the IDE (build_linux.sh) and TBRun user-app builds.
+
 2026-04-29
 
   - feat(macos-palette): Per-component PNG icons for the Git tab
