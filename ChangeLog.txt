@@ -1,6 +1,15 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-30c
+
+  - fix(macos-tbrun): Copy cocoa_mysql.c + cocoa_pgsql.c into .app bundle
+    so TBRun (F9) can compile them for user app linking. Without them the
+    linker fails with "Undefined symbols for _HB_FUN_HBMYSQL_*" because
+    the source files were missing from Resources/backends/cocoa/.
+  - feat(macos-tbrun): Auto-detect arm64 vs x86_64 via `uname -m` and
+    pass -arch accordingly so DB bindings compile for the right arch.
+
 2026-04-30b
 
   - feat(macos-designform): Default design form size 400x300 -> 572x333

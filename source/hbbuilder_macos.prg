@@ -3973,6 +3973,7 @@ static function TBRun()
    local cOldTab, cSepLine, nP1, nP2, cUserCode
    local cAppTitle, cAppName
    local cMysqlPfx, cPgsqlPfx
+   local cArch, cArchFlags
    local hForm, nCount, hCtrl, oReport, oBand, cBandType, nBandH
    static nLastHash := 0
 
@@ -4247,7 +4248,10 @@ static function TBRun()
    if ! lError
       MAC_ProgressStep( 6, "Compiling Cocoa backend..." )
       cLog += "[6] Compiling Cocoa backend..." + Chr(10)
-      cCmd := "clang -c -O2 -fobjc-arc -I" + cHbInc + ;
+      // Detect host architecture (arm64 or x86_64)
+      cArch := AllTrim( MAC_ShellExec( "uname -m" ) )
+      cArchFlags := iif( cArch == "arm64", " -arch arm64", "" )
+      cCmd := "clang -c -O2" + cArchFlags + " -fobjc-arc -I" + cHbInc + ;
               " " + cBackends + "/cocoa_core.m" + ;
               " -o " + cBuildDir + "/cocoa_core.o 2>&1"
       MAC_ShellExec( cCmd )
@@ -4280,10 +4284,12 @@ static function TBRun()
          cMysqlPfx := "/opt/homebrew/opt/mysql-client"
       endif
       if ! Empty( cMysqlPfx )
-         cCmd := "clang -c -O2 -I" + cHbInc + " -I" + cMysqlPfx + "/include/mysql" + ;
-                 " " + cBackends + "/cocoa_mysql.c" + ;
-                 " -o " + cBuildDir + "/cocoa_mysql.o 2>&1"
-         MAC_ShellExec( cCmd )
+         if File( cBackends + "/cocoa_mysql.c" )
+            cCmd := "clang -c -O2" + cArchFlags + " -I" + cHbInc + " -I" + cMysqlPfx + "/include/mysql" + ;
+                    " " + cBackends + "/cocoa_mysql.c" + ;
+                    " -o " + cBuildDir + "/cocoa_mysql.o 2>&1"
+            MAC_ShellExec( cCmd )
+         endif
       endif
       // PostgreSQL bindings
       cPgsqlPfx := ""
@@ -4293,10 +4299,12 @@ static function TBRun()
          cPgsqlPfx := "/opt/homebrew/opt/libpq"
       endif
       if ! Empty( cPgsqlPfx )
-         cCmd := "clang -c -O2 -I" + cHbInc + " -I" + cPgsqlPfx + "/include" + ;
-                 " " + cBackends + "/cocoa_pgsql.c" + ;
-                 " -o " + cBuildDir + "/cocoa_pgsql.o 2>&1"
-         MAC_ShellExec( cCmd )
+         if File( cBackends + "/cocoa_pgsql.c" )
+            cCmd := "clang -c -O2" + cArchFlags + " -I" + cHbInc + " -I" + cPgsqlPfx + "/include" + ;
+                    " " + cBackends + "/cocoa_pgsql.c" + ;
+                    " -o " + cBuildDir + "/cocoa_pgsql.o 2>&1"
+            MAC_ShellExec( cCmd )
+         endif
       endif
       cLog += "    OK" + Chr(10)
    endif

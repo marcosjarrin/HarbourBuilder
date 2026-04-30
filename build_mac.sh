@@ -344,6 +344,8 @@ cp "$PROJDIR/source/debugger/dbghook.c" "$APP/Contents/Resources/" 2>/dev/null
 # Copy backends for user project compilation
 mkdir -p "$APP/Contents/Resources/backends/cocoa"
 cp "$PROJDIR/source/backends/cocoa/cocoa_core.m" "$APP/Contents/Resources/backends/cocoa/" 2>/dev/null
+cp "$PROJDIR/source/backends/cocoa/cocoa_mysql.c" "$APP/Contents/Resources/backends/cocoa/" 2>/dev/null
+cp "$PROJDIR/source/backends/cocoa/cocoa_pgsql.c" "$APP/Contents/Resources/backends/cocoa/" 2>/dev/null
 cp "$PROJDIR/source/backends/cocoa/cocoa_editor.mm" "$APP/Contents/Resources/backends/cocoa/" 2>/dev/null
 cp "$PROJDIR/source/backends/cocoa/cocoa_inspector.m" "$APP/Contents/Resources/backends/cocoa/" 2>/dev/null
 cp "$PROJDIR/source/backends/cocoa/cocoa_webserver.m" "$APP/Contents/Resources/backends/cocoa/" 2>/dev/null
