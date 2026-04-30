@@ -107,9 +107,9 @@ function Main()
    nBottomY := nScreenH                        // no bottom margin
    nEditorH := nBottomY - nEditorTop
 
-   // Form Designer: centered in editor area, slightly above center
-   nFormX := nEditorX + Int( ( nEditorW - 400 ) / 2 )
-   nFormY := nEditorTop + Int( ( nEditorH - 300 ) * 0.35 )
+   // Form Designer: fixed position
+   nFormX := 883
+   nFormY := 361
 
    // Menu bar
    DEFINE MENUBAR OF oIDE
@@ -691,7 +691,7 @@ static function CreateDesignForm( nX, nY )
    cName := "Form" + LTrim( Str( nIdx ) )
 
    // Create new empty form (like C++Builder File > New > VCL Forms Application)
-   DEFINE FORM oDesignForm TITLE cName SIZE 400, 300 FONT "Helvetica Neue", 12
+   DEFINE FORM oDesignForm TITLE cName SIZE 572, 333 FONT "Helvetica Neue", 12
    UI_FormSetPos( oDesignForm:hCpp, nX, nY )
 
    // Register in project form list
@@ -859,8 +859,8 @@ static function RegenerateFormCode( cName, hForm )
       cTitle := cName
       nFL    := 0
       nFT    := 0
-      nW     := 400
-      nH     := 300
+      nW     := 572
+      nH     := 333
       nClr   := 15790320  // 0x00F0F0F0
    endif
 

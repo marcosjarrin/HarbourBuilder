@@ -1,6 +1,12 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-04-30b
+
+  - feat(macos-designform): Default design form size 400x300 -> 572x333
+    and position pinned to (883, 361) so Form1 lands inside the editor
+    area on standard 1920x1080 layouts.
+
 2026-04-30
 
   - feat(linux-toolbar): Speedbar icons rendered at 28x28 (was 20x20)
