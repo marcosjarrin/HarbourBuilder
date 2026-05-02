@@ -4656,6 +4656,28 @@ HB_FUNC( UI_FORMISKEYWINDOW ) { HBForm * p = GetForm(1); hb_retl( p && p->FWindo
 HB_FUNC( UI_FORMDESTROY )   { HBForm * p = GetForm(1); if( p ) [s_allControls removeObject:p]; }
 HB_FUNC( UI_FORMRESULT )    { HBForm * p = GetForm(1); hb_retni( p ? p->FModalResult : 0 ); }
 
+/* UI_FormRealizeChildren( hForm ) — create NSViews for any children that were
+   added after the form was already shown (e.g. via programmatic UI_LabelNew /
+   UI_ButtonNew calls from AIBuildForm). Skips children that already have a view. */
+HB_FUNC( UI_FORMREALIZECHILDREN )
+{
+   HBForm * f = GetForm(1);
+   if( !f || !f->FContentView ) return;
+   for( int i = 0; i < f->FChildCount; i++ ) {
+      HBControl * c = f->FChildren[i];
+      if( !c || c->FView ) continue;
+      if( !c->FFont ) c->FFont = f->FFormFont;
+      c->FTop += f->FClientTop;
+      [c createViewInParent:f->FContentView];
+   }
+   /* Keep design overlay on top so rubber-band selection still works */
+   if( f->FOverlayView ) {
+      [f->FOverlayView removeFromSuperview];
+      [f->FContentView addSubview:f->FOverlayView];
+   }
+   [f->FContentView setNeedsDisplay:YES];
+}
+
 /* --- Control creation --- */
 
 HB_FUNC( UI_LABELNEW )

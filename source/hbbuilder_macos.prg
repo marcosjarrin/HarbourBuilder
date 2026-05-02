@@ -353,6 +353,9 @@ function Main()
    // Dark mode for all IDE windows (macOS 10.14+)
    MAC_SetAppDarkMode( .T. )
 
+   // Show AI Assistant by default at startup
+   MAC_AIAssistantPanel()
+
    // When IDE closes, destroy all secondary windows
    oIDE:OnClose := { || IDE_DebugStop(), DestroyAllForms(), InspectorClose(), ;
                        CodeEditorDestroy( hCodeEditor ) }
@@ -4887,6 +4890,99 @@ return .t.
 
 static function ShowAIAssistant()
    MAC_AIAssistantPanel()
+return nil
+
+// AIBuildForm( cJson ) - called from Obj-C after Ollama returns JSON form spec.
+// Public (non-static) so it's reachable via hb_dynsymFindName.
+function AIBuildForm( cJson )
+
+   local hSpec, aCtrls, hCtrlSpec, cType, nL, nT, nW, nH, cText, cName
+   local hForm, hCtrlNew, i, oErr
+
+   if ! HB_ISCHAR( cJson ) .or. Empty( cJson )
+      return nil
+   endif
+
+   begin sequence with { | e | break( e ) }
+      hSpec := hb_jsonDecode( cJson )
+   recover using oErr
+      hSpec := nil
+   end sequence
+
+   if ! HB_ISHASH( hSpec )
+      return nil
+   endif
+
+   // Create a fresh design form
+   MenuNewForm()
+   if oDesignForm == nil
+      return nil
+   endif
+   hForm := oDesignForm:hCpp
+
+   // Apply form-level properties
+   if "title" $ hSpec .and. HB_ISCHAR( hSpec[ "title" ] )
+      UI_SetProp( hForm, "cText", hSpec[ "title" ] )
+   endif
+   if "w" $ hSpec .and. HB_ISNUMERIC( hSpec[ "w" ] ) .and. hSpec[ "w" ] > 50
+      UI_SetProp( hForm, "nWidth", hSpec[ "w" ] )
+   endif
+   if "h" $ hSpec .and. HB_ISNUMERIC( hSpec[ "h" ] ) .and. hSpec[ "h" ] > 50
+      UI_SetProp( hForm, "nHeight", hSpec[ "h" ] )
+   endif
+
+   // Add controls
+   if "controls" $ hSpec .and. HB_ISARRAY( hSpec[ "controls" ] )
+      aCtrls := hSpec[ "controls" ]
+      for i := 1 to Len( aCtrls )
+         hCtrlSpec := aCtrls[ i ]
+         if ! HB_ISHASH( hCtrlSpec )
+            loop
+         endif
+         cType := iif( "type" $ hCtrlSpec .and. HB_ISCHAR( hCtrlSpec[ "type" ] ), Upper( hCtrlSpec[ "type" ] ), "" )
+         nL    := iif( "x" $ hCtrlSpec .and. HB_ISNUMERIC( hCtrlSpec[ "x" ] ), hCtrlSpec[ "x" ], 10 )
+         nT    := iif( "y" $ hCtrlSpec .and. HB_ISNUMERIC( hCtrlSpec[ "y" ] ), hCtrlSpec[ "y" ], 10 )
+         nW    := iif( "w" $ hCtrlSpec .and. HB_ISNUMERIC( hCtrlSpec[ "w" ] ), hCtrlSpec[ "w" ], 80 )
+         nH    := iif( "h" $ hCtrlSpec .and. HB_ISNUMERIC( hCtrlSpec[ "h" ] ), hCtrlSpec[ "h" ], 24 )
+         cText := iif( "text" $ hCtrlSpec .and. HB_ISCHAR( hCtrlSpec[ "text" ] ), hCtrlSpec[ "text" ], "" )
+         cName := iif( "name" $ hCtrlSpec .and. HB_ISCHAR( hCtrlSpec[ "name" ] ), hCtrlSpec[ "name" ], "" )
+
+         hCtrlNew := 0
+         do case
+         case cType == "TLABEL"
+            hCtrlNew := UI_LabelNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TEDIT"
+            hCtrlNew := UI_EditNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TBUTTON"
+            hCtrlNew := UI_ButtonNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TCHECKBOX"
+            hCtrlNew := UI_CheckBoxNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TCOMBOBOX"
+            hCtrlNew := UI_ComboBoxNew( hForm, nL, nT, nW, nH )
+         case cType == "TGROUPBOX"
+            hCtrlNew := UI_GroupBoxNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TRADIOBUTTON"
+            hCtrlNew := UI_RadioButtonNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TMEMO"
+            hCtrlNew := UI_MemoNew( hForm, cText, nL, nT, nW, nH )
+         endcase
+
+         if hCtrlNew != nil .and. hCtrlNew != 0
+            if ! Empty( cName )
+               UI_SetProp( hCtrlNew, "cName", cName )
+            endif
+         endif
+      next
+   endif
+
+   // Refresh inspector and regenerate code
+   // Materialize NSViews for the newly-added controls (form already shown)
+   UI_FormRealizeChildren( hForm )
+
+   InspectorPopulateCombo( hForm )
+   InspectorRefresh( hForm )
+   SyncDesignerToCode()
+
 return nil
 
 // === Project Inspector ===

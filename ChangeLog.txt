@@ -1,6 +1,61 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-05-02
+
+  - feat(macos-ai): AI Assistant panel reworked end-to-end.
+    * Auto-opens at IDE startup, anchored right side of screen and
+      vertically centered (right margin 40px).
+    * Conversation text rendered in light gray (0.83) via attributed-
+      string append helper s_aiAppend(); typingAttributes set so
+      programmatically-appended text keeps the color (previous
+      mutableString:appendString lost it). Auto-scrolls to bottom on
+      every append.
+    * Bottom controls (input/Send/Clear) switched from NSViewMinYMargin
+      to NSViewMaxYMargin so they stay anchored at the bottom on resize
+      instead of drifting up.
+    * Pressing Enter in the input field sends the message (target/action
+      wired to sendMessage:).
+    * Spinning NSProgressIndicator added to the right of the Clear
+      button; runs while waiting for Ollama, hidden when idle.
+    * On open: detects whether Ollama daemon is running via GET
+      localhost:11434/api/tags. If down, tries `open -gja Ollama`,
+      falls back to spawning `ollama serve` from /opt/homebrew/bin or
+      /usr/local/bin, polls 6s for readiness. If not installed, shows
+      NSAlert offering to open https://ollama.com/download.
+    * Model combo populated dynamically from /api/tags. If no models
+      installed, auto-pulls `gemma3` (latest Gemma in Ollama registry)
+      with live progress streamed into the chat.
+
+  - feat(macos-ai-formgen): AI Assistant can now design forms from
+    natural-language requests.
+    * Single dispatch path: LLM classifies user message into FORM /
+      CODE / CHAT and responds in the matching format. FORM responses
+      are JSON specs (title/w/h/controls); CODE responses are fenced
+      Harbour snippets; CHAT is plain text.
+    * Few-shot examples for "dos botones ok y cancel", "haz un login",
+      "tres edits"; temperature 0.2 for deterministic layouts.
+    * Uses /api/chat with separate system + user roles and strips any
+      ```json ... ``` fences the model wraps around the spec.
+    * New public Harbour function AIBuildForm( cJson ): decodes via
+      hb_jsonDecode, calls MenuNewForm() to spawn a fresh design form,
+      applies title/size, drops TLabel/TEdit/TButton/TCheckBox/
+      TComboBox/TGroupBox/TRadioButton/TMemo controls via the existing
+      UI_*New() entry points, assigns names via UI_SetProp, then runs
+      InspectorPopulateCombo + InspectorRefresh + SyncDesignerToCode.
+    * Obj-C side calls AIBuildForm via hb_dynsymFindName +
+      hb_vmPushDynSym + hb_vmFunction so no Harbour-side polling is
+      needed.
+
+  - fix(macos-form-realize): New HB_FUNC UI_FormRealizeChildren( hForm )
+    creates NSViews for any HBControl children added after the form is
+    already on screen. AIBuildForm calls it after dropping all controls
+    so they actually render — previously UI_LabelNew/UI_ButtonNew etc.
+    only `addChild`d to the internal array and the views were created
+    only at form-show time, leaving programmatically-added controls
+    invisible. The helper applies FClientTop offset, re-stacks the
+    design overlay on top, and triggers a redraw.
+
 2026-04-30d
 
   - fix(macos-build): build_mac.sh now detects Homebrew prefix per arch

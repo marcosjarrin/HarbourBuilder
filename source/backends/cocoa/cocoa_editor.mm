@@ -2643,10 +2643,239 @@ static NSWindow * s_aiPanel = nil;
 static NSTextView * s_aiOutput = nil;
 static NSTextField * s_aiInput = nil;
 static NSPopUpButton * s_aiModelBtn = nil;
+static NSProgressIndicator * s_aiSpinner = nil;
+
+static NSDictionary * s_aiTextAttrs( void )
+{
+   return @{
+      NSForegroundColorAttributeName: [NSColor colorWithCalibratedRed:0.83 green:0.83 blue:0.83 alpha:1],
+      NSFontAttributeName: [NSFont monospacedSystemFontOfSize:13 weight:NSFontWeightRegular]
+   };
+}
+
+static void s_aiAppend( NSString * s )
+{
+   NSAttributedString * as = [[NSAttributedString alloc] initWithString:s attributes:s_aiTextAttrs()];
+   [[s_aiOutput textStorage] appendAttributedString:as];
+   NSUInteger len = [[s_aiOutput textStorage] length];
+   [s_aiOutput scrollRangeToVisible:NSMakeRange( len, 0 )];
+}
+
+static NSData * s_aiSyncGet( NSString * urlStr, NSTimeInterval to )
+{
+   __block NSData * out = nil;
+   dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+   NSMutableURLRequest * r = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlStr]];
+   [r setTimeoutInterval:to];
+   NSURLSessionDataTask * t = [[NSURLSession sharedSession] dataTaskWithRequest:r
+      completionHandler:^(NSData * data, NSURLResponse * resp, NSError * err) {
+         (void)resp;
+         if( !err ) out = data;
+         dispatch_semaphore_signal( sem );
+      }];
+   [t resume];
+   dispatch_semaphore_wait( sem, dispatch_time( DISPATCH_TIME_NOW, (int64_t)( ( to + 0.5 ) * NSEC_PER_SEC ) ) );
+   return out;
+}
+
+static BOOL s_aiOllamaUp( void )
+{
+   return s_aiSyncGet( @"http://localhost:11434/api/tags", 1.0 ) != nil;
+}
+
+static NSString * s_aiFindOllama( void )
+{
+   NSArray * cands = @[ @"/opt/homebrew/bin/ollama", @"/usr/local/bin/ollama", @"/usr/bin/ollama" ];
+   for( NSString * p in cands )
+      if( [[NSFileManager defaultManager] isExecutableFileAtPath:p] ) return p;
+   return nil;
+}
+
+static BOOL s_aiOllamaInstalled( void )
+{
+   if( s_aiFindOllama() ) return YES;
+   NSArray * apps = @[ @"/Applications/Ollama.app",
+                       [NSHomeDirectory() stringByAppendingPathComponent:@"Applications/Ollama.app"] ];
+   for( NSString * p in apps )
+      if( [[NSFileManager defaultManager] fileExistsAtPath:p] ) return YES;
+   return NO;
+}
+
+static BOOL s_aiTryStartOllama( void )
+{
+   /* Prefer Ollama.app if installed (manages daemon properly) */
+   @try {
+      NSTask * t = [[NSTask alloc] init];
+      [t setLaunchPath:@"/usr/bin/open"];
+      [t setArguments:@[ @"-gja", @"Ollama" ]];
+      [t setStandardOutput:[NSFileHandle fileHandleWithNullDevice]];
+      [t setStandardError:[NSFileHandle fileHandleWithNullDevice]];
+      [t launch];
+      [t waitUntilExit];
+      if( [t terminationStatus] == 0 ) return YES;
+   } @catch( NSException * e ) {}
+
+   /* Fallback: ollama serve as detached child */
+   NSString * bin = s_aiFindOllama();
+   if( !bin ) return NO;
+   @try {
+      NSTask * s = [[NSTask alloc] init];
+      [s setLaunchPath:bin];
+      [s setArguments:@[ @"serve" ]];
+      [s setStandardOutput:[NSFileHandle fileHandleWithNullDevice]];
+      [s setStandardError:[NSFileHandle fileHandleWithNullDevice]];
+      [s launch];
+      return YES;
+   } @catch( NSException * e ) {
+      return NO;
+   }
+}
+
+static NSArray * s_aiFetchModels( void )
+{
+   NSData * d = s_aiSyncGet( @"http://localhost:11434/api/tags", 3.0 );
+   if( !d ) return nil;
+   NSDictionary * j = [NSJSONSerialization JSONObjectWithData:d options:0 error:nil];
+   if( ![j isKindOfClass:[NSDictionary class]] ) return nil;
+   NSArray * arr = j[@"models"];
+   if( ![arr isKindOfClass:[NSArray class]] ) return nil;
+   NSMutableArray * names = [NSMutableArray array];
+   for( NSDictionary * m in arr )
+      if( [m isKindOfClass:[NSDictionary class]] && m[@"name"] )
+         [names addObject:m[@"name"]];
+   return names;
+}
+
+static void s_aiPullModel( NSString * model )
+{
+   NSString * bin = s_aiFindOllama();
+   if( !bin ) {
+      dispatch_async( dispatch_get_main_queue(), ^{
+         s_aiAppend( [NSString stringWithFormat:@"Cannot pull %@: ollama CLI not found in /opt/homebrew/bin or /usr/local/bin.\n", model] );
+      });
+      return;
+   }
+   dispatch_async( dispatch_get_main_queue(), ^{
+      s_aiAppend( [NSString stringWithFormat:@"\nDownloading model %@ — this may take several minutes...\n", model] );
+   });
+   dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
+      NSTask * t = [[NSTask alloc] init];
+      [t setLaunchPath:bin];
+      [t setArguments:@[ @"pull", model ]];
+      NSPipe * outPipe = [NSPipe pipe];
+      [t setStandardOutput:outPipe];
+      [t setStandardError:outPipe];
+
+      NSFileHandle * fh = [outPipe fileHandleForReading];
+      fh.readabilityHandler = ^(NSFileHandle * h) {
+         NSData * d = [h availableData];
+         if( [d length] == 0 ) return;
+         NSString * s = [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding];
+         if( !s ) return;
+         dispatch_async( dispatch_get_main_queue(), ^{
+            NSCharacterSet * sep = [NSCharacterSet characterSetWithCharactersInString:@"\r\n"];
+            for( NSString * line in [s componentsSeparatedByCharactersInSet:sep] )
+               if( [line length] > 0 )
+                  s_aiAppend( [NSString stringWithFormat:@"  %@\n", line] );
+         });
+      };
+
+      int rc = -1;
+      @try {
+         [t launch];
+         [t waitUntilExit];
+         rc = [t terminationStatus];
+      } @catch( NSException * e ) {
+         dispatch_async( dispatch_get_main_queue(), ^{
+            s_aiAppend( [NSString stringWithFormat:@"Pull failed: %@\n", [e reason]] );
+         });
+         fh.readabilityHandler = nil;
+         return;
+      }
+      fh.readabilityHandler = nil;
+
+      dispatch_async( dispatch_get_main_queue(), ^{
+         if( rc == 0 )
+            s_aiAppend( [NSString stringWithFormat:@"\nModel %@ installed successfully.\n", model] );
+         else
+            s_aiAppend( [NSString stringWithFormat:@"\nPull failed (exit code %d).\n", rc] );
+      });
+
+      NSArray * names = s_aiFetchModels();
+      dispatch_async( dispatch_get_main_queue(), ^{
+         if( names && [names count] > 0 ) {
+            [s_aiModelBtn removeAllItems];
+            for( NSString * n in names ) [s_aiModelBtn addItemWithTitle:n];
+         }
+      });
+   });
+}
+
+static void s_aiInitOllamaAsync( void )
+{
+   dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
+      BOOL up = s_aiOllamaUp();
+      if( !up ) {
+         if( !s_aiOllamaInstalled() ) {
+            dispatch_async( dispatch_get_main_queue(), ^{
+               s_aiAppend( @"\nOllama is not installed on this system.\n" );
+               NSAlert * a = [[NSAlert alloc] init];
+               [a setMessageText:@"Ollama is not installed"];
+               [a setInformativeText:@"Ollama runs local LLMs (codellama, llama3, etc.) on your Mac.\n\nDo you want to open the download page to install it?"];
+               [a addButtonWithTitle:@"Open Download Page"];
+               [a addButtonWithTitle:@"Cancel"];
+               [a setAlertStyle:NSAlertStyleInformational];
+               NSModalResponse r = [a runModal];
+               if( r == NSAlertFirstButtonReturn ) {
+                  [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"https://ollama.com/download"]];
+                  s_aiAppend( @"Opened https://ollama.com/download in your browser. Reopen this panel after installing.\n" );
+               } else {
+                  s_aiAppend( @"Install cancelled. AI Assistant unavailable until Ollama is installed.\n" );
+               }
+            });
+            return;
+         }
+         dispatch_async( dispatch_get_main_queue(), ^{
+            s_aiAppend( @"\nOllama not running — attempting to start...\n" );
+         });
+         BOOL started = s_aiTryStartOllama();
+         if( started ) {
+            for( int i = 0; i < 24; i++ ) {
+               [NSThread sleepForTimeInterval:0.25];
+               if( s_aiOllamaUp() ) { up = YES; break; }
+            }
+         }
+         if( !up ) {
+            dispatch_async( dispatch_get_main_queue(), ^{
+               s_aiAppend( started ? @"Started Ollama, but API still unreachable on localhost:11434\n"
+                                   : @"Could not start Ollama daemon. Run `ollama serve` manually.\n" );
+            });
+            return;
+         }
+      }
+      NSArray * names = s_aiFetchModels();
+      if( names && [names count] > 0 ) {
+         dispatch_async( dispatch_get_main_queue(), ^{
+            [s_aiModelBtn removeAllItems];
+            for( NSString * n in names ) [s_aiModelBtn addItemWithTitle:n];
+            s_aiAppend( [NSString stringWithFormat:@"Loaded %lu model(s) from Ollama.\n",
+                                                  (unsigned long)[names count]] );
+         });
+      } else {
+         dispatch_async( dispatch_get_main_queue(), ^{
+            [s_aiModelBtn removeAllItems];
+            [s_aiModelBtn addItemWithTitle:@"(installing default model...)"];
+            s_aiAppend( @"No models installed. Pulling default model gemma3...\n" );
+         });
+         s_aiPullModel( @"gemma3" );
+      }
+   });
+}
 
 @interface HBAISendTarget : NSObject
 - (void)sendMessage:(id)sender;
 - (void)clearChat:(id)sender;
+- (void)designFormFromPrompt:(NSString *)userDesc model:(NSString *)model;
 @end
 
 @implementation HBAISendTarget
@@ -2658,49 +2887,131 @@ static NSPopUpButton * s_aiModelBtn = nil;
 
    NSString * model = [s_aiModelBtn titleOfSelectedItem];
 
-   /* Append user message to chat */
    NSString * userMsg = [NSString stringWithFormat:@"\n> %@\n", prompt];
-   [[[s_aiOutput textStorage] mutableString] appendString:userMsg];
+   s_aiAppend( userMsg );
    [s_aiInput setStringValue:@""];
-   [s_aiOutput scrollRangeToVisible:NSMakeRange([[s_aiOutput textStorage] length], 0)];
+   [s_aiSpinner startAnimation:nil];
 
-   /* Call Ollama API asynchronously */
+   /* Single path: LLM decides if request is form-design, Harbour code, or chat. */
+   NSString * sysPrompt =
+      @"You are HbBuilder AI Assistant inside a Harbour IDE with a Delphi-style form designer.\n"
+      @"Classify each user message into exactly ONE category and respond strictly in its format.\n"
+      @"\n"
+      @"CATEGORIES:\n"
+      @"FORM — user wants to create or modify a UI form, dialog, window, or its controls.\n"
+      @"        Response format: a single JSON object, NOTHING else. No prose. No code fence. No comments.\n"
+      @"        JSON schema:\n"
+      @"        {\"title\":string,\"w\":int,\"h\":int,\"controls\":["
+      @"{\"type\":string,\"x\":int,\"y\":int,\"w\":int,\"h\":int,\"text\":string,\"name\":string}]}\n"
+      @"        type ∈ {TLabel,TEdit,TButton,TCheckBox,TComboBox,TGroupBox,TRadioButton,TMemo}.\n"
+      @"        Sizes: label 80x20, edit 180x22, button 80x28. Step y=30. Labels x=20, fields x=110.\n"
+      @"        Names: lblXxx, edtXxx, btnXxx, chkXxx, cboXxx, grpXxx, rbXxx, memXxx.\n"
+      @"\n"
+      @"CODE — user wants Harbour code (generate, refactor, explain, snippet).\n"
+      @"        Response format: short context line + a fenced block ```harbour ... ```. No JSON.\n"
+      @"\n"
+      @"CHAT — anything else (greetings, definitions, IDE questions, conversation).\n"
+      @"        Response format: plain natural-language text. No JSON. No code fence.\n"
+      @"\n"
+      @"Heuristics: words like \"form\", \"login\", \"signup\", \"dialog\", \"button\", \"edit\", "
+      @"\"checkbox\", \"label\", \"window\", \"ventana\", \"botones\", \"diseña\", \"haz un\", "
+      @"\"crea un\", \"build a\", \"add\", \"añade\", count words (\"dos\", \"tres\", \"two\", \"3\") "
+      @"+ control noun → FORM.\n"
+      @"\n"
+      @"Strictly obey the response format of the chosen category. Never mix.\n"
+      @"\n"
+      @"FORM EXAMPLES (study these carefully — match this style):\n"
+      @"\n"
+      @"USER: dos botones ok y cancel\n"
+      @"ASSISTANT: {\"title\":\"Dialog\",\"w\":300,\"h\":120,\"controls\":["
+      @"{\"type\":\"TButton\",\"x\":110,\"y\":40,\"w\":80,\"h\":28,\"text\":\"OK\",\"name\":\"btnOk\"},"
+      @"{\"type\":\"TButton\",\"x\":200,\"y\":40,\"w\":80,\"h\":28,\"text\":\"Cancel\",\"name\":\"btnCancel\"}]}\n"
+      @"\n"
+      @"USER: haz un login\n"
+      @"ASSISTANT: {\"title\":\"Login\",\"w\":380,\"h\":200,\"controls\":["
+      @"{\"type\":\"TLabel\",\"x\":20,\"y\":20,\"w\":80,\"h\":20,\"text\":\"User:\",\"name\":\"lblUser\"},"
+      @"{\"type\":\"TEdit\",\"x\":110,\"y\":20,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edtUser\"},"
+      @"{\"type\":\"TLabel\",\"x\":20,\"y\":50,\"w\":80,\"h\":20,\"text\":\"Password:\",\"name\":\"lblPass\"},"
+      @"{\"type\":\"TEdit\",\"x\":110,\"y\":50,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edtPass\"},"
+      @"{\"type\":\"TCheckBox\",\"x\":110,\"y\":85,\"w\":160,\"h\":20,\"text\":\"Remember me\",\"name\":\"chkRemember\"},"
+      @"{\"type\":\"TButton\",\"x\":200,\"y\":130,\"w\":80,\"h\":28,\"text\":\"OK\",\"name\":\"btnOk\"},"
+      @"{\"type\":\"TButton\",\"x\":290,\"y\":130,\"w\":80,\"h\":28,\"text\":\"Cancel\",\"name\":\"btnCancel\"}]}\n"
+      @"\n"
+      @"USER: tres edits\n"
+      @"ASSISTANT: {\"title\":\"Form\",\"w\":300,\"h\":160,\"controls\":["
+      @"{\"type\":\"TEdit\",\"x\":20,\"y\":20,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edt1\"},"
+      @"{\"type\":\"TEdit\",\"x\":20,\"y\":50,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edt2\"},"
+      @"{\"type\":\"TEdit\",\"x\":20,\"y\":80,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edt3\"}]}";
+
    dispatch_async( dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-      NSString * urlStr = @"http://localhost:11434/api/generate";
-      NSMutableURLRequest * req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlStr]];
+      NSMutableURLRequest * req = [NSMutableURLRequest requestWithURL:
+         [NSURL URLWithString:@"http://localhost:11434/api/chat"]];
       [req setHTTPMethod:@"POST"];
       [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-
-      /* Escape prompt for JSON */
-      NSString * escaped = [prompt stringByReplacingOccurrencesOfString:@"\\" withString:@"\\\\"];
-      escaped = [escaped stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
-      escaped = [escaped stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"];
-
-      NSString * body = [NSString stringWithFormat:
-         @"{\"model\":\"%@\",\"prompt\":\"%@\",\"stream\":false}", model, escaped];
-      [req setHTTPBody:[body dataUsingEncoding:NSUTF8StringEncoding]];
-      [req setTimeoutInterval:60];
+      NSDictionary * payload = @{
+         @"model": model,
+         @"stream": @NO,
+         @"messages": @[
+            @{ @"role": @"system", @"content": sysPrompt },
+            @{ @"role": @"user",   @"content": prompt }
+         ],
+         @"options": @{ @"temperature": @0.2 }
+      };
+      NSData * body = [NSJSONSerialization dataWithJSONObject:payload options:0 error:nil];
+      [req setHTTPBody:body];
+      [req setTimeoutInterval:180];
 
       NSURLSessionDataTask * task = [[NSURLSession sharedSession]
-         dataTaskWithRequest:req completionHandler:^(NSData * data, NSURLResponse * response, NSError * error) {
+         dataTaskWithRequest:req completionHandler:^(NSData * data, NSURLResponse * resp, NSError * err) {
+         (void)resp;
          dispatch_async( dispatch_get_main_queue(), ^{
-            if( error || !data )
-            {
-               NSString * errMsg = [NSString stringWithFormat:@"\n[Error: %@]\n",
-                  error ? [error localizedDescription] : @"No data"];
-               [[[s_aiOutput textStorage] mutableString] appendString:errMsg];
+            [s_aiSpinner stopAnimation:nil];
+            if( err || !data ) {
+               s_aiAppend( [NSString stringWithFormat:@"\n[Error: %@]\n",
+                  err ? [err localizedDescription] : @"No data"] );
+               return;
             }
-            else
-            {
-               NSDictionary * json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-               NSString * reply = json[@"response"];
-               if( reply )
-                  [[[s_aiOutput textStorage] mutableString] appendString:
-                     [NSString stringWithFormat:@"\n%@\n", reply]];
-               else
-                  [[[s_aiOutput textStorage] mutableString] appendString:@"\n[No response]\n"];
+            NSDictionary * j = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            NSDictionary * msg = j[@"message"];
+            NSString * reply = [msg isKindOfClass:[NSDictionary class]] ? msg[@"content"] : nil;
+            if( !reply || [reply length] == 0 ) {
+               s_aiAppend( @"\n[Empty response]\n" );
+               return;
             }
-            [s_aiOutput scrollRangeToVisible:NSMakeRange([[s_aiOutput textStorage] length], 0)];
+            NSString * trimmed = [reply stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+            /* Strip any accidental ```json ... ``` fences */
+            if( [trimmed hasPrefix:@"```"] ) {
+               NSRange firstNl = [trimmed rangeOfString:@"\n"];
+               if( firstNl.location != NSNotFound )
+                  trimmed = [trimmed substringFromIndex:firstNl.location + 1];
+               if( [trimmed hasSuffix:@"```"] )
+                  trimmed = [trimmed substringToIndex:[trimmed length] - 3];
+               trimmed = [trimmed stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            }
+
+            BOOL looksJson = [trimmed hasPrefix:@"{"];
+            if( looksJson ) {
+               NSData * specData = [trimmed dataUsingEncoding:NSUTF8StringEncoding];
+               id specObj = [NSJSONSerialization JSONObjectWithData:specData options:0 error:nil];
+               if( [specObj isKindOfClass:[NSDictionary class]] && specObj[@"controls"] ) {
+                  s_aiAppend( @"\nBuilding form...\n" );
+                  PHB_DYNS pSym = hb_dynsymFindName( "AIBUILDFORM" );
+                  if( pSym ) {
+                     const char * sUtf = [trimmed UTF8String];
+                     hb_vmPushDynSym( pSym );
+                     hb_vmPushNil();
+                     hb_vmPushString( sUtf, strlen( sUtf ) );
+                     hb_vmFunction( 1 );
+                     s_aiAppend( @"Form built — see design view.\n" );
+                  } else {
+                     s_aiAppend( @"[AIBuildForm not registered]\n" );
+                  }
+                  return;
+               }
+            }
+            /* Plain chat reply */
+            s_aiAppend( [NSString stringWithFormat:@"\n%@\n", reply] );
          });
       }];
       [task resume];
@@ -2710,7 +3021,8 @@ static NSPopUpButton * s_aiModelBtn = nil;
 - (void)clearChat:(id)sender
 {
    [[s_aiOutput textStorage] replaceCharactersInRange:
-      NSMakeRange(0, [[s_aiOutput textStorage] length]) withString:@"AI Assistant ready.\n"];
+      NSMakeRange(0, [[s_aiOutput textStorage] length]) withString:@""];
+   s_aiAppend( @"AI Assistant ready.\n" );
 }
 
 @end
@@ -2726,7 +3038,12 @@ HB_FUNC( MAC_AIASSISTANTPANEL )
       return;
    }
 
-   NSRect frame = NSMakeRect( 120, 150, 420, 550 );
+   /* Default: right side, vertically centered on main screen */
+   NSRect scr = [[NSScreen mainScreen] visibleFrame];
+   CGFloat panW = 420, panH = 550;
+   CGFloat panX = scr.origin.x + scr.size.width - panW - 40;
+   CGFloat panY = scr.origin.y + (scr.size.height - panH) / 2;
+   NSRect frame = NSMakeRect( panX, panY, panW, panH );
    s_aiPanel = [[NSWindow alloc] initWithContentRect:frame
       styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
       backing:NSBackingStoreBuffered defer:NO];
@@ -2738,10 +3055,9 @@ HB_FUNC( MAC_AIASSISTANTPANEL )
    CGFloat w = [cv bounds].size.width;
    CGFloat h = [cv bounds].size.height;
 
-   /* Model selector */
-   s_aiModelBtn = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(10, h-35, 200, 28) pullsDown:NO];
-   NSArray * models = @[@"codellama", @"llama3", @"deepseek-coder", @"mistral", @"phi3", @"gemma2"];
-   for( NSString * m in models ) [s_aiModelBtn addItemWithTitle:m];
+   /* Model selector — populated dynamically from Ollama after panel shown */
+   s_aiModelBtn = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(10, h-35, 260, 28) pullsDown:NO];
+   [s_aiModelBtn addItemWithTitle:@"(loading models...)"];
    [s_aiModelBtn setAutoresizingMask:NSViewMaxXMargin | NSViewMinYMargin];
    [cv addSubview:s_aiModelBtn];
 
@@ -2754,30 +3070,44 @@ HB_FUNC( MAC_AIASSISTANTPANEL )
    [s_aiOutput setFont:[NSFont monospacedSystemFontOfSize:13 weight:NSFontWeightRegular]];
    [s_aiOutput setBackgroundColor:[NSColor colorWithCalibratedRed:0.12 green:0.12 blue:0.12 alpha:1]];
    [s_aiOutput setTextColor:[NSColor colorWithCalibratedRed:0.83 green:0.83 blue:0.83 alpha:1]];
-   [[s_aiOutput textStorage] replaceCharactersInRange:NSMakeRange(0,0)
-      withString:@"AI Assistant ready.\nConnect to Ollama at localhost:11434\n"];
+   [s_aiOutput setTypingAttributes:s_aiTextAttrs()];
+   [s_aiOutput setInsertionPointColor:[NSColor colorWithCalibratedRed:0.83 green:0.83 blue:0.83 alpha:1]];
+   s_aiAppend( @"AI Assistant ready.\nConnect to Ollama at localhost:11434\n" );
    [sv setDocumentView:s_aiOutput];
    [cv addSubview:sv];
 
-   /* Input + Send + Clear */
-   s_aiInput = [[NSTextField alloc] initWithFrame:NSMakeRect(10, 12, w-160, 28)];
-   [s_aiInput setPlaceholderString:@"Ask a question..."];
-   [s_aiInput setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
-   [cv addSubview:s_aiInput];
-
+   /* Input + Send + Clear + Spinner (anchored to bottom) */
    s_aiTarget = [[HBAISendTarget alloc] init];
 
+   s_aiInput = [[NSTextField alloc] initWithFrame:NSMakeRect(10, 12, w-180, 28)];
+   [s_aiInput setPlaceholderString:@"Ask a question..."];
+   [s_aiInput setAutoresizingMask:NSViewWidthSizable | NSViewMaxYMargin];
+   [s_aiInput setTarget:s_aiTarget];
+   [s_aiInput setAction:@selector(sendMessage:)];
+   [cv addSubview:s_aiInput];
+
    NSButton * sendBtn = [NSButton buttonWithTitle:@"Send" target:s_aiTarget action:@selector(sendMessage:)];
-   [sendBtn setFrame:NSMakeRect(w-140, 12, 60, 28)];
-   [sendBtn setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
+   [sendBtn setFrame:NSMakeRect(w-160, 12, 60, 28)];
+   [sendBtn setAutoresizingMask:NSViewMinXMargin | NSViewMaxYMargin];
    [cv addSubview:sendBtn];
 
    NSButton * clearBtn = [NSButton buttonWithTitle:@"Clear" target:s_aiTarget action:@selector(clearChat:)];
-   [clearBtn setFrame:NSMakeRect(w-70, 12, 60, 28)];
-   [clearBtn setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
+   [clearBtn setFrame:NSMakeRect(w-90, 12, 60, 28)];
+   [clearBtn setAutoresizingMask:NSViewMinXMargin | NSViewMaxYMargin];
    [cv addSubview:clearBtn];
 
+   s_aiSpinner = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(w-26, 17, 18, 18)];
+   [s_aiSpinner setStyle:NSProgressIndicatorStyleSpinning];
+   [s_aiSpinner setControlSize:NSControlSizeSmall];
+   [s_aiSpinner setIndeterminate:YES];
+   [s_aiSpinner setDisplayedWhenStopped:NO];
+   [s_aiSpinner setAutoresizingMask:NSViewMinXMargin | NSViewMaxYMargin];
+   [cv addSubview:s_aiSpinner];
+
    [s_aiPanel makeKeyAndOrderFront:nil];
+
+   /* Detect / launch Ollama and populate model list in background */
+   s_aiInitOllamaAsync();
 }
 
 /* -----------------------------------------------------------------------
