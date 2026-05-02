@@ -4892,12 +4892,95 @@ static function ShowAIAssistant()
    MAC_AIAssistantPanel()
 return nil
 
+// AIRunProject() - public wrapper called from Obj-C when LLM emits {"action":"run"}
+function AIRunProject()
+   TBRun()
+return nil
+
+// AIDescribeDbf( cPath ) - return JSON array describing fields of a DBF file.
+// Tries cPath as-is, then relative to project dir. Returns "" on failure.
+function AIDescribeDbf( cPath )
+   local aStruct, i, cJson, hField
+   local aFields := {}
+   local cTried := cPath
+   local oErr
+
+   if ! HB_ISCHAR( cPath ) .or. Empty( cPath )
+      return ""
+   endif
+
+   if ! File( cTried )
+      cTried := hb_DirBase() + cPath
+      if ! File( cTried )
+         cTried := "./" + cPath
+      endif
+   endif
+   if ! File( cTried )
+      return ""
+   endif
+
+   begin sequence with { | e | break( e ) }
+      dbUseArea( .T., , cTried, "AIDESCRIBE_TMP", .T., .T. )
+      aStruct := dbStruct()
+      dbCloseArea()
+   recover using oErr
+      aStruct := nil
+   end sequence
+
+   if aStruct == nil .or. ! HB_ISARRAY( aStruct )
+      return ""
+   endif
+
+   for i := 1 to Len( aStruct )
+      hField := { => }
+      hField[ "name" ] := aStruct[i][1]
+      hField[ "type" ] := aStruct[i][2]
+      hField[ "len"  ] := aStruct[i][3]
+      hField[ "dec"  ] := aStruct[i][4]
+      AAdd( aFields, hField )
+   next
+
+   cJson := hb_jsonEncode( aFields )
+return cJson
+
+// AIAddCode( cCode ) - append code to the current form's .prg tab and
+// highlight the inserted lines with a green background marker.
+// Triggered when LLM emits {"action":"add_code","code":"..."}.
+function AIAddCode( cCode )
+   local cExisting, cNew, nTab, nFromLine, nToLine
+   if ! HB_ISCHAR( cCode ) .or. Empty( cCode )
+      return nil
+   endif
+   nTab := CodeEditorGetActiveTab( hCodeEditor )
+   if nTab < 1
+      return nil
+   endif
+   cExisting := CodeEditorGetText2( hCodeEditor, nTab )
+   if ! HB_ISCHAR( cExisting )
+      cExisting := ""
+   endif
+   if ! ( Right( cExisting, 1 ) == Chr(10) )
+      cExisting += Chr(10)
+   endif
+   // Scintilla lines are 0-based: existing lines = number of \n chars
+   nFromLine := Len( hb_ATokens( cExisting + Chr(10), Chr(10) ) ) - 2  // first NEW line (0-based)
+   cNew := cExisting + Chr(10) + cCode + Chr(10)
+   CodeEditorSetTabText( hCodeEditor, nTab, cNew )
+   nToLine := Len( hb_ATokens( cNew, Chr(10) ) ) - 2
+   CodeEditorClearMarks( hCodeEditor )
+   CodeEditorMarkLines( hCodeEditor, nFromLine, nToLine, 32896 )  // 0x008080 = olive BGR
+
+   // Trigger code regeneration so SyncDesignerToCode picks up the new METHOD
+   // and auto-wires the matching ::OnXxx event in CreateForm()
+   SyncDesignerToCode()
+return nil
+
 // AIBuildForm( cJson ) - called from Obj-C after Ollama returns JSON form spec.
 // Public (non-static) so it's reachable via hb_dynsymFindName.
 function AIBuildForm( cJson )
 
    local hSpec, aCtrls, hCtrlSpec, cType, nL, nT, nW, nH, cText, cName
-   local hForm, hCtrlNew, i, oErr
+   local hForm, hCtrlNew, i, oErr, lUseCurrent
 
    if ! HB_ISCHAR( cJson ) .or. Empty( cJson )
       return nil
@@ -4913,22 +4996,30 @@ function AIBuildForm( cJson )
       return nil
    endif
 
-   // Create a fresh design form
-   MenuNewForm()
-   if oDesignForm == nil
-      return nil
-   endif
-   hForm := oDesignForm:hCpp
+   // If spec omits title/w/h, the model is signalling "add to current form"
+   lUseCurrent := !( "title" $ hSpec ) .and. !( "w" $ hSpec ) .and. !( "h" $ hSpec ) .and. ;
+                  oDesignForm != nil
 
-   // Apply form-level properties
-   if "title" $ hSpec .and. HB_ISCHAR( hSpec[ "title" ] )
-      UI_SetProp( hForm, "cText", hSpec[ "title" ] )
-   endif
-   if "w" $ hSpec .and. HB_ISNUMERIC( hSpec[ "w" ] ) .and. hSpec[ "w" ] > 50
-      UI_SetProp( hForm, "nWidth", hSpec[ "w" ] )
-   endif
-   if "h" $ hSpec .and. HB_ISNUMERIC( hSpec[ "h" ] ) .and. hSpec[ "h" ] > 50
-      UI_SetProp( hForm, "nHeight", hSpec[ "h" ] )
+   if lUseCurrent
+      hForm := oDesignForm:hCpp
+   else
+      // Create a fresh design form
+      MenuNewForm()
+      if oDesignForm == nil
+         return nil
+      endif
+      hForm := oDesignForm:hCpp
+
+      // Apply form-level properties on new forms
+      if "title" $ hSpec .and. HB_ISCHAR( hSpec[ "title" ] )
+         UI_SetProp( hForm, "cText", hSpec[ "title" ] )
+      endif
+      if "w" $ hSpec .and. HB_ISNUMERIC( hSpec[ "w" ] ) .and. hSpec[ "w" ] > 50
+         UI_SetProp( hForm, "nWidth", hSpec[ "w" ] )
+      endif
+      if "h" $ hSpec .and. HB_ISNUMERIC( hSpec[ "h" ] ) .and. hSpec[ "h" ] > 50
+         UI_SetProp( hForm, "nHeight", hSpec[ "h" ] )
+      endif
    endif
 
    // Add controls

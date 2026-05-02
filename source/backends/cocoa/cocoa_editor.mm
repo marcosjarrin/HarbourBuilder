@@ -1872,6 +1872,32 @@ HB_FUNC( CODEEDITORGOTOFUNCTION )
    hb_retl( found >= 0 );
 }
 
+/* CodeEditorMarkLines( hEditor, nFromLine, nToLine, nBgrColor )
+   Highlights line range with a green background marker (used for AI-inserted code). */
+HB_FUNC( CODEEDITORMARKLINES )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed || !ed->sciView ) return;
+   int nFrom = hb_parni(2);
+   int nTo   = hb_parni(3);
+   long nColor = HB_ISNUM(4) ? hb_parnl(4) : 0x90EE90L;  /* light green BGR */
+   const int MARKER_AI = 5;
+   SciMsg( ed->sciView, SCI_MARKERDEFINE, (uptr_t)MARKER_AI, SC_MARK_BACKGROUND );
+   SciMsg( ed->sciView, SCI_MARKERSETBACK, (uptr_t)MARKER_AI, (sptr_t)nColor );
+   SciMsg( ed->sciView, SCI_MARKERSETALPHA, (uptr_t)MARKER_AI, 90 );
+   for( int line = nFrom; line <= nTo; line++ )
+      SciMsg( ed->sciView, SCI_MARKERADD, (uptr_t)line, (sptr_t)MARKER_AI );
+}
+
+/* CodeEditorClearMarks( hEditor ) — remove the AI-insert marker from all lines */
+HB_FUNC( CODEEDITORCLEARMARKS )
+{
+   CODEEDITOR * ed = (CODEEDITOR *)(HB_PTRUINT) hb_parnint(1);
+   if( !ed || !ed->sciView ) return;
+   const int MARKER_AI = 5;
+   SciMsg( ed->sciView, SCI_MARKERDELETEALL, (uptr_t)MARKER_AI, 0 );
+}
+
 /* CodeEditorInsertAfter( hEditor, cSearchLine, cTextToInsert ) */
 HB_FUNC( CODEEDITORINSERTAFTER )
 {
@@ -2892,6 +2918,38 @@ static void s_aiInitOllamaAsync( void )
    [s_aiInput setStringValue:@""];
    [s_aiSpinner startAnimation:nil];
 
+   /* If the message references a .dbf file, ask Harbour to describe its
+      schema and prepend the field list as context for the LLM so it doesn't
+      hallucinate field names. */
+   NSString * dbfContext = nil;
+   {
+      NSRegularExpression * re = [NSRegularExpression
+         regularExpressionWithPattern:@"([\\w./\\\\-]+\\.dbf)"
+         options:NSRegularExpressionCaseInsensitive error:nil];
+      NSTextCheckingResult * m = [re firstMatchInString:prompt options:0
+         range:NSMakeRange(0, [prompt length])];
+      if( m && m.numberOfRanges > 1 ) {
+         NSString * dbfPath = [prompt substringWithRange:[m rangeAtIndex:1]];
+         PHB_DYNS pSym = hb_dynsymFindName( "AIDESCRIBEDBF" );
+         if( pSym ) {
+            const char * sUtf = [dbfPath UTF8String];
+            hb_vmPushDynSym( pSym );
+            hb_vmPushNil();
+            hb_vmPushString( sUtf, strlen( sUtf ) );
+            hb_vmFunction( 1 );
+            PHB_ITEM pRet = hb_stackReturnItem();
+            const char * res = ( pRet && HB_IS_STRING(pRet) ) ? hb_itemGetCPtr( pRet ) : NULL;
+            if( res && *res ) {
+               dbfContext = [NSString stringWithFormat:
+                  @"\n\nDBF FIELDS (real schema of %@): %s\n"
+                  @"Use these field names verbatim. Build TLabel + TEdit for each, "
+                  @"plus nav buttons (Prev/Next/Save). Y-step 30, label width 100.\n",
+                  dbfPath, res];
+            }
+         }
+      }
+   }
+
    /* Single path: LLM decides if request is form-design, Harbour code, or chat. */
    NSString * sysPrompt =
       @"You are HbBuilder AI Assistant inside a Harbour IDE with a Delphi-style form designer.\n"
@@ -2900,14 +2958,62 @@ static void s_aiInitOllamaAsync( void )
       @"CATEGORIES:\n"
       @"FORM — user wants to create or modify a UI form, dialog, window, or its controls.\n"
       @"        Response format: a single JSON object, NOTHING else. No prose. No code fence. No comments.\n"
-      @"        JSON schema:\n"
+      @"        JSON schema (optional \"code\" field for event handler methods):\n"
       @"        {\"title\":string,\"w\":int,\"h\":int,\"controls\":["
-      @"{\"type\":string,\"x\":int,\"y\":int,\"w\":int,\"h\":int,\"text\":string,\"name\":string}]}\n"
+      @"{\"type\":string,\"x\":int,\"y\":int,\"w\":int,\"h\":int,\"text\":string,\"name\":string}],"
+      @"\"code\":string}\n"
       @"        type ∈ {TLabel,TEdit,TButton,TCheckBox,TComboBox,TGroupBox,TRadioButton,TMemo}.\n"
       @"        Sizes: label 80x20, edit 180x22, button 80x28. Step y=30. Labels x=20, fields x=110.\n"
       @"        Names: lblXxx, edtXxx, btnXxx, chkXxx, cboXxx, grpXxx, rbXxx, memXxx.\n"
+      @"        When the user describes a control with BEHAVIOR (e.g. \"button OK that runs "
+      @"MsgInfo\", \"botón cerrar que cierre el form\"), include both the control AND a Harbour "
+      @"METHOD handler in \"code\".\n"
+      @"        HANDLER NAMING CONVENTION (HbBuilder auto-wires events by name):\n"
+      @"          control event handler: <controlName> + <event-without-On>. "
+      @"            e.g. btnOk + Click → METHOD btnOkClick(). cboColor + Change → METHOD cboColorChange().\n"
+      @"          form event handler: <formName> + <event-without-On>.\n"
+      @"            e.g. Form1 + Click → METHOD Form1Click(). Form2 + Show → METHOD Form2Show().\n"
+      @"        Use METHOD <Name>() CLASS TFormN ... return nil. Never `function` with `end`. "
+      @"Escape inner quotes as \\\" and newlines as \\n.\n"
       @"\n"
-      @"CODE — user wants Harbour code (generate, refactor, explain, snippet).\n"
+      @"        DBF DATA-ENTRY FORMS: when the user message includes a DBF FIELDS list "
+      @"(\"DBF FIELDS (real schema of ...)\" appended to the request), you MUST use those exact "
+      @"field names. Generate one TLabel + TEdit row per field (label width 100 at x=20; edit "
+      @"width 180 at x=130; y starts at 20 with step 30). Below all fields, add 5 nav buttons in "
+      @"a row at y = (last field y) + 50: btnFirst|<<, btnPrev|<, btnNext|>, btnLast|>>, btnSave|Save. "
+      @"In \"code\", emit METHOD <FormName>Show() CLASS TFormN that USEs the DBF and refreshes the "
+      @"edit controls from the current record.\n"
+      @"\n"
+      @"        IMPORTANT — TARGET FORM:\n"
+      @"        * NEW form (full spec): include \"title\", \"w\", \"h\" + \"controls\". Use this when "
+      @"the user implies a new form: \"haz un login\", \"create a settings dialog\", \"diseña...\", "
+      @"\"new form\", or no target hint at all.\n"
+      @"        * CURRENT form (only add controls): emit ONLY {\"controls\":[...]} — omit "
+      @"title/w/h entirely. Use this when the user references the existing form: \"in current form\", "
+      @"\"in this form\", \"add to current\", \"en el form actual\", \"en este form\", "
+      @"\"añade al form\", \"al formulario\", \"to the active form\", \"añade a este form\".\n"
+      @"\n"
+      @"RUN — user wants to BUILD AND RUN the current project (compile + execute).\n"
+      @"        Triggers: \"run\", \"run it\", \"ejecuta\", \"corre\", \"lanza\", \"ejecutalo\", "
+      @"\"compila y ejecuta\", \"build and run\", \"F9\", \"start\", \"go\".\n"
+      @"        Response format: EXACTLY this JSON, nothing else: {\"action\":\"run\"}\n"
+      @"\n"
+      @"ADD_CODE — user wants to ADD Harbour code (a function, method, event handler, helper, "
+      @"snippet) INTO THE CURRENT FORM's .prg file.\n"
+      @"        Triggers: \"añade la función X\", \"add a function for X\", \"escribe el código de X\", "
+      @"\"agrega un método X\", \"add fibonacci\", \"insert helper X\", \"write code for X\", "
+      @"\"genera la función Y en este form\".\n"
+      @"        Also matches event-handler requests on the form itself or named existing controls "
+      @"(no NEW control implied), e.g. \"form1 onclick muestra form2\", \"cuando hago click en form "
+      @"abre X\", \"al cerrar form ejecuta Y\", \"btnOk onclick guardar\". Emit a METHOD "
+      @"<EventName>() CLASS TFormN body.\n"
+      @"        Response format: a single JSON object: {\"action\":\"add_code\",\"code\":\"...\"} "
+      @"where \"code\" is the full Harbour source (function, return statement, etc.) as a single "
+      @"properly-escaped string (use \\n for newlines and escape inner quotes as \\\"). NOTHING else "
+      @"in the response — no prose, no fences.\n"
+      @"\n"
+      @"CODE — user asks ABOUT Harbour code in general (explain, ask how, refactor a snippet pasted "
+      @"in chat). NO implication of inserting it into the form.\n"
       @"        Response format: short context line + a fenced block ```harbour ... ```. No JSON.\n"
       @"\n"
       @"CHAT — anything else (greetings, definitions, IDE questions, conversation).\n"
@@ -2941,19 +3047,85 @@ static void s_aiInitOllamaAsync( void )
       @"ASSISTANT: {\"title\":\"Form\",\"w\":300,\"h\":160,\"controls\":["
       @"{\"type\":\"TEdit\",\"x\":20,\"y\":20,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edt1\"},"
       @"{\"type\":\"TEdit\",\"x\":20,\"y\":50,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edt2\"},"
-      @"{\"type\":\"TEdit\",\"x\":20,\"y\":80,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edt3\"}]}";
+      @"{\"type\":\"TEdit\",\"x\":20,\"y\":80,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edt3\"}]}\n"
+      @"\n"
+      @"USER: run\n"
+      @"ASSISTANT: {\"action\":\"run\"}\n"
+      @"\n"
+      @"USER: ejecuta\n"
+      @"ASSISTANT: {\"action\":\"run\"}\n"
+      @"\n"
+      @"USER: login form in current form\n"
+      @"ASSISTANT: {\"controls\":["
+      @"{\"type\":\"TLabel\",\"x\":20,\"y\":20,\"w\":80,\"h\":20,\"text\":\"User:\",\"name\":\"lblUser\"},"
+      @"{\"type\":\"TEdit\",\"x\":110,\"y\":20,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edtUser\"},"
+      @"{\"type\":\"TLabel\",\"x\":20,\"y\":50,\"w\":80,\"h\":20,\"text\":\"Password:\",\"name\":\"lblPass\"},"
+      @"{\"type\":\"TEdit\",\"x\":110,\"y\":50,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edtPass\"},"
+      @"{\"type\":\"TButton\",\"x\":200,\"y\":90,\"w\":80,\"h\":28,\"text\":\"OK\",\"name\":\"btnOk\"},"
+      @"{\"type\":\"TButton\",\"x\":290,\"y\":90,\"w\":80,\"h\":28,\"text\":\"Cancel\",\"name\":\"btnCancel\"}]}\n"
+      @"\n"
+      @"USER: añade un boton ok al form actual\n"
+      @"ASSISTANT: {\"controls\":["
+      @"{\"type\":\"TButton\",\"x\":110,\"y\":120,\"w\":80,\"h\":28,\"text\":\"OK\",\"name\":\"btnOk\"}]}\n"
+      @"\n"
+      @"USER: añade la función de fibonacci\n"
+      @"ASSISTANT: {\"action\":\"add_code\",\"code\":\"function Fibonacci( n )\\n   if n < 2\\n      return n\\n   endif\\nreturn Fibonacci( n - 1 ) + Fibonacci( n - 2 )\"}\n"
+      @"\n"
+      @"USER: añade una función para contar lineas de un fichero\n"
+      @"ASSISTANT: {\"action\":\"add_code\",\"code\":\"function CountLines( cFile )\\n   local cText\\n   if ! File( cFile )\\n      return 0\\n   endif\\n   cText := MemoRead( cFile )\\nreturn Len( hb_ATokens( cText, Chr(10) ) )\"}\n"
+      @"\n"
+      @"USER: boton ok que ejecute MsgInfo( \"Hola\" )\n"
+      @"ASSISTANT: {\"controls\":["
+      @"{\"type\":\"TButton\",\"x\":110,\"y\":40,\"w\":80,\"h\":28,\"text\":\"OK\",\"name\":\"btnOk\"}],"
+      @"\"code\":\"METHOD btnOkClick() CLASS TForm1\\n   MsgInfo( \\\"Hola\\\" )\\nreturn nil\"}\n"
+      @"\n"
+      @"USER: form1 onclick muestra form2\n"
+      @"ASSISTANT: {\"action\":\"add_code\",\"code\":\"METHOD Form1Click() CLASS TForm1\\n   local oForm2 := TForm2():New()\\n   oForm2:Show()\\nreturn nil\"}\n"
+      @"\n"
+      @"USER: cuando hago click en form1 abre form2\n"
+      @"ASSISTANT: {\"action\":\"add_code\",\"code\":\"METHOD Form1Click() CLASS TForm1\\n   local oForm2 := TForm2():New()\\n   oForm2:Show()\\nreturn nil\"}\n"
+      @"\n"
+      @"USER: form para editar registros de orders.dbf\n"
+      @"DBF FIELDS (real schema of orders.dbf): [{\"name\":\"ORDID\",\"type\":\"N\",\"len\":6},"
+      @"{\"name\":\"CUSTNAME\",\"type\":\"C\",\"len\":30},{\"name\":\"AMOUNT\",\"type\":\"N\",\"len\":10}]\n"
+      @"ASSISTANT: {\"title\":\"orders\",\"w\":420,\"h\":240,\"controls\":["
+      @"{\"type\":\"TLabel\",\"x\":20,\"y\":20,\"w\":100,\"h\":20,\"text\":\"ORDID:\",\"name\":\"lblORDID\"},"
+      @"{\"type\":\"TEdit\",\"x\":130,\"y\":20,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edtORDID\"},"
+      @"{\"type\":\"TLabel\",\"x\":20,\"y\":50,\"w\":100,\"h\":20,\"text\":\"CUSTNAME:\",\"name\":\"lblCUSTNAME\"},"
+      @"{\"type\":\"TEdit\",\"x\":130,\"y\":50,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edtCUSTNAME\"},"
+      @"{\"type\":\"TLabel\",\"x\":20,\"y\":80,\"w\":100,\"h\":20,\"text\":\"AMOUNT:\",\"name\":\"lblAMOUNT\"},"
+      @"{\"type\":\"TEdit\",\"x\":130,\"y\":80,\"w\":180,\"h\":22,\"text\":\"\",\"name\":\"edtAMOUNT\"},"
+      @"{\"type\":\"TButton\",\"x\":20,\"y\":150,\"w\":60,\"h\":28,\"text\":\"<<\",\"name\":\"btnFirst\"},"
+      @"{\"type\":\"TButton\",\"x\":90,\"y\":150,\"w\":60,\"h\":28,\"text\":\"<\",\"name\":\"btnPrev\"},"
+      @"{\"type\":\"TButton\",\"x\":160,\"y\":150,\"w\":60,\"h\":28,\"text\":\">\",\"name\":\"btnNext\"},"
+      @"{\"type\":\"TButton\",\"x\":230,\"y\":150,\"w\":60,\"h\":28,\"text\":\">>\",\"name\":\"btnLast\"},"
+      @"{\"type\":\"TButton\",\"x\":300,\"y\":150,\"w\":60,\"h\":28,\"text\":\"Save\",\"name\":\"btnSave\"}],"
+      @"\"code\":\"METHOD Form1Show() CLASS TForm1\\n   USE orders.dbf NEW SHARED\\n   ::Refresh()\\nreturn nil\\n\\n"
+      @"METHOD Refresh() CLASS TForm1\\n   ::oedtORDID:cText    := AllTrim( Str( orders->ORDID ) )\\n"
+      @"   ::oedtCUSTNAME:cText := AllTrim( orders->CUSTNAME )\\n"
+      @"   ::oedtAMOUNT:cText   := AllTrim( Str( orders->AMOUNT ) )\\nreturn nil\\n\\n"
+      @"METHOD btnFirstClick() CLASS TForm1\\n   orders->( dbGoTop() )\\n   ::Refresh()\\nreturn nil\\n\\n"
+      @"METHOD btnPrevClick() CLASS TForm1\\n   orders->( dbSkip( -1 ) )\\n   ::Refresh()\\nreturn nil\\n\\n"
+      @"METHOD btnNextClick() CLASS TForm1\\n   orders->( dbSkip() )\\n   ::Refresh()\\nreturn nil\\n\\n"
+      @"METHOD btnLastClick() CLASS TForm1\\n   orders->( dbGoBottom() )\\n   ::Refresh()\\nreturn nil\\n\\n"
+      @"METHOD btnSaveClick() CLASS TForm1\\n   orders->ORDID    := Val( ::oedtORDID:cText )\\n"
+      @"   orders->CUSTNAME := ::oedtCUSTNAME:cText\\n"
+      @"   orders->AMOUNT   := Val( ::oedtAMOUNT:cText )\\n   dbCommit()\\nreturn nil\"}";
 
    dispatch_async( dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
       NSMutableURLRequest * req = [NSMutableURLRequest requestWithURL:
          [NSURL URLWithString:@"http://localhost:11434/api/chat"]];
       [req setHTTPMethod:@"POST"];
       [req setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+      NSString * userContent = dbfContext
+         ? [NSString stringWithFormat:@"%@%@", prompt, dbfContext]
+         : prompt;
       NSDictionary * payload = @{
          @"model": model,
          @"stream": @NO,
          @"messages": @[
             @{ @"role": @"system", @"content": sysPrompt },
-            @{ @"role": @"user",   @"content": prompt }
+            @{ @"role": @"user",   @"content": userContent }
          ],
          @"options": @{ @"temperature": @0.2 }
       };
@@ -2991,23 +3163,113 @@ static void s_aiInitOllamaAsync( void )
             }
 
             BOOL looksJson = [trimmed hasPrefix:@"{"];
+            id specObj = nil;
             if( looksJson ) {
                NSData * specData = [trimmed dataUsingEncoding:NSUTF8StringEncoding];
-               id specObj = [NSJSONSerialization JSONObjectWithData:specData options:0 error:nil];
-               if( [specObj isKindOfClass:[NSDictionary class]] && specObj[@"controls"] ) {
-                  s_aiAppend( @"\nBuilding form...\n" );
-                  PHB_DYNS pSym = hb_dynsymFindName( "AIBUILDFORM" );
-                  if( pSym ) {
-                     const char * sUtf = [trimmed UTF8String];
-                     hb_vmPushDynSym( pSym );
-                     hb_vmPushNil();
-                     hb_vmPushString( sUtf, strlen( sUtf ) );
-                     hb_vmFunction( 1 );
-                     s_aiAppend( @"Form built — see design view.\n" );
-                  } else {
-                     s_aiAppend( @"[AIBuildForm not registered]\n" );
+               specObj = [NSJSONSerialization JSONObjectWithData:specData options:0 error:nil];
+               /* If parse failed, try balanced-brace recovery: extract from
+                  the first '{' to the matching '}' (track nesting, ignore
+                  braces inside strings) and parse that. */
+               if( ![specObj isKindOfClass:[NSDictionary class]] ) {
+                  NSUInteger len = [trimmed length];
+                  NSInteger start = -1;
+                  NSInteger depth = 0;
+                  BOOL inStr = NO;
+                  BOOL esc = NO;
+                  NSInteger end = -1;
+                  for( NSUInteger i = 0; i < len; i++ ) {
+                     unichar c = [trimmed characterAtIndex:i];
+                     if( inStr ) {
+                        if( esc ) { esc = NO; continue; }
+                        if( c == '\\' ) { esc = YES; continue; }
+                        if( c == '"' ) { inStr = NO; }
+                        continue;
+                     }
+                     if( c == '"' ) { inStr = YES; continue; }
+                     if( c == '{' ) {
+                        if( start < 0 ) start = (NSInteger)i;
+                        depth++;
+                     } else if( c == '}' ) {
+                        depth--;
+                        if( depth == 0 && start >= 0 ) { end = (NSInteger)i; break; }
+                     }
                   }
-                  return;
+                  if( start >= 0 && end > start ) {
+                     NSString * sub = [trimmed substringWithRange:
+                        NSMakeRange((NSUInteger)start, (NSUInteger)(end - start + 1))];
+                     NSData * subData = [sub dataUsingEncoding:NSUTF8StringEncoding];
+                     specObj = [NSJSONSerialization JSONObjectWithData:subData options:0 error:nil];
+                  }
+               }
+               if( [specObj isKindOfClass:[NSDictionary class]] ) {
+                  NSDictionary * dict = (NSDictionary *)specObj;
+                  NSString * action = dict[@"action"];
+                  /* Action: run -> build & launch project */
+                  if( [action isKindOfClass:[NSString class]] &&
+                      ( [action isEqualToString:@"run"] || [action isEqualToString:@"build_run"] ) ) {
+                     s_aiAppend( @"\nBuilding and running project...\n" );
+                     PHB_DYNS pSym = hb_dynsymFindName( "AIRUNPROJECT" );
+                     if( pSym ) {
+                        hb_vmPushDynSym( pSym );
+                        hb_vmPushNil();
+                        hb_vmFunction( 0 );
+                     } else {
+                        s_aiAppend( @"[AIRunProject not registered]\n" );
+                     }
+                     return;
+                  }
+                  /* Action: add_code -> append code to active form's .prg tab */
+                  if( [action isKindOfClass:[NSString class]] &&
+                      [action isEqualToString:@"add_code"] ) {
+                     NSString * code = dict[@"code"];
+                     if( ![code isKindOfClass:[NSString class]] || [code length] == 0 ) {
+                        s_aiAppend( @"\n[add_code: missing code field]\n" );
+                        return;
+                     }
+                     s_aiAppend( @"\nAdding code to current form...\n" );
+                     s_aiAppend( [NSString stringWithFormat:@"```harbour\n%@\n```\n", code] );
+                     PHB_DYNS pSym = hb_dynsymFindName( "AIADDCODE" );
+                     if( pSym ) {
+                        const char * sUtf = [code UTF8String];
+                        hb_vmPushDynSym( pSym );
+                        hb_vmPushNil();
+                        hb_vmPushString( sUtf, strlen( sUtf ) );
+                        hb_vmFunction( 1 );
+                        s_aiAppend( @"Code appended to active editor tab.\n" );
+                     } else {
+                        s_aiAppend( @"[AIAddCode not registered]\n" );
+                     }
+                     return;
+                  }
+                  /* Form spec (optionally with event-handler code) */
+                  if( dict[@"controls"] ) {
+                     s_aiAppend( @"\nBuilding form...\n" );
+                     PHB_DYNS pSym = hb_dynsymFindName( "AIBUILDFORM" );
+                     if( pSym ) {
+                        const char * sUtf = [trimmed UTF8String];
+                        hb_vmPushDynSym( pSym );
+                        hb_vmPushNil();
+                        hb_vmPushString( sUtf, strlen( sUtf ) );
+                        hb_vmFunction( 1 );
+                        s_aiAppend( @"Form built — see design view.\n" );
+                     } else {
+                        s_aiAppend( @"[AIBuildForm not registered]\n" );
+                     }
+                     NSString * code = dict[@"code"];
+                     if( [code isKindOfClass:[NSString class]] && [code length] > 0 ) {
+                        s_aiAppend( @"Adding event handler code...\n" );
+                        s_aiAppend( [NSString stringWithFormat:@"```harbour\n%@\n```\n", code] );
+                        PHB_DYNS pCode = hb_dynsymFindName( "AIADDCODE" );
+                        if( pCode ) {
+                           const char * sCode = [code UTF8String];
+                           hb_vmPushDynSym( pCode );
+                           hb_vmPushNil();
+                           hb_vmPushString( sCode, strlen( sCode ) );
+                           hb_vmFunction( 1 );
+                        }
+                     }
+                     return;
+                  }
                }
             }
             /* Plain chat reply */

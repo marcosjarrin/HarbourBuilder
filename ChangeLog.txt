@@ -1,6 +1,55 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-05-02b
+
+  - feat(macos-ai-skill): AI Assistant skill expanded — single LLM
+    dispatch path now covers FORM (new), FORM (current), RUN, ADD_CODE,
+    CODE, CHAT.
+    * No regex intent detection — LLM classifies. Detection is
+      shape-based: response with "controls" key + title/w/h → new form;
+      "controls" alone (no title) → add to current form; {"action":"run"}
+      → AIRunProject (TBRun); {"action":"add_code","code":"..."} →
+      AIAddCode appends to active editor tab; plain text → chat.
+    * Form spec can include optional "code" field with event-handler
+      methods. After AIBuildForm runs, the code is appended via
+      AIAddCode. SyncDesignerToCode then auto-wires events by name
+      (METHOD btnOkClick → ::OnClick := { || ::btnOkClick() }).
+    * Method-naming convention documented in the skill: control
+      handlers = controlName + event-without-On (btnOkClick,
+      cboColorChange); form handlers = formName + event-without-On
+      (Form1Click, Form2Show). Few-shot examples updated.
+
+  - feat(macos-ai-dbf): DBF data-entry-form generation.
+    * New public Harbour function AIDescribeDbf( cPath ) opens the DBF
+      via dbUseArea, captures dbStruct, returns a JSON array of
+      {name,type,len,dec}. Resolves cPath as-is, then relative to
+      project base, then to cwd.
+    * Obj-C side regex-detects ".dbf" in the user message, calls
+      AIDescribeDbf, and prepends "DBF FIELDS (real schema of ...): [...]"
+      to the user message before sending to Ollama. The skill instructs
+      the model to use those exact field names, build TLabel + TEdit
+      rows + nav row (btnFirst/Prev/Next/Last/Save), and emit
+      USE/dbSkip/dbCommit-style Harbour code.
+    * Few-shot example for orders.dbf demonstrates correct Harbour:
+      `orders->FIELD` access, `::oedtX:cText` for control text,
+      Form1Show + Refresh helper + nav/save methods.
+
+  - feat(macos-ai-run): {"action":"run"} dispatches to new public
+    Harbour function AIRunProject which calls TBRun() (build + launch).
+
+  - feat(macos-ai-codehighlight): new HB_FUNCs CodeEditorMarkLines and
+    CodeEditorClearMarks use Scintilla SCI_MARKERDEFINE +
+    SC_MARK_BACKGROUND + alpha 90 to highlight AI-inserted line ranges.
+    Color olive (0x008080 BGR). AIAddCode clears prior marks then
+    highlights from the first new line to the last.
+
+  - fix(macos-ai-json): balanced-brace JSON recovery. When the primary
+    JSON parse fails, scan from the first '{' to its matching '}' (track
+    nesting, skip braces inside strings, honour escapes) and parse that
+    substring instead. Salvages malformed model output that has trailing
+    garbage after the closing brace, e.g. `{...}],"code":"..."}`.
+
 2026-05-02
 
   - feat(macos-ai): AI Assistant panel reworked end-to-end.
