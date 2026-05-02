@@ -5063,6 +5063,41 @@ HB_FUNC( UI_SPEEDBTNNEW )
    if( pForm ) [pForm addChild:p]; RetCtrl( p );
 }
 
+HB_FUNC( UI_STATICTEXTNEW )
+{
+   HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
+   p->FControlType = CT_STATICTEXT;
+   p->FWidth = 65; p->FHeight = 17;
+   strncpy( p->FClassName, "TStaticText", sizeof(p->FClassName) - 1 );
+   if( HB_ISCHAR(2) ) [p setText:hb_parc(2)];
+   if( HB_ISNUM(3) ) p->FLeft = hb_parni(3);   if( HB_ISNUM(4) ) p->FTop = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FWidth = hb_parni(5);  if( HB_ISNUM(6) ) p->FHeight = hb_parni(6);
+   if( pForm ) [pForm addChild:p]; RetCtrl( p );
+}
+
+HB_FUNC( UI_SCROLLBOXNEW )
+{
+   HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
+   p->FControlType = CT_SCROLLBOX;
+   p->FWidth = 185; p->FHeight = 140;
+   strncpy( p->FClassName, "TScrollBox", sizeof(p->FClassName) - 1 );
+   if( HB_ISNUM(2) ) p->FLeft = hb_parni(2);   if( HB_ISNUM(3) ) p->FTop = hb_parni(3);
+   if( HB_ISNUM(4) ) p->FWidth = hb_parni(4);  if( HB_ISNUM(5) ) p->FHeight = hb_parni(5);
+   if( pForm ) [pForm addChild:p]; RetCtrl( p );
+}
+
+HB_FUNC( UI_LABELEDEDITNEW )
+{
+   HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];
+   p->FControlType = CT_LABELEDEDIT;
+   p->FWidth = 120; p->FHeight = 24;
+   strncpy( p->FClassName, "TLabeledEdit", sizeof(p->FClassName) - 1 );
+   if( HB_ISCHAR(2) ) [p setText:hb_parc(2)];
+   if( HB_ISNUM(3) ) p->FLeft = hb_parni(3);   if( HB_ISNUM(4) ) p->FTop = hb_parni(4);
+   if( HB_ISNUM(5) ) p->FWidth = hb_parni(5);  if( HB_ISNUM(6) ) p->FHeight = hb_parni(6);
+   if( pForm ) [pForm addChild:p]; RetCtrl( p );
+}
+
 HB_FUNC( UI_RICHEDITNEW )
 {
    HBForm * pForm = GetForm(1); HBControl * p = [[HBControl alloc] init];

@@ -4086,9 +4086,14 @@ static function TBRun()
    for i := 1 to Len( aModules )
       cAllCode += CodeEditorGetTabText( hCodeEditor, 1 + Len(aForms) + i )
    next
-   nHash := Len( cAllCode )
-   for i := 1 to Min( Len( cAllCode ), 5000 )
-      nHash := nHash + Asc( SubStr( cAllCode, i, 1 ) ) * i
+   // Full-content hash (FNV-1a 32-bit). Previous version sampled only the
+   // first 5000 chars by position — small AI-driven edits (centering a
+   // control, renaming text, etc.) often left it unchanged, so the cached
+   // app got launched instead of being rebuilt.
+   nHash := 2166136261
+   for i := 1 to Len( cAllCode )
+      nHash := hb_BitXor( nHash, Asc( SubStr( cAllCode, i, 1 ) ) )
+      nHash := hb_BitAnd( nHash * 16777619, 4294967295 )
    next
    if nHash == nLastHash .and. nLastHash != 0 .and. ;
       File( cBuildDir + "/" + cAppName + ".app/Contents/MacOS/" + cAppName )
@@ -5237,6 +5242,18 @@ function AIBuildForm( cJson )
             hCtrlNew := UI_BitBtnNew( hForm, cText, nL, nT, nW, nH )
          case cType == "TTABCONTROL"
             hCtrlNew := UI_TabControlNew( hForm, nL, nT, nW, nH )
+         case cType == "TMASKEDIT"
+            hCtrlNew := UI_MaskEditNew( hForm, cText, nL, nT, nW, nH )   // cText carries the mask string
+         case cType == "TSTRINGGRID"
+            hCtrlNew := UI_StringGridNew( hForm, nL, nT, nW, nH )
+         case cType == "TSPEEDBUTTON"
+            hCtrlNew := UI_SpeedBtnNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TSTATICTEXT"
+            hCtrlNew := UI_StaticTextNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TSCROLLBOX"
+            hCtrlNew := UI_ScrollBoxNew( hForm, nL, nT, nW, nH )
+         case cType == "TLABELEDEDIT"
+            hCtrlNew := UI_LabeledEditNew( hForm, cText, nL, nT, nW, nH )
          endcase
 
          if hCtrlNew != nil .and. hCtrlNew != 0

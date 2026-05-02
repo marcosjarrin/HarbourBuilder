@@ -3087,7 +3087,31 @@ static void s_aiSetSuggestions( NSArray<NSString*> * items, id target )
       @"{\"type\":string,\"x\":int,\"y\":int,\"w\":int,\"h\":int,\"text\":string,\"name\":string}],"
       @"\"code\":string}\n"
       @"        type ∈ {TLabel,TEdit,TButton,TCheckBox,TComboBox,TGroupBox,TRadioButton,TMemo,"
-      @"TTreeView,TListView,TListBox,TProgressBar,TImage,TBevel,TShape,TBitBtn,TTabControl}.\n"
+      @"TTreeView,TListView,TListBox,TProgressBar,TImage,TBevel,TShape,TBitBtn,TTabControl,"
+      @"TMaskEdit,TStringGrid,TSpeedButton,TStaticText,TScrollBox,TLabeledEdit}.\n"
+      @"        HBBUILDER PALETTE CATALOG (use ONLY these — do not invent component names):\n"
+      @"          • Standard tab: TLabel, TEdit, TButton, TCheckBox, TComboBox, TListBox, "
+      @"TGroupBox, TRadioButton, TMemo.\n"
+      @"          • Additional tab: TBitBtn, TSpeedButton, TImage, TShape, TBevel, TMaskEdit, "
+      @"TStringGrid, TScrollBox, TStaticText, TLabeledEdit.\n"
+      @"          • Cocoa tab: TTabControl, TTreeView, TListView, TProgressBar.\n"
+      @"        If the user asks to LIST/SHOW the palette controls, respond as CHAT (plain text) "
+      @"using exactly this catalog — never describe Delphi-specific controls (TTrayIcon, "
+      @"TMediaPlayer, TChart, etc.) which are NOT in HbBuilder.\n"
+      @"        For TMaskEdit, the \"text\" field is the input MASK (e.g. \"99/99/9999\").\n"
+      @"\n"
+      @"        FOLLOW-UP SUGGESTIONS: every JSON response (FORM, ADD_CODE, RUN, etc.) MUST also "
+      @"include a \"next\" field — an array of 3 to 4 short Spanish/English follow-up prompts that "
+      @"the IDE will show as one-click chips. Tailor them to what was just done. Examples:\n"
+      @"          • After creating a login form: "
+      @"\"next\":[\"centra los botones\",\"añade remember me\",\"cambia título\",\"run\"]\n"
+      @"          • After \"ajusta tamaño form\": "
+      @"\"next\":[\"centra los controles\",\"añade un boton\",\"añade un label\",\"run\"]\n"
+      @"          • After ADD_CODE for a method: "
+      @"\"next\":[\"añade otro método\",\"run\",\"refactoriza esto\",\"explica el código\"]\n"
+      @"          • After {\"action\":\"run\"}: "
+      @"\"next\":[\"añade un control\",\"ajusta tamaño form\",\"refactor\",\"otra ventana\"]\n"
+      @"        Each suggestion ≤ 30 characters, action-oriented, never repeats the previous request.\n"
       @"        For TTreeView, TListBox, TComboBox, TListView (anything with rows): include an "
       @"\"items\":[\"a\",\"b\",\"c\"] field in the control spec to populate it. The IDE shows "
       @"those items in the design preview AND at runtime — never emit a Form1Show method that "
@@ -3172,10 +3196,13 @@ static void s_aiSetSuggestions( NSArray<NSString*> * items, id target )
       @"\n"
       @"CODE — user asks ABOUT Harbour code in general (explain, ask how, refactor a snippet pasted "
       @"in chat). NO implication of inserting it into the form.\n"
-      @"        Response format: short context line + a fenced block ```harbour ... ```. No JSON.\n"
+      @"        Response format: JSON {\"text\":\"<short context>\\n```harbour\\n<code>\\n```\","
+      @"\"next\":[\"...\",\"...\"]}.\n"
       @"\n"
-      @"CHAT — anything else (greetings, definitions, IDE questions, conversation).\n"
-      @"        Response format: plain natural-language text. No JSON. No code fence.\n"
+      @"CHAT — anything else (greetings, definitions, IDE questions, conversation, listing palette).\n"
+      @"        Response format: JSON {\"text\":\"<natural-language reply>\","
+      @"\"next\":[\"...\",\"...\"]}. Inside the \"text\" string, escape inner quotes as \\\" and "
+      @"newlines as \\n. ALL responses are JSON — never emit raw prose.\n"
       @"\n"
       @"Heuristics: words like \"form\", \"login\", \"signup\", \"dialog\", \"button\", \"edit\", "
       @"\"checkbox\", \"label\", \"window\", \"ventana\", \"botones\", \"diseña\", \"haz un\", "
@@ -3330,6 +3357,7 @@ static void s_aiSetSuggestions( NSArray<NSString*> * items, id target )
       NSURLSessionDataTask * task = [[NSURLSession sharedSession]
          dataTaskWithRequest:req completionHandler:^(NSData * data, NSURLResponse * resp, NSError * err) {
          (void)resp;
+         __block id specObj = nil;
          dispatch_async( dispatch_get_main_queue(), ^{
             [s_aiSpinner stopAnimation:nil];
             if( err || !data ) {
@@ -3382,7 +3410,6 @@ static void s_aiSetSuggestions( NSArray<NSString*> * items, id target )
             }
 
             BOOL looksJson = [trimmed hasPrefix:@"{"];
-            id specObj = nil;
             if( looksJson ) {
                NSData * specData = [trimmed dataUsingEncoding:NSUTF8StringEncoding];
                specObj = [NSJSONSerialization JSONObjectWithData:specData options:0 error:nil];
@@ -3460,6 +3487,14 @@ static void s_aiSetSuggestions( NSArray<NSString*> * items, id target )
                      }
                      return;
                   }
+                  /* CHAT / CODE wrapper: {"text":"...","next":[...]} → display text */
+                  NSString * textField = dict[@"text"];
+                  if( [textField isKindOfClass:[NSString class]] && [textField length] > 0 &&
+                      !dict[@"controls"] && !dict[@"action"] &&
+                      !dict[@"w"] && !dict[@"h"] && !dict[@"title"] ) {
+                     s_aiAppend( [NSString stringWithFormat:@"\n%@\n", textField] );
+                     return;
+                  }
                   /* Form spec (optionally with event-handler code).
                      Shape-driven: any of controls/w/h/title triggers AIBuildForm,
                      which dispatches to new-form / add-to-current / resize-current. */
@@ -3497,22 +3532,42 @@ static void s_aiSetSuggestions( NSArray<NSString*> * items, id target )
             s_aiAppend( [NSString stringWithFormat:@"\n%@\n", reply] );
          });
          dispatch_async( dispatch_get_main_queue(), ^{
-            /* Refresh suggestion chips after each turn — vary based on form state */
-            BOOL hasForm = NO;
-            PHB_DYNS pHas = hb_dynsymFindName( "AIGETACTIVEFORMCLASS" );
-            if( pHas ) {
-               hb_vmPushDynSym( pHas );
-               hb_vmPushNil();
-               hb_vmFunction( 0 );
-               PHB_ITEM pR = hb_stackReturnItem();
-               if( pR && HB_IS_STRING(pR) ) {
-                  const char * c = hb_itemGetCPtr( pR );
-                  hasForm = ( c && *c );
-               }
+            /* Prefer the model's own "next":[...] follow-up suggestions if it
+               supplied them in the JSON response. Otherwise fall back to a
+               context-aware default (form-mod vs form-create). */
+            NSArray * suggFromModel = nil;
+            if( [specObj isKindOfClass:[NSDictionary class]] ) {
+               id n = ((NSDictionary *)specObj)[@"next"];
+               if( [n isKindOfClass:[NSArray class]] && [(NSArray *)n count] > 0 )
+                  suggFromModel = (NSArray *)n;
             }
-            NSArray * sugg = hasForm
-               ? @[ @"añade ok y cancel", @"centralos", @"ajusta tamaño form", @"run" ]
-               : @[ @"haz un login", @"haz un signup", @"form de búsqueda", @"run" ];
+            NSArray * sugg = nil;
+            if( suggFromModel ) {
+               NSMutableArray * clean = [NSMutableArray array];
+               for( id s in suggFromModel ) {
+                  if( [s isKindOfClass:[NSString class]] && [(NSString *)s length] > 0 )
+                     [clean addObject:s];
+                  if( [clean count] >= 4 ) break;
+               }
+               if( [clean count] > 0 ) sugg = clean;
+            }
+            if( !sugg ) {
+               BOOL hasForm = NO;
+               PHB_DYNS pHas = hb_dynsymFindName( "AIGETACTIVEFORMCLASS" );
+               if( pHas ) {
+                  hb_vmPushDynSym( pHas );
+                  hb_vmPushNil();
+                  hb_vmFunction( 0 );
+                  PHB_ITEM pR = hb_stackReturnItem();
+                  if( pR && HB_IS_STRING(pR) ) {
+                     const char * c = hb_itemGetCPtr( pR );
+                     hasForm = ( c && *c );
+                  }
+               }
+               sugg = hasForm
+                  ? @[ @"añade ok y cancel", @"centralos", @"ajusta tamaño form", @"run" ]
+                  : @[ @"haz un login", @"haz un signup", @"form de búsqueda", @"run" ];
+            }
             s_aiSetSuggestions( sugg, self );
          });
       }];

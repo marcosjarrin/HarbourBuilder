@@ -1,6 +1,98 @@
 HarbourBuilder - Cross-platform visual IDE for Harbour
 =======================================================
 
+2026-05-02d
+
+  - feat(macos-ai-additional): Additional-palette controls reachable
+    from AIBuildForm. Three new HB_FUNCs in cocoa_core.m:
+    UI_StaticTextNew, UI_ScrollBoxNew, UI_LabeledEditNew. Existing
+    UI_SpeedBtnNew / UI_MaskEditNew / UI_StringGridNew / UI_BitBtnNew /
+    UI_ImageNew / UI_ShapeNew / UI_BevelNew now wired through AIBuildForm.
+    Allowed control-type whitelist expanded accordingly. Skill carries
+    the actual HbBuilder palette catalog (Standard / Additional /
+    Cocoa) so the model stops describing Delphi-only controls
+    (TTrayIcon, TMediaPlayer, TChart, …) when asked to list components.
+
+  - feat(macos-ai-suggestions): Skill drives the chip suggestions —
+    every JSON response MUST include "next":[3-4 short prompts].
+    AIBuildForm/AIAddCode/RUN responses include them; CHAT and CODE
+    responses are now also JSON-wrapped: {"text":"...","next":[...]}.
+    Obj-C parses "next" from the response; falls back to context-aware
+    defaults (form-mod chips when an active form exists, form-create
+    chips otherwise) only if the model omits it. Chip row implemented
+    as NSStackView above the input; chips refresh after each turn,
+    click → fills input + sends.
+
+  - feat(macos-ai-upsert): AIBuildForm consolidated into a single path
+    that upserts controls by name. New AI_FindCtrlByName helper looks
+    up an existing child by its cName; if found, AIBuildForm UPDATES
+    its props (nLeft/nTop/nWidth/nHeight/cText/aItems) instead of
+    creating a duplicate. Lets the model emit "centra los botones",
+    "muévelo abajo", etc. by re-emitting controls with the same name
+    and new x/y. Skill carries explicit examples and a rule: never
+    refuse a move/center request.
+
+  - feat(macos-ai-items): Control spec accepts "items":[...] for
+    TTreeView / TListBox / TComboBox / TListView. AIBuildForm calls
+    UI_SetProp(hCtrl, "aItems", items) which goes through FHeaders +
+    reload-data, so items appear in the design preview AND at runtime.
+    Skill instructs the model to populate via "items" inline rather
+    than emitting a Form1Show populator.
+
+  - feat(macos-ai-context): Active-form context fed to LLM on every
+    send. AIDescribeActiveForm() returns JSON of class, title, size
+    and existing controls. Obj-C prepends it to the user message.
+    Skill rule: emitting a control with an existing name UPDATES that
+    control; behavior wiring goes via ADD_CODE on existing controls.
+    AIGetActiveFormClass() also feeds the actual TFormN class name so
+    generated METHODs target the right class. AI_RewriteClassName is
+    a defensive backstop that rewrites stale "CLASS T<name>" the model
+    emits to the real active class.
+
+  - feat(macos-ai-deepseek): DeepSeek backend support alongside Ollama.
+    Reads DEEPSEEK_API_KEY env or ~/.hbbuilder_deepseek_key; inline
+    "/key sk-..." stores and unlocks. When DeepSeek is configured the
+    Ollama probe + banner is skipped; combo gets deepseek-v4-flash +
+    deepseek-chat at the top. Routing by selected model: deepseek* →
+    POST https://api.deepseek.com/v1/chat/completions with Bearer auth
+    and OpenAI-shape payload. Response parser handles Ollama shape,
+    OpenAI shape, and {"error":{"message":...}}.
+
+  - fix(macos-tbrun-cache): FNV-1a 32-bit hash over the FULL project
+    code, replacing the previous 5000-byte position-weighted sum that
+    let small AI-driven edits (centering a button, renaming text) slip
+    through unchanged so the cached app launched instead of being
+    rebuilt. Also fixes "run sometimes executes the previous project."
+
+  - fix(macos-ai-blockscope): Hoist `id specObj` out of the inner
+    dispatch_async-main block (declared `__block id specObj = nil`
+    inside the URL completion handler) so the second main-queue block
+    that drives suggestion-chip refresh can read the parsed JSON. Was
+    a build-breaking compile error; once fixed, model-supplied "next"
+    chips actually populate.
+
+  - feat(macos-ai-events): AIAddCode triggers SyncDesignerToCode after
+    appending so Form-event-handler methods auto-wire by name (e.g.
+    METHOD Form1Click → ::OnClick := { || ::Form1Click() } emitted in
+    CreateForm). Skill documents the naming convention: control event
+    handler = controlName + event-without-On (btnOkClick); form event
+    handler = formName + event-without-On (Form1Click).
+
+  - feat(macos-ai-types): Allowed types include TTreeView, TListView,
+    TListBox, TProgressBar, TImage, TBevel, TShape, TBitBtn,
+    TTabControl, TMaskEdit, TStringGrid, TSpeedButton, TStaticText,
+    TScrollBox, TLabeledEdit. Each dispatches to its UI_*New entry
+    point. TMaskEdit's "text" field carries the input mask
+    (e.g. "99/99/9999").
+
+  - feat(macos-ai-panel): AI Assistant panel polish.
+    * Title simplified to "AI Assistant" (no "(Ollama)" suffix).
+    * Default width 420 → 450 px.
+    * Suggestion chips row above the input; chat scroll moves up to
+      make room.
+    * Banner conditional on backend: "(DeepSeek)" when configured,
+      Ollama wording otherwise.
+
 2026-05-02c
 
   - feat(macos-ai-deepseek): DeepSeek backend alongside Ollama. Reads
