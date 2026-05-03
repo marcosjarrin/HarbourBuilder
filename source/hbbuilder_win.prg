@@ -7852,27 +7852,27 @@ static char * s_aiFetchOllamaTags( void )
 /* Recompute child layout for the given client size. Called on WM_SIZE. */
 static void s_aiRelayout( int cw, int ch )
 {
-   int topRowH = 28, chipsH = 30, inputH = 26, statusH = 18, margin = 6;
-   int chatY   = margin + topRowH + 4;
+   int topRowH = 32, chipsH = 34, inputH = 30, statusH = 22, margin = 8;
+   int chatY   = margin + topRowH + 6;
    int chatH   = ch - chatY - chipsH - inputH - statusH - 4*margin;
    if( chatH < 60 ) chatH = 60;
 
    if( s_hAIModelLbl )
-      MoveWindow( s_hAIModelLbl, margin, margin + 6, 42, 18, TRUE );
+      MoveWindow( s_hAIModelLbl, margin, margin + 8, 56, 22, TRUE );
    if( s_hAICombo )
-      MoveWindow( s_hAICombo, margin + 50, margin, cw - 80 - margin*2, 240, TRUE );
+      MoveWindow( s_hAICombo, margin + 60, margin + 4, cw - 90 - margin*2, 280, TRUE );
    if( s_hAIClear )
-      MoveWindow( s_hAIClear, cw - margin - 70, margin, 70, topRowH, TRUE );
+      MoveWindow( s_hAIClear, cw - margin - 80, margin + 2, 80, topRowH, TRUE );
    if( s_hAIOutput )
       MoveWindow( s_hAIOutput, margin, chatY, cw - margin*2, chatH, TRUE );
    if( s_hAIChipsBar )
       MoveWindow( s_hAIChipsBar, margin, chatY + chatH + margin, cw - margin*2, chipsH, TRUE );
    if( s_hAIInput )
       MoveWindow( s_hAIInput, margin, chatY + chatH + chipsH + margin*2,
-                  cw - margin*2 - 76, inputH, TRUE );
+                  cw - margin*2 - 86, inputH, TRUE );
    if( s_hAISend )
-      MoveWindow( s_hAISend, cw - margin - 70, chatY + chatH + chipsH + margin*2,
-                  70, inputH, TRUE );
+      MoveWindow( s_hAISend, cw - margin - 80, chatY + chatH + chipsH + margin*2,
+                  80, inputH, TRUE );
    if( s_hAIStatus )
       MoveWindow( s_hAIStatus, margin, ch - statusH - margin, cw - margin*2, statusH, TRUE );
 }
@@ -8022,8 +8022,19 @@ HB_FUNC( W32_AIASSISTANTPANEL )
                              &bDark, sizeof(bDark) );
    }
 
-   s_hAIUiFont = (HFONT) GetStockObject( DEFAULT_GUI_FONT );
-   lf.lfHeight = -14;
+   /* UI font: Segoe UI 11pt */
+   {
+      LOGFONTA uf = {0};
+      uf.lfHeight = -15;          /* ~11pt at 96 DPI */
+      uf.lfWeight = FW_NORMAL;
+      uf.lfCharSet = DEFAULT_CHARSET;
+      lstrcpyA( uf.lfFaceName, "Segoe UI" );
+      s_hAIUiFont = CreateFontIndirectA( &uf );
+      if( !s_hAIUiFont )
+         s_hAIUiFont = (HFONT) GetStockObject( DEFAULT_GUI_FONT );
+   }
+   /* Chat font: Consolas 12pt monospace */
+   lf.lfHeight = -17;             /* ~12.5pt at 96 DPI */
    lf.lfCharSet = DEFAULT_CHARSET;
    lf.lfPitchAndFamily = FIXED_PITCH;
    lstrcpyA( lf.lfFaceName, "Consolas" );
