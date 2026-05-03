@@ -3113,10 +3113,11 @@ HB_FUNC( INS_CREATE )
         dampening factor so they grow with DPI but don't dominate
         (font 13pt -> 17pt at 200% DPI; col 205 -> 308 at 200%). */
      int sysDpi = 96;
+     int dampedDpi;
      { HDC hScreen = GetDC( NULL );
        sysDpi = GetDeviceCaps( hScreen, LOGPIXELSY );
        ReleaseDC( NULL, hScreen ); }
-     int dampedDpi = 96 + ( sysDpi - 96 ) / 2;  /* 96 at 96, 144 at 192 */
+     dampedDpi = 96 + ( sysDpi - 96 ) / 2;  /* 96 at 96, 144 at 192 */
      if( dampedDpi < 96 ) dampedDpi = 96;
      lf.lfHeight = -MulDiv( 13, dampedDpi, 72 );
      lf.lfCharSet = DEFAULT_CHARSET;
