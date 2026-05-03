@@ -7976,7 +7976,7 @@ HB_FUNC( W32_AIASSISTANTPANEL )
    HWND hOwner;
    RECT rc;
    LOGFONTA lf = {0};
-   int panW = 420, panH = 560;
+   int panW = 440, panH = 720;
 
    s_aiLoadKey();
 
@@ -8029,69 +8029,54 @@ HB_FUNC( W32_AIASSISTANTPANEL )
    lstrcpyA( lf.lfFaceName, "Consolas" );
    s_hAIChatFont = CreateFontIndirectA( &lf );
 
-   /* Layout constants */
+   /* Create children with placeholder geometry; s_aiRelayout will position them
+      based on the actual client rect (excludes title bar + frame). */
    {
-      int topRowH = 28;
-      int chipsH  = 30;
-      int inputH  = 26;
-      int statusH = 18;
-      int margin  = 6;
-      int chatY   = margin + topRowH + 4;
-      int chatH   = panH - chatY - chipsH - inputH - statusH - 4*margin;
-
-      /* Top row: Model label + combo + Clear */
       s_hAIModelLbl = CreateWindowExA( 0, "STATIC", "Model:", WS_CHILD|WS_VISIBLE,
-         margin, margin + 6, 42, 18, s_hAIWnd, NULL, GetModuleHandle(NULL), NULL );
+         0, 0, 0, 0, s_hAIWnd, NULL, GetModuleHandle(NULL), NULL );
       SendMessage( s_hAIModelLbl, WM_SETFONT, (WPARAM) s_hAIUiFont, TRUE );
       s_hAICombo = CreateWindowExA( 0, "COMBOBOX", NULL,
          WS_CHILD|WS_VISIBLE|CBS_DROPDOWNLIST|WS_VSCROLL,
-         margin + 50, margin, panW - 80 - margin*2, 240,
-         s_hAIWnd, (HMENU)2010, GetModuleHandle(NULL), NULL );
+         0, 0, 0, 240, s_hAIWnd, (HMENU)2010, GetModuleHandle(NULL), NULL );
       SendMessage( s_hAICombo, WM_SETFONT, (WPARAM) s_hAIUiFont, TRUE );
       s_hAIClear = CreateWindowExA( 0, "BUTTON", "Clear",
          WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON,
-         panW - margin - 70, margin, 70, topRowH,
-         s_hAIWnd, (HMENU)2011, GetModuleHandle(NULL), NULL );
+         0, 0, 0, 0, s_hAIWnd, (HMENU)2011, GetModuleHandle(NULL), NULL );
       SendMessage( s_hAIClear, WM_SETFONT, (WPARAM) s_hAIUiFont, TRUE );
 
-      /* Chat output (read-only EDIT, dark bg via WM_CTLCOLOREDIT) */
       s_hAIOutput = CreateWindowExA( WS_EX_CLIENTEDGE, "EDIT",
          "AI Assistant ready.\r\n",
          WS_CHILD|WS_VISIBLE|WS_VSCROLL|ES_MULTILINE|ES_READONLY|ES_AUTOVSCROLL,
-         margin, chatY, panW - margin*2, chatH,
-         s_hAIWnd, NULL, GetModuleHandle(NULL), NULL );
+         0, 0, 0, 0, s_hAIWnd, NULL, GetModuleHandle(NULL), NULL );
       SendMessage( s_hAIOutput, WM_SETFONT, (WPARAM) s_hAIChatFont, TRUE );
 
-      /* Chips bar (child window holding chip buttons; we reposition via WM_SIZE in later task) */
       s_hAIChipsBar = CreateWindowExA( 0, "STATIC", NULL, WS_CHILD|WS_VISIBLE,
-         margin, chatY + chatH + margin, panW - margin*2, chipsH,
-         s_hAIWnd, (HMENU)2020, GetModuleHandle(NULL), NULL );
+         0, 0, 0, 0, s_hAIWnd, (HMENU)2020, GetModuleHandle(NULL), NULL );
       s_aiChipsOldProc = (WNDPROC) SetWindowLongPtr( s_hAIChipsBar, GWLP_WNDPROC,
                                                      (LONG_PTR) s_aiChipsProc );
 
-      /* Input field */
       s_hAIInput = CreateWindowExA( WS_EX_CLIENTEDGE, "EDIT", "",
          WS_CHILD|WS_VISIBLE|ES_AUTOHSCROLL,
-         margin, chatY + chatH + chipsH + margin*2,
-         panW - margin*2 - 76, inputH,
-         s_hAIWnd, (HMENU)2030, GetModuleHandle(NULL), NULL );
+         0, 0, 0, 0, s_hAIWnd, (HMENU)2030, GetModuleHandle(NULL), NULL );
       SendMessage( s_hAIInput, WM_SETFONT, (WPARAM) s_hAIUiFont, TRUE );
       s_aiInputOldProc = (WNDPROC) SetWindowLongPtr( s_hAIInput, GWLP_WNDPROC,
                                                      (LONG_PTR) s_aiInputProc );
 
-      /* Send button */
       s_hAISend = CreateWindowExA( 0, "BUTTON", "Send",
          WS_CHILD|WS_VISIBLE|BS_DEFPUSHBUTTON,
-         panW - margin - 70, chatY + chatH + chipsH + margin*2, 70, inputH,
-         s_hAIWnd, (HMENU)2031, GetModuleHandle(NULL), NULL );
+         0, 0, 0, 0, s_hAIWnd, (HMENU)2031, GetModuleHandle(NULL), NULL );
       SendMessage( s_hAISend, WM_SETFONT, (WPARAM) s_hAIUiFont, TRUE );
 
-      /* Status bar */
       s_hAIStatus = CreateWindowExA( 0, "STATIC", "Status: Ready",
          WS_CHILD|WS_VISIBLE|SS_LEFT,
-         margin, panH - statusH - margin, panW - margin*2, statusH,
-         s_hAIWnd, NULL, GetModuleHandle(NULL), NULL );
+         0, 0, 0, 0, s_hAIWnd, NULL, GetModuleHandle(NULL), NULL );
       SendMessage( s_hAIStatus, WM_SETFONT, (WPARAM) s_hAIUiFont, TRUE );
+
+      {
+         RECT rcc;
+         GetClientRect( s_hAIWnd, &rcc );
+         s_aiRelayout( rcc.right, rcc.bottom );
+      }
 
       /* Default model list (dynamic ollama tags added in later task) */
       SendMessageA( s_hAICombo, CB_ADDSTRING, 0, (LPARAM)"deepseek-v4-flash" );
