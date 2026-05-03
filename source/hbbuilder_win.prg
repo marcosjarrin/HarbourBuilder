@@ -6803,6 +6803,16 @@ static const char * AI_SYS_PROMPT =
 
 static LRESULT CALLBACK AIPanelWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam );
 
+static void s_aiAppend( const char * txt )
+{
+   int n;
+   if( !s_hAIOutput || !txt || !*txt ) return;
+   n = (int) SendMessageA( s_hAIOutput, WM_GETTEXTLENGTH, 0, 0 );
+   SendMessageA( s_hAIOutput, EM_SETSEL, n, n );
+   SendMessageA( s_hAIOutput, EM_REPLACESEL, FALSE, (LPARAM)txt );
+   SendMessageA( s_hAIOutput, EM_SCROLLCARET, 0, 0 );
+}
+
 static LRESULT CALLBACK AIPanelWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
    switch( msg )
@@ -6818,6 +6828,13 @@ static LRESULT CALLBACK AIPanelWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPAR
          return (LRESULT) s_hAIChatBrush;
       }
       break;
+   case WM_AI_APPEND:
+      if( lParam ) {
+         char * p = (char *) lParam;
+         s_aiAppend( p );
+         free( p );
+      }
+      return 0;
    case WM_CLOSE:
       ShowWindow( hWnd, SW_HIDE );
       return 0;
@@ -6943,6 +6960,25 @@ HB_FUNC( W32_AIASSISTANTPANEL )
       SendMessageA( s_hAICombo, CB_ADDSTRING, 0, (LPARAM)"deepseek-coder" );
       SendMessageA( s_hAICombo, CB_ADDSTRING, 0, (LPARAM)"gemma3" );
       SendMessage( s_hAICombo, CB_SETCURSEL, 0, 0 );
+   }
+}
+
+HB_FUNC( W32_AIAPPENDCHAT )
+{
+   const char * t = hb_parc(1);
+   if( t && s_hAIWnd ) {
+      /* Convert LF to CRLF for EDIT control */
+      int len = (int) strlen( t );
+      char * buf = (char *) malloc( (size_t)len * 2 + 1 );
+      char * p = buf;
+      int i;
+      for( i = 0; i < len; i++ ) {
+         if( t[i] == '\n' && (i == 0 || t[i-1] != '\r') ) *p++ = '\r';
+         *p++ = t[i];
+      }
+      *p = 0;
+      s_aiAppend( buf );
+      free( buf );
    }
 }
 
