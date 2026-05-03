@@ -5862,6 +5862,190 @@ function AIBuildForm( cJson )
 
 return nil
 
+// AIDispatchReply( cRaw ) - called from C with raw HTTP reply JSON.
+// Extracts the model's "content" string, then parses it as our skill JSON
+// and dispatches to AIBuildForm / AIAddCode / AIRunProject / chat.
+function AIDispatchReply( cRaw )
+   local hOuter, cReply, cTrim, hSpec, oErr
+   local cAction, cCode
+   local nStart, nEnd, nDepth, lInStr, lEsc, i, c
+   local aNext
+
+   if ! HB_ISCHAR( cRaw ) .or. Empty( cRaw )
+      return nil
+   endif
+
+   // 1. Extract assistant content string from OpenAI / Ollama / DeepSeek shape
+   begin sequence with { | e | break( e ) }
+      hOuter := hb_jsonDecode( cRaw )
+   recover using oErr
+      hOuter := nil
+   end sequence
+
+   cReply := nil
+   if HB_ISHASH( hOuter )
+      if HB_ISARRAY( hOuter[ "choices" ] ) .and. Len( hOuter[ "choices" ] ) > 0
+         if HB_ISHASH( hOuter[ "choices" ][1] ) .and. HB_ISHASH( hOuter[ "choices" ][1][ "message" ] )
+            cReply := hOuter[ "choices" ][1][ "message" ][ "content" ]
+         endif
+      endif
+      if cReply == nil .and. HB_ISHASH( hOuter[ "message" ] )
+         cReply := hOuter[ "message" ][ "content" ]
+      endif
+      if cReply == nil .and. HB_ISHASH( hOuter[ "error" ] ) .and. ;
+         HB_ISCHAR( hOuter[ "error" ][ "message" ] )
+         W32_AIAppendChat( Chr(10) + "[API error: " + hOuter[ "error" ][ "message" ] + "]" + Chr(10) )
+         return nil
+      endif
+   endif
+
+   if cReply == nil .or. ! HB_ISCHAR( cReply ) .or. Empty( cReply )
+      W32_AIAppendChat( Chr(10) + "[Empty response]" + Chr(10) )
+      return nil
+   endif
+
+   cTrim := AllTrim( cReply )
+
+   // Strip ```json ... ``` fences
+   if Left( cTrim, 3 ) == "```"
+      i := At( Chr(10), cTrim )
+      if i > 0
+         cTrim := SubStr( cTrim, i + 1 )
+      endif
+      if Right( cTrim, 3 ) == "```"
+         cTrim := Left( cTrim, Len( cTrim ) - 3 )
+      endif
+      cTrim := AllTrim( cTrim )
+   endif
+
+   // 2. Try direct JSON parse of the assistant message
+   hSpec := nil
+   if Left( cTrim, 1 ) == "{"
+      begin sequence with { | e | break( e ) }
+         hSpec := hb_jsonDecode( cTrim )
+      recover using oErr
+         hSpec := nil
+      end sequence
+   endif
+
+   // 3. Balanced-brace recovery if first parse failed
+   if ! HB_ISHASH( hSpec ) .and. Left( cTrim, 1 ) == "{"
+      nStart := 0; nEnd := 0; nDepth := 0; lInStr := .F.; lEsc := .F.
+      for i := 1 to Len( cTrim )
+         c := SubStr( cTrim, i, 1 )
+         if lInStr
+            if lEsc
+               lEsc := .F.
+            elseif c == "\"
+               lEsc := .T.
+            elseif c == '"'
+               lInStr := .F.
+            endif
+         elseif c == '"'
+            lInStr := .T.
+         elseif c == "{"
+            if nStart == 0; nStart := i; endif
+            nDepth++
+         elseif c == "}"
+            nDepth--
+            if nDepth == 0 .and. nStart > 0
+               nEnd := i; exit
+            endif
+         endif
+      next
+      if nStart > 0 .and. nEnd > nStart
+         begin sequence with { | e | break( e ) }
+            hSpec := hb_jsonDecode( SubStr( cTrim, nStart, nEnd - nStart + 1 ) )
+         recover using oErr
+            hSpec := nil
+         end sequence
+      endif
+   endif
+
+   // 4. Dispatch by shape
+   if HB_ISHASH( hSpec )
+      cAction := iif( "action" $ hSpec .and. HB_ISCHAR( hSpec[ "action" ] ), hSpec[ "action" ], "" )
+
+      if cAction == "run" .or. cAction == "build_run"
+         W32_AIAppendChat( Chr(10) + "Building and running project..." + Chr(10) )
+         AIRunProject()
+      elseif cAction == "add_code"
+         cCode := iif( "code" $ hSpec .and. HB_ISCHAR( hSpec[ "code" ] ), hSpec[ "code" ], "" )
+         if Empty( cCode )
+            W32_AIAppendChat( Chr(10) + "[add_code: missing code field]" + Chr(10) )
+         else
+            W32_AIAppendChat( Chr(10) + "Adding code to current form..." + Chr(10) + ;
+                              "```harbour" + Chr(10) + cCode + Chr(10) + "```" + Chr(10) )
+            AIAddCode( cCode )
+            W32_AIAppendChat( "Code appended to active editor tab." + Chr(10) )
+         endif
+      elseif "controls" $ hSpec .or. "w" $ hSpec .or. "h" $ hSpec .or. "title" $ hSpec
+         W32_AIAppendChat( Chr(10) + "Building form..." + Chr(10) )
+         AIBuildForm( cTrim )
+         W32_AIAppendChat( "Form built — see design view." + Chr(10) )
+         if "code" $ hSpec .and. HB_ISCHAR( hSpec[ "code" ] ) .and. ! Empty( hSpec[ "code" ] )
+            W32_AIAppendChat( "Adding event handler code..." + Chr(10) + ;
+                              "```harbour" + Chr(10) + hSpec[ "code" ] + Chr(10) + "```" + Chr(10) )
+            AIAddCode( hSpec[ "code" ] )
+         endif
+      elseif "text" $ hSpec .and. HB_ISCHAR( hSpec[ "text" ] )
+         W32_AIAppendChat( Chr(10) + hSpec[ "text" ] + Chr(10) )
+      else
+         W32_AIAppendChat( Chr(10) + cReply + Chr(10) )
+      endif
+
+      // Suggestion chips from "next" array
+      if "next" $ hSpec .and. HB_ISARRAY( hSpec[ "next" ] ) .and. Len( hSpec[ "next" ] ) > 0
+         aNext := {}
+         for i := 1 to Len( hSpec[ "next" ] )
+            if HB_ISCHAR( hSpec[ "next" ][i] ) .and. ! Empty( hSpec[ "next" ][i] )
+               AAdd( aNext, hSpec[ "next" ][i] )
+            endif
+         next
+         if Len( aNext ) > 0
+            W32_AISetChips( aNext )
+         else
+            W32_AISetChips( AIDefaultChips() )
+         endif
+      else
+         W32_AISetChips( AIDefaultChips() )
+      endif
+   else
+      // Plain chat (non-JSON reply)
+      W32_AIAppendChat( Chr(10) + cReply + Chr(10) )
+      W32_AISetChips( AIDefaultChips() )
+   endif
+
+return nil
+
+function AIDefaultChips()
+   if ! Empty( AIGetActiveFormClass() )
+      return { "añade ok y cancel", "centralos", "ajusta tamaño form", "run" }
+   endif
+return { "haz un login", "haz un signup", "form de búsqueda", "run" }
+
+// AIParseOllamaTags( cJson ) - extract array of model names from /api/tags reply.
+function AIParseOllamaTags( cJson )
+   local hOuter, aNames := {}, aMods, hMod, i, oErr
+   if ! HB_ISCHAR( cJson ) .or. Empty( cJson )
+      return aNames
+   endif
+   begin sequence with { | e | break( e ) }
+      hOuter := hb_jsonDecode( cJson )
+   recover using oErr
+      hOuter := nil
+   end sequence
+   if HB_ISHASH( hOuter ) .and. HB_ISARRAY( hOuter[ "models" ] )
+      aMods := hOuter[ "models" ]
+      for i := 1 to Len( aMods )
+         hMod := aMods[i]
+         if HB_ISHASH( hMod ) .and. HB_ISCHAR( hMod[ "name" ] )
+            AAdd( aNames, hMod[ "name" ] )
+         endif
+      next
+   endif
+return aNames
+
 // === C Compiler Not Found Dialog ===
 
 static function ShowNoCompilerDialog()
@@ -7705,6 +7889,7 @@ static LRESULT CALLBACK AIPanelWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPAR
             s_aiAppend( "\r\n[AIDispatchReply not registered]\r\n" );
             s_aiAppend( p );
          }
+         if( s_hAIStatus ) SetWindowTextA( s_hAIStatus, "Status: Ready" );
          free( p );
       }
       return 0;
