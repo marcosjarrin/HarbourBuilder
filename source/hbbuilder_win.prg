@@ -7976,7 +7976,7 @@ HB_FUNC( W32_AIASSISTANTPANEL )
    HWND hOwner;
    RECT rc;
    LOGFONTA lf = {0};
-   int panW = 460, panH = 820;
+   int panW = 490, panH = 820;
 
    s_aiLoadKey();
 
