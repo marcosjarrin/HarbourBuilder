@@ -7166,6 +7166,76 @@ static LRESULT CALLBACK s_aiInputProc( HWND hWnd, UINT msg, WPARAM wParam, LPARA
    return CallWindowProc( s_aiInputOldProc, hWnd, msg, wParam, lParam );
 }
 
+#define AI_CHIP_ID_BASE 2100
+#define AI_CHIP_MAX     8
+
+static char * s_aiChipText[ AI_CHIP_MAX ] = { NULL };
+static int    s_aiChipCount = 0;
+
+static void s_aiClearChips( void )
+{
+   int i;
+   HWND hChild;
+   for( i = 0; i < AI_CHIP_MAX; i++ ) {
+      hChild = GetDlgItem( s_hAIChipsBar, AI_CHIP_ID_BASE + i );
+      if( hChild ) DestroyWindow( hChild );
+      if( s_aiChipText[i] ) { free( s_aiChipText[i] ); s_aiChipText[i] = NULL; }
+   }
+   s_aiChipCount = 0;
+}
+
+static void s_aiSetChips( const char ** labels, int n )
+{
+   int i, x = 4, y = 2, w, totalW;
+   RECT rc;
+   HDC hdc;
+   SIZE sz;
+   if( !s_hAIChipsBar ) return;
+   s_aiClearChips();
+   if( n > AI_CHIP_MAX ) n = AI_CHIP_MAX;
+   GetClientRect( s_hAIChipsBar, &rc );
+   totalW = rc.right - rc.left - 8;
+   hdc = GetDC( s_hAIChipsBar );
+   SelectObject( hdc, s_hAIUiFont );
+   for( i = 0; i < n; i++ ) {
+      const char * t = labels[i];
+      if( !t || !*t ) continue;
+      GetTextExtentPoint32A( hdc, t, (int)strlen(t), &sz );
+      w = sz.cx + 18;
+      if( x + w > totalW ) break;
+      s_aiChipText[ s_aiChipCount ] = _strdup( t );
+      CreateWindowExA( 0, "BUTTON", t,
+         WS_CHILD|WS_VISIBLE|BS_PUSHBUTTON,
+         x, y, w, 24,
+         s_hAIChipsBar, (HMENU)(LONG_PTR)(AI_CHIP_ID_BASE + s_aiChipCount),
+         GetModuleHandle(NULL), NULL );
+      {
+         HWND hb = GetDlgItem( s_hAIChipsBar, AI_CHIP_ID_BASE + s_aiChipCount );
+         SendMessage( hb, WM_SETFONT, (WPARAM) s_hAIUiFont, TRUE );
+      }
+      x += w + 4;
+      s_aiChipCount++;
+   }
+   ReleaseDC( s_hAIChipsBar, hdc );
+}
+
+static WNDPROC s_aiChipsOldProc = NULL;
+static LRESULT CALLBACK s_aiChipsProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
+{
+   if( msg == WM_COMMAND ) {
+      WORD id = LOWORD( wParam );
+      if( id >= AI_CHIP_ID_BASE && id < AI_CHIP_ID_BASE + AI_CHIP_MAX ) {
+         int idx = id - AI_CHIP_ID_BASE;
+         if( idx < s_aiChipCount && s_aiChipText[idx] ) {
+            SetWindowTextA( s_hAIInput, s_aiChipText[idx] );
+            s_aiOnSend();
+         }
+         return 0;
+      }
+   }
+   return CallWindowProc( s_aiChipsOldProc, hWnd, msg, wParam, lParam );
+}
+
 static LRESULT CALLBACK AIPanelWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
    switch( msg )
@@ -7306,6 +7376,8 @@ HB_FUNC( W32_AIASSISTANTPANEL )
       s_hAIChipsBar = CreateWindowExA( 0, "STATIC", NULL, WS_CHILD|WS_VISIBLE,
          margin, chatY + chatH + margin, panW - margin*2, chipsH,
          s_hAIWnd, (HMENU)2020, GetModuleHandle(NULL), NULL );
+      s_aiChipsOldProc = (WNDPROC) SetWindowLongPtr( s_hAIChipsBar, GWLP_WNDPROC,
+                                                     (LONG_PTR) s_aiChipsProc );
 
       /* Input field */
       s_hAIInput = CreateWindowExA( WS_EX_CLIENTEDGE, "EDIT", "",
@@ -7370,6 +7442,20 @@ HB_FUNC( W32_AIDEEPSEEKKEY )
       if( !s_aiDeepseekKey ) s_aiLoadKey();
       hb_retc( s_aiDeepseekKey ? s_aiDeepseekKey : "" );
    }
+}
+
+HB_FUNC( W32_AISETCHIPS )
+{
+   PHB_ITEM pArr = hb_param( 1, HB_IT_ARRAY );
+   int i, n;
+   const char ** labels;
+   if( !pArr || !s_hAIChipsBar ) return;
+   n = (int) hb_arrayLen( pArr );
+   if( n > AI_CHIP_MAX ) n = AI_CHIP_MAX;
+   labels = (const char **) malloc( sizeof(char *) * (size_t)n );
+   for( i = 0; i < n; i++ ) labels[i] = hb_arrayGetCPtr( pArr, i + 1 );
+   s_aiSetChips( labels, n );
+   free( (void *) labels );
 }
 
 /* W32_SetDarkMode( hWnd, lDark ) - enable Windows 10/11 dark title bar */
