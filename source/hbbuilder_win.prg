@@ -7996,7 +7996,7 @@ HB_FUNC( W32_AIASSISTANTPANEL )
    hOwner = GetActiveWindow();
    GetWindowRect( hOwner, &rc );
 
-   s_hAIWnd = CreateWindowExA( WS_EX_TOOLWINDOW,
+   s_hAIWnd = CreateWindowExA( WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
       "HbAIPanel", "AI Assistant",
       WS_POPUP|WS_CAPTION|WS_SYSMENU|WS_THICKFRAME|WS_VISIBLE,
       rc.right - panW - 16, rc.top + 60, panW, panH,
