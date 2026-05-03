@@ -7953,15 +7953,20 @@ static LRESULT CALLBACK AIPanelWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPAR
       }
       break;
    case WM_ERASEBKGND:
-      if( g_bDarkIDE ) {
+      {
          HDC hdc = (HDC)wParam;
          RECT rcc; GetClientRect( hWnd, &rcc );
-         if( !s_hAIPanelBrush )
-            s_hAIPanelBrush = CreateSolidBrush( RGB(0x2D,0x2D,0x30) );
-         FillRect( hdc, &rcc, s_hAIPanelBrush );
+         if( g_bDarkIDE ) {
+            if( !s_hAIPanelBrush )
+               s_hAIPanelBrush = CreateSolidBrush( RGB(0x2D,0x2D,0x30) );
+            FillRect( hdc, &rcc, s_hAIPanelBrush );
+         } else {
+            /* Always paint light bg explicitly so a former dark fill doesn't
+               linger when wc.hbrBackground is NULL. */
+            FillRect( hdc, &rcc, (HBRUSH) (COLOR_BTNFACE + 1) );
+         }
          return 1;
       }
-      break;
    case WM_SIZE:
       s_aiRelayout( LOWORD(lParam), HIWORD(lParam) );
       InvalidateRect( hWnd, NULL, TRUE );
