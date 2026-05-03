@@ -5488,27 +5488,19 @@ static function OnDebugPause( cFunc, nLine, cLocals, cStack )
 
 return .t.  // pause here — user code
 
-// === AI Assistant (Ollama / LM Studio) ===
+// === AI Assistant ===
 
 static function ShowAIAssistant()
+   local cWhere := W32_ShellExec( 'where curl.exe' )
 
-   // Check if Ollama is running before opening the panel
-   local cResult := W32_ShellExec( 'curl -s http://localhost:11434/api/tags 2>nul' )
-
-   if Empty( cResult ) .or. ! ( "models" $ cResult )
-      // Ollama not detected - offer to help
-      MsgInfo( "Ollama is not running!" + Chr(10) + ;
+   if Empty( cWhere ) .or. ! ( "curl.exe" $ Lower( cWhere ) )
+      MsgInfo( "curl.exe is not available." + Chr(10) + ;
                Chr(10) + ;
-               "The AI Assistant requires Ollama for local AI." + Chr(10) + ;
+               "The AI Assistant requires curl, which ships with Windows 10 1803+." + Chr(10) + ;
                Chr(10) + ;
-               "To install Ollama:" + Chr(10) + ;
-               "1. Download from https://ollama.com/download" + Chr(10) + ;
-               "2. Run the installer" + Chr(10) + ;
-               "3. Open a terminal and run: ollama pull codellama" + Chr(10) + ;
-               "4. Restart HbBuilder and try again" + Chr(10) + ;
-               Chr(10) + ;
-               "The AI Assistant will open anyway for preview.", ;
-               "Ollama Not Detected" )
+               "Update Windows or install curl from https://curl.se/windows/", ;
+               "curl.exe Not Found" )
+      return nil
    endif
 
    W32_AIAssistantPanel()
