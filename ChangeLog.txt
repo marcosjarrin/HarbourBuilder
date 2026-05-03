@@ -3,6 +3,23 @@ HarbourBuilder - Cross-platform visual IDE for Harbour
 
 2026-05-03b
 
+  - fix(win-ai): runtime dark-mode toggle now propagates to the AI
+    panel. The panel was created once with hardcoded #1E1E1E chat +
+    #2D2D30 panel bg — WM_CTLCOLOREDIT/STATIC always returned dark
+    regardless of g_bDarkIDE, and ToggleDarkMode never told the panel
+    to repaint. Fixes:
+      - WM_CTLCOLOREDIT / WM_CTLCOLORSTATIC for chat + input now branch
+        on g_bDarkIDE (white bg + dark text in light mode).
+      - WM_ERASEBKGND always FillRect — dark brush in dark mode,
+        COLOR_BTNFACE in light — so a former dark fill doesn't survive
+        when wc.hbrBackground was NULL.
+      - New HB_FUNC( W32_AIRefreshTheme ): re-applies
+        DwmSetWindowAttribute, drops cached panel + chat brushes,
+        invalidates panel + chat + input + chips bar, and
+        SetWindowPos(SWP_FRAMECHANGED) so DWM re-frames the title bar.
+      - ToggleDarkMode calls W32_AIRefreshTheme alongside the existing
+        IDE / inspector / design-form / code-editor refresh hooks.
+
   - fix(win-ai): AI-built controls now materialize on the design form.
     AIBuildForm called UI_*New which only added the C++ control to the
     form's children list — the HWND was never created because
