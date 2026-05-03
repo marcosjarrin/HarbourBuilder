@@ -5727,6 +5727,141 @@ function AIAddCode( cCode )
    SyncDesignerToCode()
 return nil
 
+// AIBuildForm( cJson ) - called from C after Ollama returns JSON form spec.
+function AIBuildForm( cJson )
+
+   local hSpec, aCtrls, hCtrlSpec, cType, nL, nT, nW, nH, cText, cName
+   local hForm, hCtrlNew, i, oErr
+
+   if ! HB_ISCHAR( cJson ) .or. Empty( cJson )
+      return nil
+   endif
+
+   begin sequence with { | e | break( e ) }
+      hSpec := hb_jsonDecode( cJson )
+   recover using oErr
+      hSpec := nil
+   end sequence
+
+   if ! HB_ISHASH( hSpec )
+      return nil
+   endif
+
+   // Single rule: "title" key signals a NEW form. Otherwise operate on the
+   // currently-active form. Skill is responsible for choosing the right shape.
+   if "title" $ hSpec
+      MenuNewForm()
+   endif
+   if oDesignForm == nil
+      return nil
+   endif
+   hForm := oDesignForm:hCpp
+
+   // Apply form-level properties when present
+   if "title" $ hSpec .and. HB_ISCHAR( hSpec[ "title" ] )
+      UI_SetProp( hForm, "cText", hSpec[ "title" ] )
+   endif
+   if "w" $ hSpec .and. HB_ISNUMERIC( hSpec[ "w" ] ) .and. hSpec[ "w" ] > 50
+      UI_SetProp( hForm, "nWidth", hSpec[ "w" ] )
+   endif
+   if "h" $ hSpec .and. HB_ISNUMERIC( hSpec[ "h" ] ) .and. hSpec[ "h" ] > 50
+      UI_SetProp( hForm, "nHeight", hSpec[ "h" ] )
+   endif
+
+   // Add or update controls
+   if "controls" $ hSpec .and. HB_ISARRAY( hSpec[ "controls" ] )
+      aCtrls := hSpec[ "controls" ]
+      for i := 1 to Len( aCtrls )
+         hCtrlSpec := aCtrls[ i ]
+         if ! HB_ISHASH( hCtrlSpec )
+            loop
+         endif
+         cType := iif( "type" $ hCtrlSpec .and. HB_ISCHAR( hCtrlSpec[ "type" ] ), Upper( hCtrlSpec[ "type" ] ), "" )
+         nL    := iif( "x" $ hCtrlSpec .and. HB_ISNUMERIC( hCtrlSpec[ "x" ] ), hCtrlSpec[ "x" ], 10 )
+         nT    := iif( "y" $ hCtrlSpec .and. HB_ISNUMERIC( hCtrlSpec[ "y" ] ), hCtrlSpec[ "y" ], 10 )
+         nW    := iif( "w" $ hCtrlSpec .and. HB_ISNUMERIC( hCtrlSpec[ "w" ] ), hCtrlSpec[ "w" ], 80 )
+         nH    := iif( "h" $ hCtrlSpec .and. HB_ISNUMERIC( hCtrlSpec[ "h" ] ), hCtrlSpec[ "h" ], 24 )
+         cText := iif( "text" $ hCtrlSpec .and. HB_ISCHAR( hCtrlSpec[ "text" ] ), hCtrlSpec[ "text" ], "" )
+         cName := iif( "name" $ hCtrlSpec .and. HB_ISCHAR( hCtrlSpec[ "name" ] ), hCtrlSpec[ "name" ], "" )
+
+         // If a control with this name already exists on the form, UPDATE it
+         // (move/resize/relabel) instead of creating a duplicate.
+         hCtrlNew := AI_FindCtrlByName( hForm, cName )
+         if hCtrlNew != 0
+            if "x" $ hCtrlSpec; UI_SetProp( hCtrlNew, "nLeft",   nL ); endif
+            if "y" $ hCtrlSpec; UI_SetProp( hCtrlNew, "nTop",    nT ); endif
+            if "w" $ hCtrlSpec; UI_SetProp( hCtrlNew, "nWidth",  nW ); endif
+            if "h" $ hCtrlSpec; UI_SetProp( hCtrlNew, "nHeight", nH ); endif
+            if "text" $ hCtrlSpec .and. ! Empty( cText )
+               UI_SetProp( hCtrlNew, "cText", cText )
+            endif
+            if "items" $ hCtrlSpec .and. HB_ISARRAY( hCtrlSpec[ "items" ] )
+               UI_SetProp( hCtrlNew, "aItems", hCtrlSpec[ "items" ] )
+            endif
+            loop
+         endif
+
+         do case
+         case cType == "TLABEL"
+            hCtrlNew := UI_LabelNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TEDIT"
+            hCtrlNew := UI_EditNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TBUTTON"
+            hCtrlNew := UI_ButtonNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TCHECKBOX"
+            hCtrlNew := UI_CheckBoxNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TCOMBOBOX"
+            hCtrlNew := UI_ComboBoxNew( hForm, nL, nT, nW, nH )
+         case cType == "TGROUPBOX"
+            hCtrlNew := UI_GroupBoxNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TRADIOBUTTON"
+            hCtrlNew := UI_RadioButtonNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TMEMO"
+            hCtrlNew := UI_MemoNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TTREEVIEW"
+            hCtrlNew := UI_TreeViewNew( hForm, nL, nT, nW, nH )
+         case cType == "TLISTVIEW"
+            hCtrlNew := UI_ListViewNew( hForm, nL, nT, nW, nH )
+         case cType == "TLISTBOX"
+            hCtrlNew := UI_ListBoxNew( hForm, nL, nT, nW, nH )
+         case cType == "TPROGRESSBAR"
+            hCtrlNew := UI_ProgressBarNew( hForm, nL, nT, nW, nH )
+         case cType == "TIMAGE"
+            hCtrlNew := UI_ImageNew( hForm, nL, nT, nW, nH )
+         case cType == "TBEVEL"
+            hCtrlNew := UI_BevelNew( hForm, nL, nT, nW, nH )
+         case cType == "TSHAPE"
+            hCtrlNew := UI_ShapeNew( hForm, nL, nT, nW, nH )
+         case cType == "TBITBTN"
+            hCtrlNew := UI_BitBtnNew( hForm, cText, nL, nT, nW, nH )
+         case cType == "TTABCONTROL"
+            hCtrlNew := UI_TabControlNew( hForm, nL, nT, nW, nH )
+         case cType == "TMASKEDIT"
+            hCtrlNew := UI_MaskEditNew( hForm, cText, nL, nT, nW, nH )   // cText carries the mask string
+         case cType == "TSTRINGGRID"
+            hCtrlNew := UI_StringGridNew( hForm, nL, nT, nW, nH )
+         case cType == "TSPEEDBUTTON"
+            hCtrlNew := UI_SpeedBtnNew( hForm, cText, nL, nT, nW, nH )
+         endcase
+
+         if hCtrlNew != nil .and. hCtrlNew != 0
+            if ! Empty( cName )
+               UI_SetProp( hCtrlNew, "cName", cName )
+            endif
+            if "items" $ hCtrlSpec .and. HB_ISARRAY( hCtrlSpec[ "items" ] )
+               UI_SetProp( hCtrlNew, "aItems", hCtrlSpec[ "items" ] )
+            endif
+         endif
+      next
+   endif
+
+   // Refresh inspector and regenerate code
+   InspectorPopulateCombo( hForm )
+   InspectorRefresh( hForm )
+   SyncDesignerToCode()
+
+return nil
+
 // === C Compiler Not Found Dialog ===
 
 static function ShowNoCompilerDialog()
