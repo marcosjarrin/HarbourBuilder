@@ -5850,6 +5850,11 @@ function AIBuildForm( cJson )
       next
    endif
 
+   // Materialize HWNDs for newly-added controls (form already shown).
+   // Without this the controls are invisible — only TForm::Show creates
+   // child HWNDs in its initial loop; runtime AddChild leaves FHandle NULL.
+   UI_FormCreateChildren( hForm )
+
    // Refresh inspector and regenerate code
    InspectorPopulateCombo( hForm )
    InspectorRefresh( hForm )
