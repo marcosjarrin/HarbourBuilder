@@ -6339,6 +6339,9 @@ static function ToggleDarkMode()
       W32_SetWindowDarkMode( UI_FormGetHwnd( oDesignForm:hCpp ), lDarkMode )
    endif
 
+   // Refresh AI Assistant panel
+   W32_AIRefreshTheme()
+
 return nil
 
 static function IniWrite( cSection, cKey, cValue )
@@ -7909,29 +7912,37 @@ static LRESULT CALLBACK AIPanelWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPAR
    switch( msg )
    {
    case WM_CTLCOLOREDIT:
-      {
+      if( (HWND)lParam == s_hAIOutput || (HWND)lParam == s_hAIInput ) {
          HDC hdc = (HDC)wParam;
-         /* Chat output + input EDIT both dark */
-         if( (HWND)lParam == s_hAIOutput || (HWND)lParam == s_hAIInput ) {
+         if( g_bDarkIDE ) {
             SetBkColor( hdc, RGB(0x1E,0x1E,0x1E) );
             SetTextColor( hdc, RGB(0xD4,0xD4,0xD4) );
             if( !s_hAIChatBrush )
                s_hAIChatBrush = CreateSolidBrush( RGB(0x1E,0x1E,0x1E) );
             return (LRESULT) s_hAIChatBrush;
+         } else {
+            SetBkColor( hdc, RGB(0xFF,0xFF,0xFF) );
+            SetTextColor( hdc, RGB(0x10,0x10,0x10) );
+            return (LRESULT) GetStockObject( WHITE_BRUSH );
          }
       }
       break;
    case WM_CTLCOLORSTATIC:
-      /* Chat output as STATIC fallback (read-only EDIT may route here) */
       if( (HWND)lParam == s_hAIOutput ) {
          HDC hdc = (HDC)wParam;
-         SetBkColor( hdc, RGB(0x1E,0x1E,0x1E) );
-         SetTextColor( hdc, RGB(0xD4,0xD4,0xD4) );
-         if( !s_hAIChatBrush )
-            s_hAIChatBrush = CreateSolidBrush( RGB(0x1E,0x1E,0x1E) );
-         return (LRESULT) s_hAIChatBrush;
+         if( g_bDarkIDE ) {
+            SetBkColor( hdc, RGB(0x1E,0x1E,0x1E) );
+            SetTextColor( hdc, RGB(0xD4,0xD4,0xD4) );
+            if( !s_hAIChatBrush )
+               s_hAIChatBrush = CreateSolidBrush( RGB(0x1E,0x1E,0x1E) );
+            return (LRESULT) s_hAIChatBrush;
+         } else {
+            SetBkColor( hdc, RGB(0xFF,0xFF,0xFF) );
+            SetTextColor( hdc, RGB(0x10,0x10,0x10) );
+            return (LRESULT) GetStockObject( WHITE_BRUSH );
+         }
       }
-      /* Other static labels + chips bar use panel bg color in dark mode */
+      /* Other static labels + chips bar use panel bg color */
       if( g_bDarkIDE ) {
          HDC hdc = (HDC)wParam;
          SetBkColor( hdc, RGB(0x2D,0x2D,0x30) );
@@ -8218,6 +8229,29 @@ HB_FUNC( W32_AIAPPENDCHAT )
       *p = 0;
       s_aiAppend( buf );
       free( buf );
+   }
+}
+
+/* W32_AIRefreshTheme() - re-apply dark/light to AI panel after g_bDarkIDE
+   toggle. Re-calls DwmSetWindowAttribute on the title bar and forces a
+   repaint so WM_ERASEBKGND / WM_CTLCOLOR* re-read g_bDarkIDE. */
+HB_FUNC( W32_AIREFRESHTHEME )
+{
+   if( s_hAIWnd && IsWindow(s_hAIWnd) ) {
+      BOOL bDark = g_bDarkIDE ? TRUE : FALSE;
+      DwmSetWindowAttribute( s_hAIWnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
+                             &bDark, sizeof(bDark) );
+      /* Drop cached panel brush so next WM_ERASEBKGND/WM_CTLCOLORSTATIC
+         creates a fresh one for the current theme. */
+      if( s_hAIPanelBrush ) { DeleteObject( s_hAIPanelBrush ); s_hAIPanelBrush = NULL; }
+      if( s_hAIChatBrush )  { DeleteObject( s_hAIChatBrush );  s_hAIChatBrush  = NULL; }
+      InvalidateRect( s_hAIWnd, NULL, TRUE );
+      if( s_hAIOutput ) InvalidateRect( s_hAIOutput, NULL, TRUE );
+      if( s_hAIInput )  InvalidateRect( s_hAIInput,  NULL, TRUE );
+      if( s_hAIChipsBar ) InvalidateRect( s_hAIChipsBar, NULL, TRUE );
+      /* Force re-frame so DWM picks up the new dark-mode title bar */
+      SetWindowPos( s_hAIWnd, NULL, 0,0,0,0,
+         SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_FRAMECHANGED );
    }
 }
 
