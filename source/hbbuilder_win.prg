@@ -7860,7 +7860,7 @@ static void s_aiRelayout( int cw, int ch )
    if( s_hAIModelLbl )
       MoveWindow( s_hAIModelLbl, margin, margin + 8, 56, 22, TRUE );
    if( s_hAICombo )
-      MoveWindow( s_hAICombo, margin + 60, margin + 4, cw - 90 - margin*2, 280, TRUE );
+      MoveWindow( s_hAICombo, margin + 60, margin + 4, cw - 140 - margin*3, 280, TRUE );
    if( s_hAIClear )
       MoveWindow( s_hAIClear, cw - margin - 80, margin + 2, 80, topRowH, TRUE );
    if( s_hAIOutput )
