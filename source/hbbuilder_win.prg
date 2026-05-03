@@ -7029,6 +7029,143 @@ static void s_aiAppend( const char * txt )
    SendMessageA( s_hAIOutput, EM_SCROLLCARET, 0, 0 );
 }
 
+/* Call Harbour str-returning function. Caller frees with free(). NULL if missing/empty. */
+static char * s_aiCallHbStr( const char * fnName, const char * arg )
+{
+   PHB_DYNS pSym = hb_dynsymFindName( fnName );
+   PHB_ITEM pRet;
+   if( !pSym ) return NULL;
+   hb_vmPushDynSym( pSym );
+   hb_vmPushNil();
+   if( arg ) { hb_vmPushString( arg, strlen(arg) ); hb_vmFunction( 1 ); }
+   else      { hb_vmFunction( 0 ); }
+   pRet = hb_stackReturnItem();
+   if( pRet && HB_IS_STRING( pRet ) ) {
+      const char * s = hb_itemGetCPtr( pRet );
+      if( s && *s ) return _strdup( s );
+   }
+   return NULL;
+}
+
+static void s_aiOnSend( void )
+{
+   char prompt[8192], echo[8200], * actCtx, model[128], * userMsg, * dbfStart, * dbfEnd, * dbfPath;
+   int promptLen, capacity;
+   AICTX * ctx;
+   BOOL useDeep;
+   HANDLE hThread;
+   DWORD tid;
+
+   GetWindowTextA( s_hAIInput, prompt, sizeof(prompt) );
+   if( prompt[0] == 0 ) return;
+   SetWindowTextA( s_hAIInput, "" );
+
+   _snprintf( echo, sizeof(echo), "\r\n> %s\r\n", prompt );
+   s_aiAppend( echo );
+
+   /* /key sk-... */
+   if( strncmp( prompt, "/key ", 5 ) == 0 ) {
+      const char * k = prompt + 5;
+      while( *k == ' ' ) k++;
+      if( strncmp( k, "sk-", 3 ) == 0 ) {
+         s_aiSaveKey( k );
+         s_aiAppend( "DeepSeek API key saved.\r\n" );
+      } else {
+         s_aiAppend( "Invalid key.\r\n" );
+      }
+      return;
+   }
+
+   GetWindowTextA( s_hAICombo, model, sizeof(model) );
+   if( model[0] == 0 ) lstrcpynA( model, "codellama", sizeof(model) );
+   useDeep = s_aiIsDeepseek( model );
+   if( useDeep && (!s_aiDeepseekKey || !*s_aiDeepseekKey) ) {
+      s_aiAppend( "\r\nDeepSeek API key not set. Type `/key sk-...` first.\r\n" );
+      return;
+   }
+
+   /* Build extended user message: prompt + ACTIVE FORM + DBF schema */
+   capacity = (int) strlen( prompt ) + 32 * 1024;
+   userMsg = (char *) malloc( capacity );
+   lstrcpynA( userMsg, prompt, capacity );
+   promptLen = (int) strlen( userMsg );
+
+   actCtx = s_aiCallHbStr( "AIDESCRIBEACTIVEFORM", NULL );
+   if( actCtx ) {
+      _snprintf( userMsg + promptLen, capacity - promptLen,
+         "\n\nACTIVE FORM (currently open in the designer): %s\n"
+         "If the user mentions any control listed above by its name or text, "
+         "those controls ALREADY EXIST - do NOT redefine them in \"controls\". "
+         "Only emit \"controls\" for genuinely new ones.\n",
+         actCtx );
+      promptLen = (int) strlen( userMsg );
+      free( actCtx );
+   }
+
+   /* Detect *.dbf in prompt */
+   dbfStart = strstr( prompt, ".dbf" );
+   if( !dbfStart ) dbfStart = strstr( prompt, ".DBF" );
+   if( dbfStart ) {
+      const char * s = dbfStart;
+      while( s > prompt && ( isalnum((unsigned char)s[-1]) || s[-1]=='_' || s[-1]=='/' || s[-1]=='\\' || s[-1]=='.' || s[-1]=='-' ) )
+         s--;
+      dbfEnd = dbfStart + 4;
+      dbfPath = (char *) malloc( (size_t)(dbfEnd - s) + 1 );
+      memcpy( dbfPath, s, dbfEnd - s );
+      dbfPath[dbfEnd - s] = 0;
+      {
+         char * schema = s_aiCallHbStr( "AIDESCRIBEDBF", dbfPath );
+         if( schema ) {
+            _snprintf( userMsg + promptLen, capacity - promptLen,
+               "\n\nDBF FIELDS (real schema of %s): %s\n"
+               "Use these field names verbatim. Build TLabel + TEdit for each, "
+               "plus nav buttons (Prev/Next/Save). Y-step 30, label width 100.\n",
+               dbfPath, schema );
+            free( schema );
+         }
+      }
+      free( dbfPath );
+   }
+
+   ctx = (AICTX *) malloc( sizeof(AICTX) );
+   ctx->hPanel = s_hAIWnd;
+   {
+      char path[MAX_PATH];
+      if( !s_aiBuildPayload( useDeep, model, userMsg,
+                             s_aiDeepseekKey, ctx->cmdline, sizeof(ctx->cmdline),
+                             path, sizeof(path) ) ) {
+         s_aiAppend( "\r\n[Payload build failed]\r\n" );
+         free( ctx ); free( userMsg ); return;
+      }
+   }
+   free( userMsg );
+
+   SetWindowTextA( s_hAIStatus, "Status: Sending..." );
+
+   hThread = CreateThread( NULL, 0, ai_send_thread, ctx, 0, &tid );
+   if( hThread ) CloseHandle( hThread );
+   else {
+      s_aiAppend( "\r\n[CreateThread failed]\r\n" );
+      free( ctx );
+   }
+}
+
+static void s_aiOnClear( void )
+{
+   SetWindowTextA( s_hAIOutput, "AI Assistant ready.\r\n" );
+}
+
+static WNDPROC s_aiInputOldProc = NULL;
+static LRESULT CALLBACK s_aiInputProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
+{
+   if( msg == WM_KEYDOWN && wParam == VK_RETURN ) {
+      s_aiOnSend();
+      return 0;
+   }
+   if( msg == WM_CHAR && wParam == VK_RETURN ) return 0;  /* swallow beep */
+   return CallWindowProc( s_aiInputOldProc, hWnd, msg, wParam, lParam );
+}
+
 static LRESULT CALLBACK AIPanelWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
 {
    switch( msg )
@@ -7042,6 +7179,12 @@ static LRESULT CALLBACK AIPanelWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPAR
          if( !s_hAIChatBrush )
             s_hAIChatBrush = CreateSolidBrush( RGB(0x1E,0x1E,0x1E) );
          return (LRESULT) s_hAIChatBrush;
+      }
+      break;
+   case WM_COMMAND:
+      switch( LOWORD(wParam) ) {
+         case 2011: s_aiOnClear(); return 0;
+         case 2031: s_aiOnSend();  return 0;
       }
       break;
    case WM_AI_APPEND:
@@ -7171,6 +7314,8 @@ HB_FUNC( W32_AIASSISTANTPANEL )
          panW - margin*2 - 76, inputH,
          s_hAIWnd, (HMENU)2030, GetModuleHandle(NULL), NULL );
       SendMessage( s_hAIInput, WM_SETFONT, (WPARAM) s_hAIUiFont, TRUE );
+      s_aiInputOldProc = (WNDPROC) SetWindowLongPtr( s_hAIInput, GWLP_WNDPROC,
+                                                     (LONG_PTR) s_aiInputProc );
 
       /* Send button */
       s_hAISend = CreateWindowExA( 0, "BUTTON", "Send",
